@@ -1,7 +1,7 @@
 {
-  "latestVersion": "2.1.39-1-7ae666e",
-  "currentHash": "283fe75449913035287a90c382bf9e1e9062433efb06e611aaa15c5aa7d1e002",
+  "latestVersion": "2.1.40-1-57e628f",
+  "currentHash": "6ba7c572f82cd4e3a05fda229d2c89e89ea2fedd47433413a17c034fa7e5cd0b",
   "changeList": [
-    "2.1.39-1-7ae666e: defensive changes", "2.1.39-1-7ae666e: Built at 2025-06-04T13:00:03Z"
+    "2.1.40-1-57e628f: additional logging coomer", "2.1.40-1-57e628f: Built at 2025-06-06T07:33:23Z"
   ]
 }
