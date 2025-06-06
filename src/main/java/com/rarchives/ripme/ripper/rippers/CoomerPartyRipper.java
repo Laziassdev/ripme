@@ -157,28 +157,35 @@ public class CoomerPartyRipper extends AbstractJSONRipper {
         ArrayList<String> urls = new ArrayList<>();
 
         for (int i = 0; i < posts.length(); i++) {
-            if (maxDownloads > 0 && queuedDownloadCounter >= maxDownloads) {
-                logger.info("Reached maxDownloads (" + maxDownloads + "), stopping URL collection");
-                break;
-            }
-
-            int initialSize = urls.size();
-
             JSONObject post = posts.getJSONObject(i);
+            logger.debug("Processing post: {}", post.toString());
 
-            if (!post.has(KEY_FILE) && !post.has(KEY_ATTACHMENTS)) {
-                logger.debug("Post has no media: " + post.optString("id", "unknown ID"));
-                continue;
+            int before = urls.size();
+
+            try {
+                pullFileUrl(post, urls);
+            } catch (Exception e) {
+                logger.warn("Error pulling file URL for post {}: {}", i, e.getMessage());
             }
 
-            pullFileUrl(post, urls);
-            pullAttachmentUrls(post, urls);
+            try {
+                pullAttachmentUrls(post, urls);
+            } catch (Exception e) {
+                logger.warn("Error pulling attachments for post {}: {}", i, e.getMessage());
+            }
 
-            int newUrls = urls.size() - initialSize;
-            queuedDownloadCounter += newUrls;
+            int added = urls.size() - before;
+            if (added == 0) {
+                logger.debug("Post {} yielded no URLs", i);
+            }
+
+            queuedDownloadCounter += added;
         }
 
-        logger.debug("Pulled " + urls.size() + " URLs from " + posts.length() + " posts");
+        if (urls.isEmpty()) {
+            logger.warn("No downloadable URLs found in JSON block of {} posts", posts.length());
+        }
+
         return urls;
     }
 
