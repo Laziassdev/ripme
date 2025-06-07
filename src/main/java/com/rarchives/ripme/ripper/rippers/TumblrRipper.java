@@ -294,9 +294,13 @@ public class TumblrRipper extends AlbumRipper {
                             String altUrl = alt.getString("url").replaceAll("http:", "https:");
                             // Optional: Only pick _1280 or similar if present
                             if (altUrl.contains("_1280")) {
+                            try {
                                 fileURL = new URI(altUrl).toURL();
                                 downloadURL(fileURL, date);
                                 break;
+                            } catch (URISyntaxException | MalformedURLException ex) {
+                                logger.warn("Failed to convert alt image URL to valid URI", ex);
+                            }
                             }
                         }
                     }
