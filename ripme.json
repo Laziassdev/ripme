@@ -1,7 +1,7 @@
 {
-  "latestVersion": "2.1.42-1-faf3e29",
-  "currentHash": "231924d6d6c8d8f00e865809a4395fb2bd9a0dee6d7b9352d88d373439165cc2",
+  "latestVersion": "2.1.43-1-2f61bc3",
+  "currentHash": "f79f66e95f2c37711e43ad8bc0e734da3e0b16126a383f4c43db2d5de251461e",
   "changeList": [
-    "2.1.42-1-faf3e29: fix issues and download videos", "2.1.42-1-faf3e29: Built at 2025-06-07T13:10:42Z"
+    "2.1.43-1-2f61bc3: Merge branch 'main' of https://github.com/Laziassdev/ripme", "2.1.43-1-2f61bc3: Built at 2025-06-07T13:51:04Z"
   ]
 }
