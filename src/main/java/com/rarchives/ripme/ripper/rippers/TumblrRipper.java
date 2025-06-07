@@ -181,19 +181,28 @@ public class TumblrRipper extends AlbumRipper {
                     json = new JSONObject(response);
                 } catch (IOException e) {
                     try {
-                        String responseBody = Http.url(apiURL).ignoreContentType().get().html();
+                        String responseBody = Http.url(apiURL).ignoreContentType().get().body().text();
                         if (responseBody.contains("\"code\":4012")) {
                             logger.error("This Tumblr is only viewable within the Tumblr dashboard. Cannot proceed.");
                             sendUpdate(STATUS.DOWNLOAD_ERRORED, "Tumblr blog is not accessible via API. Dashboard-only access.");
+                            shouldStopRipping = true;
+                            break;
+                        }
+                        if (responseBody.contains("\"status\":404") || responseBody.contains("\"msg\":\"Not Found\"")) {
+                            logger.error("Tumblr blog does not exist or is private. Exiting.");
+                            sendUpdate(STATUS.DOWNLOAD_ERRORED, "Tumblr blog not found (404): " + apiURL);
+                            shouldStopRipping = false;
                             break;
                         }
                         logger.error("Failed to fetch Tumblr API JSON. Raw body: " + responseBody);
                     } catch (Exception ex) {
                         logger.warn("Couldn't fetch or parse raw response body", ex);
+                        sendUpdate(STATUS.DOWNLOAD_ERRORED, "Failed to parse error response from Tumblr");
+                        shouldStopRipping = true;
+                        break;
                     }
                     continue;
                 }
-
 
                 if (retry) {
                     useDefaultApiKey = true;
