@@ -154,7 +154,7 @@ public class TumblrRipper extends AlbumRipper {
 
     @Override
     public String getGID(URL url) throws MalformedURLException {
-        Pattern p = Pattern.compile("^https?://([a-zA-Z0-9\-.]+)");
+        Pattern p = Pattern.compile("^https?://([a-zA-Z0-9\\-\\.]+)");
         Matcher m = p.matcher(url.toExternalForm());
         if (m.find()) {
             this.albumType = ALBUM_TYPE.SUBDOMAIN;
