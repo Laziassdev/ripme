@@ -177,26 +177,24 @@ public class TumblrRipper extends AlbumRipper {
                 boolean retry = false;
 
                 try {
-                    json = new JSONObject(Http.getWith429Retry(new URL(apiURL), MAX_RETRIES, RETRY_DELAY_SECONDS, null));
+                    String response = Http.getWith429Retry(new URL(apiURL), MAX_RETRIES, RETRY_DELAY_SECONDS, null);
+                    json = new JSONObject(response);
                 } catch (IOException e) {
-                    Throwable cause = e.getCause();
-                    if (cause instanceof HttpStatusException) {
-                        HttpStatusException status = (HttpStatusException)cause;
-                        if (status.getStatusCode() == HttpURLConnection.HTTP_UNAUTHORIZED && !useDefaultApiKey) {
-                            retry = true;
-                        } else if (status.getStatusCode() == 404) {
-                            logger.error("No user or album found!");
-                            sendUpdate(STATUS.NO_ALBUM_OR_USER, "Album or user doesn't exist!");
-                            shouldStopRipping = true;
-                            break;
-                        } else if (status.getStatusCode() == 429) {
-                            logger.error("Tumblr rate limit has been exceeded");
-                            sendUpdate(STATUS.DOWNLOAD_ERRORED,"Tumblr rate limit has been exceeded");
+                    try {
+                        String responseBody = Http.url(apiURL).ignoreContentType().response().body().text();
+                        if (responseBody.contains("\"code\":4012")) {
+                            logger.error("This Tumblr is only viewable within the Tumblr dashboard. Cannot proceed.");
+                            sendUpdate(STATUS.DOWNLOAD_ERRORED, "Tumblr blog is not accessible via API. Dashboard-only access.");
                             shouldStopRipping = true;
                             break;
                         }
+                        logger.error("Failed to fetch Tumblr API JSON. Raw body: " + responseBody);
+                    } catch (Exception ex) {
+                        logger.warn("Couldn't fetch or parse raw response body", ex);
                     }
+                    continue;
                 }
+
 
                 if (retry) {
                     useDefaultApiKey = true;
@@ -291,6 +289,17 @@ public class TumblrRipper extends AlbumRipper {
                         }
                     } catch (Exception e) {
                         logger.error("[!] Error while parsing photo in " + photo, e);
+                        JSONArray altSizes = photo.getJSONArray("alt_sizes");
+                        for (int k = 0; k < altSizes.length(); k++) {
+                            JSONObject alt = altSizes.getJSONObject(k);
+                            String altUrl = alt.getString("url").replaceAll("http:", "https:");
+                            // Optional: Only pick _1280 or similar if present
+                            if (altUrl.contains("_1280")) {
+                                fileURL = new URI(altUrl).toURL();
+                                downloadURL(fileURL, date);
+                                break;
+                            }
+                        }
                     }
                 }
             } else if (post.has("video_url")) {
@@ -331,6 +340,56 @@ public class TumblrRipper extends AlbumRipper {
                     } catch (MalformedURLException | URISyntaxException e) {
                         logger.error("[!] Error while getting embedded image at " + post, e);
                         return true;
+                    }
+                }
+            }
+            else if (post.has("player")) {
+                JSONArray players = post.getJSONArray("player");
+                for (int j = players.length() - 1; j >= 0; j--) {
+                    JSONObject player = players.getJSONObject(j);
+                    if (player.has("embed_code")) {
+                        Document embed = Jsoup.parse(player.getString("embed_code"));
+                        String src = embed.select("source[src]").attr("src");
+                        if (!src.isEmpty()) {
+                            try {
+                                fileURL = new URI(src.replaceAll("http:", "https:")).toURL();
+                                downloadURL(fileURL, date);
+                            } catch (Exception e) {
+                                logger.warn("Could not parse video from embed_code", e);
+                            }
+                        }
+                    }
+                }
+            }
+            if (post.has("caption")) {
+                Document caption = Jsoup.parse(post.getString("caption"));
+                caption.select("img[src]").forEach(img -> {
+                    try {
+                        String imgSrc = img.attr("src").replaceAll("http:", "https:");
+                        Matcher qualM = qualP.matcher(imgSrc);
+                        imgSrc = qualM.replaceFirst("_1280.$1");
+                        downloadURL(new URI(imgSrc).toURL(), date);
+                    } catch (Exception e) {
+                        logger.warn("Failed to download embedded image from caption", e);
+                    }
+                });
+            }
+            if (post.has("trail")) {
+                JSONArray trails = post.getJSONArray("trail");
+                for (int j = 0; j < trails.length(); j++) {
+                    JSONObject trail = trails.getJSONObject(j);
+                    if (trail.has("content_raw")) {
+                        Document embedded = Jsoup.parse(trail.getString("content_raw"));
+                        embedded.select("img[src]").forEach(img -> {
+                            try {
+                                String imgSrc = img.attr("src").replaceAll("http:", "https:");
+                                Matcher qualM = qualP.matcher(imgSrc);
+                                imgSrc = qualM.replaceFirst("_1280.$1");
+                                downloadURL(new URI(imgSrc).toURL(), date);
+                            } catch (Exception e) {
+                                logger.warn("Failed to download embedded image from trail", e);
+                            }
+                        });
                     }
                 }
             }
