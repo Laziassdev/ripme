@@ -224,6 +224,12 @@ public class TumblrRipper extends AlbumRipper {
                     break;
                 }
 
+                if (json == null) {
+                    logger.error("Failed to fetch or parse Tumblr API JSON from " + apiURL);
+                    sendUpdate(STATUS.DOWNLOAD_ERRORED, "Failed to fetch JSON from Tumblr API: " + apiURL);
+                    continue;  // Stop the loop, or `continue;` if you want to skip just this page
+                }
+
                 if (!handleJSON(json)) {
                     // Returns false if an error occurs and we should stop.
                     break;
@@ -446,11 +452,18 @@ public class TumblrRipper extends AlbumRipper {
             return;
         }
 
-        logger.info(albumType);
+        // Handle direct Tumblr video CDN links
+        if (url.getHost().equals("va.media.tumblr.com")) {
+            addURLToDownload(url, getPrefix(index) + "tumblr_video_" + index);
+            index++;
+            return;
+        }
+
         if (albumType == ALBUM_TYPE.TAG) {
             addURLToDownload(url, date + " ");
         }
         addURLToDownload(url, getPrefix(index));
         index++;
     }
+
 }
