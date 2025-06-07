@@ -181,7 +181,7 @@ public class TumblrRipper extends AlbumRipper {
                     json = new JSONObject(response);
                 } catch (IOException e) {
                     try {
-                        String responseBody = Http.url(apiURL).ignoreContentType().get().body();
+                        String responseBody = Http.url(apiURL).ignoreContentType().get().html();
                         if (responseBody.contains("\"code\":4012")) {
                             logger.error("This Tumblr is only viewable within the Tumblr dashboard. Cannot proceed.");
                             sendUpdate(STATUS.DOWNLOAD_ERRORED, "Tumblr blog is not accessible via API. Dashboard-only access.");
@@ -366,7 +366,7 @@ public class TumblrRipper extends AlbumRipper {
                     try {
                         String imgSrc = img.attr("src").replaceAll("http:", "https:");
                         Matcher localQualM = qualP.matcher(imgSrc);
-                        mgSrc = localQualM.replaceFirst("_1280.$1");
+                        imgSrc = localQualM.replaceFirst("_1280.$1");
                         downloadURL(new URI(imgSrc).toURL(), date);
                     } catch (Exception e) {
                         logger.warn("Failed to download embedded image from caption", e);
