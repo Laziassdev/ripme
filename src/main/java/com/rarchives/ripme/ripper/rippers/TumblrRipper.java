@@ -31,6 +31,7 @@ public class TumblrRipper extends AlbumRipper {
     private static final Logger logger = LogManager.getLogger(TumblrRipper.class);
     private static final int MAX_RETRIES = 5;
     private static final int RETRY_DELAY_SECONDS = 5;
+    private final int maxDownloads = Utils.getConfigInteger("max.downloads", 0); // 0 = no limit
     int index = 1;
 
     private static final String DOMAIN = "tumblr.com",
@@ -440,6 +441,11 @@ public class TumblrRipper extends AlbumRipper {
     }
 
     public void downloadURL(URL url, String date) {
+        if (maxDownloads > 0 && index > maxDownloads) {
+            logger.info("Max download limit reached (" + maxDownloads + "), skipping: " + url);
+            return;
+        }
+
         logger.info(albumType);
         if (albumType == ALBUM_TYPE.TAG) {
             addURLToDownload(url, date + " ");

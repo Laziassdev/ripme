@@ -2,9 +2,10 @@ name: CI + release
 
 on:
   push:
-    branches:
-      - main
-
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+  workflow_dispatch:  # Manual trigger support
 env:
   DEBUG: false
 
