@@ -181,11 +181,10 @@ public class TumblrRipper extends AlbumRipper {
                     json = new JSONObject(response);
                 } catch (IOException e) {
                     try {
-                        String responseBody = Http.url(apiURL).ignoreContentType().response().body().text();
+                        String responseBody = Http.url(apiURL).ignoreContentType().get().body();
                         if (responseBody.contains("\"code\":4012")) {
                             logger.error("This Tumblr is only viewable within the Tumblr dashboard. Cannot proceed.");
                             sendUpdate(STATUS.DOWNLOAD_ERRORED, "Tumblr blog is not accessible via API. Dashboard-only access.");
-                            shouldStopRipping = true;
                             break;
                         }
                         logger.error("Failed to fetch Tumblr API JSON. Raw body: " + responseBody);
@@ -366,8 +365,8 @@ public class TumblrRipper extends AlbumRipper {
                 caption.select("img[src]").forEach(img -> {
                     try {
                         String imgSrc = img.attr("src").replaceAll("http:", "https:");
-                        Matcher qualM = qualP.matcher(imgSrc);
-                        imgSrc = qualM.replaceFirst("_1280.$1");
+                        Matcher localQualM = qualP.matcher(imgSrc);
+                        mgSrc = localQualM.replaceFirst("_1280.$1");
                         downloadURL(new URI(imgSrc).toURL(), date);
                     } catch (Exception e) {
                         logger.warn("Failed to download embedded image from caption", e);
@@ -383,8 +382,8 @@ public class TumblrRipper extends AlbumRipper {
                         embedded.select("img[src]").forEach(img -> {
                             try {
                                 String imgSrc = img.attr("src").replaceAll("http:", "https:");
-                                Matcher qualM = qualP.matcher(imgSrc);
-                                imgSrc = qualM.replaceFirst("_1280.$1");
+                                Matcher localQualM = qualP.matcher(imgSrc);
+                                imgSrc = localQualM.replaceFirst("_1280.$1");
                                 downloadURL(new URI(imgSrc).toURL(), date);
                             } catch (Exception e) {
                                 logger.warn("Failed to download embedded image from trail", e);
