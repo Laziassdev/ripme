@@ -1,7 +1,7 @@
 {
-  "latestVersion": "2.1.45-1-f93d40c",
-  "currentHash": "32eed027e4fcd16ef839dd5e2faf65ec47e15f1635e4e82daa33dab582edaa1f",
+  "latestVersion": "2.1.46-1-3aab30b",
+  "currentHash": "4e93a23b9377b8cc76c5e8ddf685981136df29a21f719c17f740081285a1c857",
   "changeList": [
-    "2.1.45-1-f93d40c: download videos", "2.1.45-1-f93d40c: Built at 2025-06-07T14:19:36Z"
+    "2.1.46-1-3aab30b: additional logic to fix errors", "2.1.46-1-3aab30b: Built at 2025-06-07T15:20:34Z"
   ]
 }
