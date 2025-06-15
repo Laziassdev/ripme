@@ -170,7 +170,8 @@ public class InstagramRipper extends AbstractJSONRipper {
         addURLToDownload(url, getPrefix(index), "", null, cookies);
     }
 
-    private String getPrefix(int index) {
+    @Override
+    protected String getPrefix(int index) {
         return String.format("%03d_", index);
     }
 }
