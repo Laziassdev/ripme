@@ -5,6 +5,8 @@ import static java.lang.String.format;
 import java.io.IOException;
 import java.net.MalformedURLException;
 import java.net.URL;
+import java.net.URLEncoder;
+import java.nio.charset.StandardCharsets;
 import java.util.*;
 import java.util.regex.*;
 
@@ -89,8 +91,8 @@ public class InstagramRipper extends AbstractJSONRipper {
             JSONObject shared = Http.url(fullUrlUser)
                 .cookies(cookies)
                 .ignoreContentType()
-                .userAgent("Instagram 155.0.0.37.107 Android")  // Spoof Instagram app
-                .header("X-IG-App-ID", "936619743392459")       // Optional: used by Instagram web
+                .userAgent("Instagram 155.0.0.37.107 Android")
+                .header("X-IG-App-ID", "936619743392459")
                 .referrer("https://www.instagram.com/")
                 .getJSON();
             idString = shared.getJSONObject("data").getJSONObject("user").getString("id");
@@ -102,8 +104,10 @@ public class InstagramRipper extends AbstractJSONRipper {
         if (afterCursor != null) {
             variables.put("after", afterCursor);
         }
+
         String queryHash = "c6809c9c025875ac6f02619eae97a80e";
-        String fullUrl = format("https://www.instagram.com/graphql/query/?query_hash=%s&variables=%s", queryHash, variables.toString());
+        String encodedVariables = URLEncoder.encode(variables.toString(), StandardCharsets.UTF_8);
+        String fullUrl = format("https://www.instagram.com/graphql/query/?query_hash=%s&variables=%s", queryHash, encodedVariables);
 
         JSONObject result = Http.url(fullUrl).cookies(cookies).getJSON();
         JSONObject media = result.getJSONObject("data").getJSONObject("user").getJSONObject("edge_owner_to_timeline_media");
