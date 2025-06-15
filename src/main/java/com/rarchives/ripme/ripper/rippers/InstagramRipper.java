@@ -33,15 +33,6 @@ import org.jsoup.Connection;
 import org.jsoup.nodes.Document;
 import org.jsoup.nodes.Element;
 
-import com.oracle.js.parser.ErrorManager;
-import com.oracle.js.parser.Parser;
-import com.oracle.js.parser.ScriptEnvironment;
-import com.oracle.js.parser.Source;
-import com.oracle.js.parser.ir.Block;
-import com.oracle.js.parser.ir.CallNode;
-import com.oracle.js.parser.ir.ExpressionStatement;
-import com.oracle.js.parser.ir.FunctionNode;
-import com.oracle.js.parser.ir.Statement;
 import com.rarchives.ripme.ripper.AbstractJSONRipper;
 import com.rarchives.ripme.utils.Http;
 import com.rarchives.ripme.utils.Utils;
@@ -180,26 +171,32 @@ public class InstagramRipper extends AbstractJSONRipper {
         if (postRip) {
             return null;
         }
-
+    
         Predicate<String> hrefFilter = href -> href.contains("Consumer.js");
         if (taggedRip) {
             hrefFilter = href -> href.contains("ProfilePageContainer.js") || href.contains("TagPageContainer.js");
         }
-
+    
         String href = doc.select("link[rel=preload]").stream()
                 .map(link -> link.attr("href"))
                 .filter(hrefFilter)
                 .findFirst().orElse("");
-
+    
         String body = Http.url("https://www.instagram.com" + href).cookies(cookies).response().body();
-
-        Function<String, String> hashExtractor =
-                storiesRip || pinnedReelRip ? this::getStoriesHash :
-                        pinnedRip ? this::getPinnedHash : hashtagRip ? this::getTagHash :
-                                taggedRip ? this::getUserTagHash : this::getProfileHash;
-
-        return hashExtractor.apply(body);
+    
+        if (storiesRip || pinnedReelRip) {
+            return getHashValue(body, "loadStoryViewers", -5);
+        } else if (pinnedRip) {
+            return getHashValue(body, "loadProfilePageExtras", -2);
+        } else if (hashtagRip) {
+            return getHashValue(body, "requestNextTagMedia", -1);
+        } else if (taggedRip) {
+            return getHashValue(body, "requestNextTaggedPosts", -1);
+        } else {
+            return getHashValue(body, "loadProfilePageExtras", -1);
+        }
     }
+
 
     private String getStoriesHash(String jsData) {
         return getHashValue(jsData, "loadStoryViewers", -5);
@@ -422,27 +419,23 @@ public class InstagramRipper extends AbstractJSONRipper {
 
     // Javascript parsing
     /* ------------------------------------------------------------------------------------------------------- */
-    private String getHashValue(String javaScriptData, String keyword, int offset,
-            Function<String, String> extractHash) {
-        List<Statement> statements = getJsBodyBlock(javaScriptData).getStatements();
+    private String getHashValue(String js, String keyword, int fallbackOffset) {
+        // Match patterns like: loadProfilePageExtras:{queryId:"abc123..."}
+        Pattern pattern = Pattern.compile(keyword + "\\s*.*?queryId\\s*:\\s*\"([0-9a-f]+)\"");
+        Matcher matcher = pattern.matcher(js);
+        if (matcher.find()) {
+            return matcher.group(1);
+        }
 
-        return statements.stream()
-                .flatMap(statement -> filterItems(statement, ExpressionStatement.class))
-                .map(ExpressionStatement::getExpression)
-                .flatMap(expression -> filterItems(expression, CallNode.class))
-                .map(CallNode::getArgs)
-                .map(expressions -> expressions.get(0))
-                .flatMap(expression -> filterItems(expression, FunctionNode.class))
-                .map(FunctionNode::getBody)
-                .map(Block::getStatements)
-                .map(statementList -> lookForHash(statementList, keyword, offset, extractHash))
-                .filter(Objects::nonNull)
-                .findFirst().orElse(null);
+    // Fallback: search for any queryId if keyword failed
+    Pattern fallbackPattern = Pattern.compile("queryId\\s*:\\s*\"([0-9a-f]+)\"");
+    Matcher fallbackMatcher = fallbackPattern.matcher(js);
+    if (fallbackMatcher.find()) {
+        return fallbackMatcher.group(1);
     }
 
-    private String getHashValue(String javaScriptData, String keyword, int offset) {
-        return getHashValue(javaScriptData, keyword, offset, null);
-    }
+    return null;
+}
 
     private String lookForHash(List<Statement> list, String keyword, int offset, Function<String, String> extractHash) {
         for (int i = 0; i < list.size(); i++) {
@@ -461,12 +454,6 @@ public class InstagramRipper extends AbstractJSONRipper {
         return Stream.of(obj).filter(aClass::isInstance).map(aClass::cast);
     }
 
-    private Block getJsBodyBlock(String javaScriptData) {
-        ScriptEnvironment env = ScriptEnvironment.builder().ecmaScriptVersion(10).constAsVar(true).build();
-        ErrorManager errorManager = new ErrorManager.ThrowErrorManager();
-        Source src = Source.sourceFor("name", javaScriptData);
-        return new Parser(env, src, errorManager).parse().getBody();
-    }
 
     // Some JSON helper methods below
     /* ------------------------------------------------------------------------------------------------------- */
