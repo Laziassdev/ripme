@@ -109,12 +109,8 @@ public class InstagramRipper extends AbstractJSONRipper {
         String encodedVariables = URLEncoder.encode(variables.toString(), StandardCharsets.UTF_8);
         String fullUrl = format("https://www.instagram.com/graphql/query/?query_hash=%s&variables=%s", queryHash, encodedVariables);
 
-        JSONObject result = Http.url(fullUrl).cookies(cookies).getJSON();
-        JSONObject media = result.getJSONObject("data").getJSONObject("user").getJSONObject("edge_owner_to_timeline_media");
-        JSONObject pageInfo = media.getJSONObject("page_info");
-        hasNextPage = pageInfo.getBoolean("has_next_page");
-        endCursor = pageInfo.optString("end_cursor", null);
-        return result;
+        String rawJson = Http.url(fullUrl).cookies(cookies).ignoreContentType().get().body().text();
+        return new JSONObject(rawJson);
     }
 
     private void setAuthCookie() {
