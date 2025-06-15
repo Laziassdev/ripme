@@ -11,7 +11,6 @@ import java.util.regex.*;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.json.*;
-import org.jsoup.Connection;
 import org.jsoup.nodes.Document;
 import org.jsoup.nodes.Element;
 
@@ -87,12 +86,10 @@ public class InstagramRipper extends AbstractJSONRipper {
     private JSONObject getGraphQLUserPage(String username, String afterCursor) throws IOException {
         if (idString == null) {
             String fullUrlUser = format("https://i.instagram.com/api/v1/users/web_profile_info/?username=%s", username);
-        
             JSONObject shared = Http.url(fullUrlUser)
                 .cookies(cookies)
                 .ignoreContentType()
                 .getJSON();
-        
             idString = shared.getJSONObject("data").getJSONObject("user").getString("id");
         }
 
