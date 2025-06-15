@@ -89,6 +89,9 @@ public class InstagramRipper extends AbstractJSONRipper {
             JSONObject shared = Http.url(fullUrlUser)
                 .cookies(cookies)
                 .ignoreContentType()
+                .userAgent("Instagram 155.0.0.37.107 Android")  // Spoof Instagram app
+                .header("X-IG-App-ID", "936619743392459")       // Optional: used by Instagram web
+                .referrer("https://www.instagram.com/")
                 .getJSON();
             idString = shared.getJSONObject("data").getJSONObject("user").getString("id");
         }
