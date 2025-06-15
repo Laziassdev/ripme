@@ -194,18 +194,6 @@ public class InstagramRipper extends AbstractJSONRipper {
         return getHashValue(jsData, "requestNextTaggedPosts", -1);
     }
 
-    private JSONObject getJsonObjectFromDoc(Document document) {
-        for (Element script : document.select("script[type=text/javascript]")) {
-            String scriptText = script.data();
-            if (scriptText.startsWith("window._sharedData") || scriptText.startsWith("window.__additionalDataLoaded")) {
-                String jsonText = scriptText.replaceAll("[^{]*([{].*})[^}]*", "$1");
-                if (jsonText.contains("graphql") || jsonText.contains("StoriesPage")) {
-                    return new JSONObject(jsonText);
-                }
-            }
-        }
-        return null;
-    }
 
     @Override
     public JSONObject getNextPage(JSONObject source) throws IOException {
@@ -412,18 +400,6 @@ public class InstagramRipper extends AbstractJSONRipper {
     return null;
 }
 
-    private String lookForHash(List<Statement> list, String keyword, int offset, Function<String, String> extractHash) {
-        for (int i = 0; i < list.size(); i++) {
-            Statement st = list.get(i);
-            if (st.toString().contains(keyword)) {
-                if (extractHash != null) {
-                    return extractHash.apply(list.get(i + offset).toString());
-                }
-                return list.get(i + offset).toString().replaceAll(".*\"([0-9a-f]*)\".*", "$1");
-            }
-        }
-        return null;
-    }
 
     private <T> Stream<T> filterItems(Object obj, Class<T> aClass) {
         return Stream.of(obj).filter(aClass::isInstance).map(aClass::cast);
