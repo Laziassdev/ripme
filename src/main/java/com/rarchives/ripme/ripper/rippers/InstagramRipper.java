@@ -164,7 +164,7 @@ public class InstagramRipper extends AbstractJSONRipper {
         for (Element script : document.select("script[type=text/javascript]")) {
             String scriptText = script.data();
             if (scriptText.startsWith("window._sharedData") || scriptText.startsWith("window.__additionalDataLoaded")) {
-                String jsonText = scriptText.replaceAll("[^\{]*([\{].*})[^\}]*", "$1");
+                String jsonText = scriptText.replaceAll("[^\\{]*([\\{].*})[^\\}]*", "$1");
                 if (jsonText.contains("graphql") || jsonText.contains("StoriesPage")) {
                     return new JSONObject(jsonText);
                 }
