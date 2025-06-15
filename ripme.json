@@ -1,7 +1,7 @@
 {
-  "latestVersion": "2.1.47-1-3a32df3",
-  "currentHash": "0f0638ad5a64c2c430b766a5740486875eff34a4338323a697861fb788de01e6",
+  "latestVersion": "2.1.48-1-580d8a0",
+  "currentHash": "07abe0367e3db7ad1d8206a3a0464d704ec79b764c9840c984398bd20e9639cd",
   "changeList": [
-    "2.1.47-1-3a32df3: additional logic to fix errors", "2.1.47-1-3a32df3: Built at 2025-06-07T15:38:31Z"
+    "2.1.48-1-580d8a0: Update InstagramRipper.java", "2.1.48-1-580d8a0: Built at 2025-06-15T16:45:14Z"
   ]
 }
