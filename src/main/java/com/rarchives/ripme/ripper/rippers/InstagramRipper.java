@@ -59,29 +59,15 @@ public class InstagramRipper extends AbstractJSONRipper {
     private boolean pinnedReelRip;
 
     private enum UrlTypePattern {
-        // e.g. https://www.instagram.com/explore/tags/rachelc00k/
         HASHTAG("explore/tags/(?<tagname>[^?/]+)"),
-
-        // e.g. https://www.instagram.com/stories/rachelc00k/
         STORIES("stories/(?<username>[^?/]+)"),
-
-        // e.g. https://www.instagram.com/rachelc00k/tagged/
         USER_TAGGED("(?<username>[^?/]+)/tagged"),
-
-        // e.g. https://www.instagram.com/rachelc00k/channel/
         IGTV("(?<username>[^?/]+)/channel"),
-
-        // e.g. https://www.instagram.com/p/Bu4CEfbhNk4/
         SINGLE_POST("(?:p|tv)/(?<shortcode>[^?/]+)"),
-
-        // pseudo-url, e.g. https://www.instagram.com/rachelc00k/?pinned
         PINNED("(?<username>[^?/]+)/?[?]pinned"),
-
-        // e.g. https://www.instagram.com/rachelc00k/
         USER_PROFILE("(?<username>[^?/]+)");
 
         private final String urlTypePattern;
-
         UrlTypePattern(String urlTypePattern) {
             this.urlTypePattern = urlTypePattern;
         }
@@ -107,28 +93,14 @@ public class InstagramRipper extends AbstractJSONRipper {
             Matcher urlMatcher = getUrlMatcher(url, urlType);
             if (urlMatcher.matches()) {
                 switch (urlType) {
-                    case HASHTAG:
-                        hashtagRip = true;
-                        return "tag_" + urlMatcher.group("tagname");
-                    case PINNED:
-                        pinnedRip = true;
-                        return urlMatcher.group("username") + "_pinned";
-                    case STORIES:
-                        storiesRip = true;
-                        return urlMatcher.group("username") + "_stories";
-                    case USER_TAGGED:
-                        taggedRip = true;
-                        return urlMatcher.group("username") + "_tagged";
-                    case IGTV:
-                        igtvRip = true;
-                        return urlMatcher.group("username") + "_igtv";
-                    case SINGLE_POST:
-                        postRip = true;
-                        return "post_" + urlMatcher.group("shortcode");
-                    case USER_PROFILE:
-                        return urlMatcher.group("username");
-                    default:
-                        throw new RuntimeException("Reached unreachable");
+                    case HASHTAG: hashtagRip = true; return "tag_" + urlMatcher.group("tagname");
+                    case PINNED: pinnedRip = true; return urlMatcher.group("username") + "_pinned";
+                    case STORIES: storiesRip = true; return urlMatcher.group("username") + "_stories";
+                    case USER_TAGGED: taggedRip = true; return urlMatcher.group("username") + "_tagged";
+                    case IGTV: igtvRip = true; return urlMatcher.group("username") + "_igtv";
+                    case SINGLE_POST: postRip = true; return "post_" + urlMatcher.group("shortcode");
+                    case USER_PROFILE: return urlMatcher.group("username");
+                    default: throw new RuntimeException("Reached unreachable");
                 }
             }
         }
@@ -137,7 +109,7 @@ public class InstagramRipper extends AbstractJSONRipper {
 
     private Matcher getUrlMatcher(URL url, UrlTypePattern type) {
         String baseRegex = "^https?://(?:www[.])?instagram[.]com/%s(?:[?/].*)?";
-        Pattern pattern = Pattern.compile(format(baseRegex, type.urlTypePattern));
+        Pattern pattern = Pattern.compile(String.format(baseRegex, type.urlTypePattern));
         return pattern.matcher(url.toExternalForm());
     }
 
@@ -147,11 +119,10 @@ public class InstagramRipper extends AbstractJSONRipper {
         Document document = Http.url(url).cookies(cookies).response().parse();
         qHash = getQhash(document);
         JSONObject jsonObject = getJsonObjectFromDoc(document);
-        String hashtagNamePath = "entry_data.TagPage[0].graphql.hashtag.name";
-        String singlePostIdPath = "graphql.shortcode_media.shortcode";
-        String profileIdPath = "entry_data.ProfilePage[0].graphql.user.id";
-        String storiesPath = "entry_data.StoriesPage[0].user.id";
-        String idPath = hashtagRip ? hashtagNamePath : storiesRip ? storiesPath : postRip ? singlePostIdPath : profileIdPath;
+        String idPath = hashtagRip ? "entry_data.TagPage[0].graphql.hashtag.name" :
+                storiesRip ? "entry_data.StoriesPage[0].user.id" :
+                postRip ? "graphql.shortcode_media.shortcode" :
+                "entry_data.ProfilePage[0].graphql.user.id";
         idString = getJsonStringByPath(jsonObject, idPath);
         return taggedRip ? getNextPage(null) : pinnedRip ? getPinnedItems(document) : storiesRip ? getStoriesItems() : jsonObject;
     }
@@ -166,37 +137,41 @@ public class InstagramRipper extends AbstractJSONRipper {
         }
     }
 
-    // Query hash is used for graphql requests
     private String getQhash(Document doc) throws IOException {
-        if (postRip) {
-            return null;
-        }
-    
+        if (postRip) return null;
         Predicate<String> hrefFilter = href -> href.contains("Consumer.js");
-        if (taggedRip) {
-            hrefFilter = href -> href.contains("ProfilePageContainer.js") || href.contains("TagPageContainer.js");
-        }
-    
-        String href = doc.select("link[rel=preload]").stream()
-                .map(link -> link.attr("href"))
-                .filter(hrefFilter)
-                .findFirst().orElse("");
-    
+        if (taggedRip) hrefFilter = href -> href.contains("ProfilePageContainer.js") || href.contains("TagPageContainer.js");
+        String href = doc.select("link[rel=preload]").stream().map(link -> link.attr("href")).filter(hrefFilter).findFirst().orElse("");
         String body = Http.url("https://www.instagram.com" + href).cookies(cookies).response().body();
-    
-        if (storiesRip || pinnedReelRip) {
-            return getHashValue(body, "loadStoryViewers", -5);
-        } else if (pinnedRip) {
-            return getHashValue(body, "loadProfilePageExtras", -2);
-        } else if (hashtagRip) {
-            return getHashValue(body, "requestNextTagMedia", -1);
-        } else if (taggedRip) {
-            return getHashValue(body, "requestNextTaggedPosts", -1);
-        } else {
-            return getHashValue(body, "loadProfilePageExtras", -1);
-        }
+        if (storiesRip || pinnedReelRip) return extractQueryHash(body, "loadStoryViewers");
+        if (pinnedRip) return extractQueryHash(body, "loadProfilePageExtras");
+        if (hashtagRip) return extractQueryHash(body, "requestNextTagMedia");
+        if (taggedRip) return extractQueryHash(body, "requestNextTaggedPosts");
+        return extractQueryHash(body, "loadProfilePageExtras");
     }
 
+    private String extractQueryHash(String js, String keyword) {
+        Pattern pattern = Pattern.compile(keyword + ".*?queryId\s*:\s*\"([0-9a-f]{32})\"");
+        Matcher matcher = pattern.matcher(js);
+        if (matcher.find()) return matcher.group(1);
+        Pattern fallback = Pattern.compile("queryId\s*:\s*\"([0-9a-f]{32})\"");
+        Matcher fallbackMatcher = fallback.matcher(js);
+        if (fallbackMatcher.find()) return fallbackMatcher.group(1);
+        return null;
+    }
+
+    private JSONObject getJsonObjectFromDoc(Document document) {
+        for (Element script : document.select("script[type=text/javascript]")) {
+            String scriptText = script.data();
+            if (scriptText.startsWith("window._sharedData") || scriptText.startsWith("window.__additionalDataLoaded")) {
+                String jsonText = scriptText.replaceAll("[^\{]*([\{].*})[^\}]*", "$1");
+                if (jsonText.contains("graphql") || jsonText.contains("StoriesPage")) {
+                    return new JSONObject(jsonText);
+                }
+            }
+        }
+        return null;
+    }
 
     private String getStoriesHash(String jsData) {
         return getHashValue(jsData, "loadStoryViewers", -5);
