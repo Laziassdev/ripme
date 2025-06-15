@@ -88,13 +88,14 @@ public class InstagramRipper extends AbstractJSONRipper {
     private JSONObject getGraphQLUserPage(String username, String afterCursor) throws IOException {
         if (idString == null) {
             String fullUrlUser = format("https://i.instagram.com/api/v1/users/web_profile_info/?username=%s", username);
-            JSONObject shared = Http.url(fullUrlUser)
+            String rawProfile = Http.url(fullUrlUser)
                 .cookies(cookies)
                 .ignoreContentType()
                 .userAgent("Instagram 155.0.0.37.107 Android")
                 .header("X-IG-App-ID", "936619743392459")
                 .referrer("https://www.instagram.com/")
-                .getJSON();
+                .get().body().text();
+            JSONObject shared = new JSONObject(rawProfile);
             idString = shared.getJSONObject("data").getJSONObject("user").getString("id");
         }
 
