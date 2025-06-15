@@ -86,10 +86,20 @@ public class InstagramRipper extends AbstractJSONRipper {
 
     private JSONObject getGraphQLUserPage(String username, String afterCursor) throws IOException {
         if (idString == null) {
-            // Lookup user ID first
-            JSONObject shared = Http.url("https://www.instagram.com/" + username + "/?__a=1").cookies(cookies).getJSON();
-            idString = shared.getJSONObject("graphql").getJSONObject("user").getString("id");
+            // Query user ID using username via GraphQL
+            String queryHashUserID = "7e38d09372c4176e1c8f3c5c3c1e15b8"; // or a valid hash for username lookup
+            JSONObject variablesUser = new JSONObject();
+            variablesUser.put("usernames", Collections.singletonList(username));
+            String fullUrlUser = format("https://i.instagram.com/api/v1/users/web_profile_info/?username=%s", username);
+
+            String jsonString = Http.url(fullUrlUser)
+                .cookies(cookies)
+                .ignoreContentType()
+                .asString();
+            JSONObject shared = new JSONObject(jsonString);
+            idString = shared.getJSONObject("data").getJSONObject("user").getString("id");
         }
+
         JSONObject variables = new JSONObject();
         variables.put("id", idString);
         variables.put("first", 12);
