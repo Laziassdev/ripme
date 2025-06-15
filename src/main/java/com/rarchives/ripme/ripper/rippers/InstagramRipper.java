@@ -9,26 +9,14 @@ import java.time.Instant;
 import java.time.ZoneOffset;
 import java.time.ZonedDateTime;
 import java.time.format.DateTimeFormatter;
-import java.util.ArrayList;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
-import java.util.Objects;
-import java.util.Spliterators;
-import java.util.function.BiFunction;
-import java.util.function.Consumer;
-import java.util.function.Function;
-import java.util.function.Predicate;
-import java.util.regex.Matcher;
-import java.util.regex.Pattern;
-import java.util.stream.Collectors;
-import java.util.stream.Stream;
-import java.util.stream.StreamSupport;
+import java.util.*;
+import java.util.function.*;
+import java.util.regex.*;
+import java.util.stream.*;
 
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
-import org.json.JSONArray;
-import org.json.JSONObject;
+import org.json.*;
 import org.jsoup.Connection;
 import org.jsoup.nodes.Document;
 import org.jsoup.nodes.Element;
@@ -37,41 +25,13 @@ import com.rarchives.ripme.ripper.AbstractJSONRipper;
 import com.rarchives.ripme.utils.Http;
 import com.rarchives.ripme.utils.Utils;
 
-// Available configuration options:
-// instagram.download_images_only - use to skip video links
-// instagram.session_id - should be set for stories and private accounts (look for sessionid cookie)
 public class InstagramRipper extends AbstractJSONRipper {
 
-    private static final Logger logger = LogManager.getLogger(ImagebamRipper.class);
+    private static final Logger logger = LogManager.getLogger(InstagramRipper.class);
 
     private String qHash;
     private Map<String, String> cookies = new HashMap<>();
     private String idString;
-    private List<String> itemPrefixes = new ArrayList<>();
-    private List<String> failedItems = new ArrayList<>();
-
-    private boolean hashtagRip;
-    private boolean taggedRip;
-    private boolean igtvRip;
-    private boolean postRip;
-    private boolean storiesRip;
-    private boolean pinnedRip;
-    private boolean pinnedReelRip;
-
-    private enum UrlTypePattern {
-        HASHTAG("explore/tags/(?<tagname>[^?/]+)"),
-        STORIES("stories/(?<username>[^?/]+)"),
-        USER_TAGGED("(?<username>[^?/]+)/tagged"),
-        IGTV("(?<username>[^?/]+)/channel"),
-        SINGLE_POST("(?:p|tv)/(?<shortcode>[^?/]+)"),
-        PINNED("(?<username>[^?/]+)/?[?]pinned"),
-        USER_PROFILE("(?<username>[^?/]+)");
-
-        private final String urlTypePattern;
-        UrlTypePattern(String urlTypePattern) {
-            this.urlTypePattern = urlTypePattern;
-        }
-    }
 
     public InstagramRipper(URL url) throws IOException {
         super(url);
@@ -89,370 +49,93 @@ public class InstagramRipper extends AbstractJSONRipper {
 
     @Override
     public String getGID(URL url) throws MalformedURLException {
-        for (UrlTypePattern urlType : UrlTypePattern.values()) {
-            Matcher urlMatcher = getUrlMatcher(url, urlType);
-            if (urlMatcher.matches()) {
-                switch (urlType) {
-                    case HASHTAG: hashtagRip = true; return "tag_" + urlMatcher.group("tagname");
-                    case PINNED: pinnedRip = true; return urlMatcher.group("username") + "_pinned";
-                    case STORIES: storiesRip = true; return urlMatcher.group("username") + "_stories";
-                    case USER_TAGGED: taggedRip = true; return urlMatcher.group("username") + "_tagged";
-                    case IGTV: igtvRip = true; return urlMatcher.group("username") + "_igtv";
-                    case SINGLE_POST: postRip = true; return "post_" + urlMatcher.group("shortcode");
-                    case USER_PROFILE: return urlMatcher.group("username");
-                    default: throw new RuntimeException("Reached unreachable");
-                }
-            }
+        Pattern pattern = Pattern.compile("https?://(?:www\\.)?instagram\\.com/(?<username>[^/?#]+)/?");
+        Matcher matcher = pattern.matcher(url.toExternalForm());
+        if (matcher.find()) {
+            return matcher.group("username");
         }
-        throw new MalformedURLException("This URL can't be ripped");
-    }
-
-    private Matcher getUrlMatcher(URL url, UrlTypePattern type) {
-        String baseRegex = "^https?://(?:www[.])?instagram[.]com/%s(?:[?/].*)?";
-        Pattern pattern = Pattern.compile(String.format(baseRegex, type.urlTypePattern));
-        return pattern.matcher(url.toExternalForm());
+        throw new MalformedURLException("Expected format: https://www.instagram.com/username/");
     }
 
     @Override
     public JSONObject getFirstPage() throws IOException {
         setAuthCookie();
         Document document = Http.url(url).cookies(cookies).response().parse();
-        qHash = getQhash(document);
         JSONObject jsonObject = getJsonObjectFromDoc(document);
-        String idPath = hashtagRip ? "entry_data.TagPage[0].graphql.hashtag.name" :
-                storiesRip ? "entry_data.StoriesPage[0].user.id" :
-                postRip ? "graphql.shortcode_media.shortcode" :
-                "entry_data.ProfilePage[0].graphql.user.id";
-        idString = getJsonStringByPath(jsonObject, idPath);
-        return taggedRip ? getNextPage(null) : pinnedRip ? getPinnedItems(document) : storiesRip ? getStoriesItems() : jsonObject;
+        if (jsonObject == null) {
+            throw new IOException("Unable to parse Instagram page JSON. Possible invalid session or private profile.");
+        }
+        JSONObject user = getJsonObjectByPath(jsonObject, "entry_data.ProfilePage[0].graphql.user");
+        if (user.optBoolean("is_private") && user.optJSONObject("edge_owner_to_timeline_media") == null) {
+            throw new IOException("This Instagram profile is private. Set a valid 'instagram.session_id' in rip.properties.");
+        }
+        idString = user.getString("id");
+        return jsonObject;
     }
 
-    private void setAuthCookie() throws IOException {
+    private void setAuthCookie() {
         String sessionId = Utils.getConfigString("instagram.session_id", null);
-        if ((storiesRip || pinnedRip) && sessionId == null) {
-            throw new IOException("instagram.session_id should be set up for Instagram stories");
-        }
         if (sessionId != null) {
             cookies.put("sessionid", sessionId);
         }
     }
 
-    private String getQhash(Document doc) throws IOException {
-        if (postRip) return null;
-        Predicate<String> hrefFilter = href -> href.contains("Consumer.js");
-        if (taggedRip) hrefFilter = href -> href.contains("ProfilePageContainer.js") || href.contains("TagPageContainer.js");
-        String href = doc.select("link[rel=preload]").stream().map(link -> link.attr("href")).filter(hrefFilter).findFirst().orElse("");
-        String body = Http.url("https://www.instagram.com" + href).cookies(cookies).response().body();
-        if (storiesRip || pinnedReelRip) return extractQueryHash(body, "loadStoryViewers");
-        if (pinnedRip) return extractQueryHash(body, "loadProfilePageExtras");
-        if (hashtagRip) return extractQueryHash(body, "requestNextTagMedia");
-        if (taggedRip) return extractQueryHash(body, "requestNextTaggedPosts");
-        return extractQueryHash(body, "loadProfilePageExtras");
-    }
-
-    private String extractQueryHash(String js, String keyword) {
-        Pattern pattern = Pattern.compile(keyword + ".*?queryId\s*:\s*\"([0-9a-f]{32})\"");
-        Matcher matcher = pattern.matcher(js);
-        if (matcher.find()) return matcher.group(1);
-        Pattern fallback = Pattern.compile("queryId\s*:\s*\"([0-9a-f]{32})\"");
-        Matcher fallbackMatcher = fallback.matcher(js);
-        if (fallbackMatcher.find()) return fallbackMatcher.group(1);
-        return null;
-    }
-
     private JSONObject getJsonObjectFromDoc(Document document) {
         for (Element script : document.select("script[type=text/javascript]")) {
             String scriptText = script.data();
-            if (scriptText.startsWith("window._sharedData") || scriptText.startsWith("window.__additionalDataLoaded")) {
-                String jsonText = scriptText.replaceAll("[^\\{]*([\\{].*})[^\\}]*", "$1");
-                if (jsonText.contains("graphql") || jsonText.contains("StoriesPage")) {
+            if (scriptText.startsWith("window._sharedData")) {
+                try {
+                    String jsonText = scriptText.replaceAll("[^\\{]*([\\{].*})[^\\}]*", "$1");
                     return new JSONObject(jsonText);
+                } catch (Exception e) {
+                    logger.warn("Failed to parse embedded script JSON", e);
                 }
             }
         }
+        logger.error("No embedded JSON found in Instagram document");
         return null;
     }
 
-    private String getStoriesHash(String jsData) {
-        return getHashValue(jsData, "loadStoryViewers", -5);
-    }
-
-    private String getProfileHash(String jsData) {
-        return getHashValue(jsData, "loadProfilePageExtras", -1);
-    }
-
-    private String getPinnedHash(String jsData) {
-        return getHashValue(jsData, "loadProfilePageExtras", -2);
-    }
-
-    private String getTagHash(String jsData) {
-        return getHashValue(jsData, "requestNextTagMedia", -1);
-    }
-
-    private String getUserTagHash(String jsData) {
-        return getHashValue(jsData, "requestNextTaggedPosts", -1);
-    }
-
-
-    @Override
-    public JSONObject getNextPage(JSONObject source) throws IOException {
-        if (postRip || storiesRip || pinnedReelRip) {
-            return null;
-        }
-        JSONObject nextPageQuery = new JSONObject().put(hashtagRip ? "tag_name" : "id", idString).put("first", 12);
-        if (source == null) {
-            return graphqlRequest(nextPageQuery);
-        }
-        JSONObject pageInfo = getMediaRoot(source).getJSONObject("page_info");
-        if (pageInfo.getBoolean("has_next_page")) {
-            return graphqlRequest(nextPageQuery.put("after", pageInfo.getString("end_cursor")));
-        } else {
-            failedItems.forEach(logger::error);
-            return null;
-        }
-    }
-
-    private JSONObject getStoriesItems() throws IOException {
-        return graphqlRequest(new JSONObject().append("reel_ids", idString).put("precomposed_overlay", false));
-    }
-
-    // Two requests with different query hashes required for pinned items.
-    // Query hash to be used depends on flag specified:
-    // pinnedRip flag is used initially to get list of pinned albums;
-    // pinnedReelRip flag is used next to get media urls.
-    private JSONObject getPinnedItems(Document document) throws IOException {
-        JSONObject queryForIds = new JSONObject().put("user_id", idString).put("include_highlight_reels", true);
-        JSONObject pinnedIdsJson = graphqlRequest(queryForIds);
-        JSONArray pinnedItems = getJsonArrayByPath(pinnedIdsJson, "data.user.edge_highlight_reels.edges");
-        pinnedRip = false;
-        pinnedReelRip = true;
-        qHash = getQhash(document);
-        JSONObject queryForDetails = new JSONObject();
-        getStreamOfJsonArray(pinnedItems)
-                .map(object -> getJsonStringByPath(object, "node.id"))
-                .forEach(id -> queryForDetails.append("highlight_reel_ids", id));
-        queryForDetails.put("precomposed_overlay", false);
-        return graphqlRequest(queryForDetails);
-    }
-
-    private JSONObject graphqlRequest(JSONObject vars) throws IOException {
-        // Sleep for a while to avoid a ban
-        sleep(2500);
-        String url = format("https://www.instagram.com/graphql/query/?query_hash=%s&variables=%s", qHash, vars.toString());
-        return Http.url(url).cookies(cookies).getJSON();
-    }
-
-    @Override
-    public List<String> getURLsFromJSON(JSONObject json) {
-        if (storiesRip || pinnedReelRip) {
-            JSONArray storyAlbums = getJsonArrayByPath(json, "data.reels_media");
-            return getStreamOfJsonArray(storyAlbums)
-                    .flatMap(album -> getStreamOfJsonArray(album.getJSONArray("items")))
-                    .peek(storyItem -> itemPrefixes.add(getTimestampPrefix(storyItem)))
-                    .flatMap(this::parseStoryItemForUrls)
-                    .collect(Collectors.toList());
-        }
-        if (postRip) {
-            JSONObject detailsJson = downloadItemDetailsJson(idString);
-            addPrefixInfo(detailsJson);
-            return parseItemDetailsForUrls(detailsJson).collect(Collectors.toList());
-        }
-        JSONArray edges = getMediaRoot(json).getJSONArray("edges");
-        return getStreamOfJsonArray(edges)
-                .map(edge -> getJsonStringByPath(edge, "node.shortcode"))
-                .map(this::downloadItemDetailsJson)
-                .filter(Objects::nonNull)
-                .peek(this::addPrefixInfo)
-                .flatMap(this::parseItemDetailsForUrls)
-                .collect(Collectors.toList());
-    }
-
-    private Stream<? extends String> parseStoryItemForUrls(JSONObject storyItem) {
-        if (storyItem.getBoolean("is_video")) {
-            itemPrefixes.add(getTimestampPrefix(storyItem) + "preview_");
-            int lastIndex = storyItem.getJSONArray("video_resources").length() - 1;
-            return Stream.of(
-                    getJsonStringByPath(storyItem, "video_resources[" + lastIndex + "].src"),
-                    storyItem.getString("display_url"));
-        }
-        return Stream.of(storyItem.getString("display_url"));
-    }
-
-    private JSONObject getMediaRoot(JSONObject json) {
-        String userExtra = "data.user.edge_owner_to_timeline_media";
-        String igtvExtra = "data.user.edge_felix_video_timeline";
-        String taggedExtra = "data.user.edge_user_to_photos_of_you";
-        String hashtagExtra = "data.hashtag.edge_hashtag_to_media";
-        String userHomeRoot = "entry_data.ProfilePage[0].graphql.user.edge_owner_to_timeline_media";
-        String igtvHomeRoot = "entry_data.ProfilePage[0].graphql.user.edge_felix_video_timeline";
-        String hashtagHomeRoot = "entry_data.TagPage[0].graphql.hashtag.edge_hashtag_to_media";
-        String mediaRootPath = json.optJSONObject("entry_data") != null ?
-                (hashtagRip ? hashtagHomeRoot : igtvRip ? igtvHomeRoot : userHomeRoot) : hashtagRip ?
-                hashtagExtra : igtvRip ? igtvExtra : taggedRip ? taggedExtra : userExtra;
-        return getJsonObjectByPath(json, mediaRootPath);
-    }
-
-    private JSONObject downloadItemDetailsJson(String shortcode) {
-        String url = "https://www.instagram.com/p/%s/?__a=1";
-        try {
-            Http http = Http.url(format(url, shortcode));
-            http.ignoreContentType();
-            http.connection().followRedirects(false);
-            Connection.Response response = http.cookies(cookies).response();
-            // Fix for redirection link; repeat request with the new shortcode
-            if (response.statusCode() == 302) {
-                Pattern redirectIdPattern = Pattern.compile("/p/(?<shortcode>[^?/]+)");
-                Matcher m = redirectIdPattern.matcher(response.header("location"));
-                return m.find() ? downloadItemDetailsJson(m.group("shortcode")) : null;
-            }
-            return new JSONObject(response.body());
-        } catch (Exception e) {
-            failedItems.add(shortcode);
-            logger.trace(format("No item %s found", shortcode), e);
-        }
-        return null;
-    }
-
-    private void addPrefixInfo(JSONObject itemDetailsJson) {
-        JSONObject mediaItem = getJsonObjectByPath(itemDetailsJson, "graphql.shortcode_media");
-        String shortcode = mediaItem.getString("shortcode");
-        int subItemsCount = "GraphSidecar".equals(mediaItem.getString("__typename")) ?
-                getJsonArrayByPath(mediaItem, "edge_sidecar_to_children.edges").length() : 1;
-        for (int i = 0; i < subItemsCount; i++) {
-            itemPrefixes.add(getTimestampPrefix(mediaItem) + shortcode + "_");
-        }
-    }
-
-    private String getTimestampPrefix(JSONObject item) {
-        Instant instant = Instant.ofEpochSecond(item.getLong("taken_at_timestamp"));
-        return DateTimeFormatter.ofPattern("yyyy-MM-dd_HH-mm-ss_").format(ZonedDateTime.ofInstant(instant, ZoneOffset.UTC));
-    }
-
-    private Stream<? extends String> parseItemDetailsForUrls(JSONObject itemDetailsJson) {
-        JSONObject mediaItem = getJsonObjectByPath(itemDetailsJson, "graphql.shortcode_media");
-        // For some reason JSON video_url has lower quality than the HTML-tag one
-        // HTML-tag url is requested here and marked with _extra_ prefix
-        if ("GraphVideo".equals(mediaItem.getString("__typename"))) {
-            String shortcode = mediaItem.getString("shortcode");
-            String urlFromPage = getVideoUrlFromPage(shortcode);
-            if (!urlFromPage.isEmpty()) {
-                itemPrefixes.add(getTimestampPrefix(mediaItem) + shortcode + "_extra_");
-                return Stream.of(mediaItem.getString("video_url"), urlFromPage);
-            }
-        }
-        return parseRootForUrls(mediaItem);
-    }
-
-    // Uses recursion for GraphSidecar
-    private Stream<? extends String> parseRootForUrls(JSONObject mediaItem) {
-        String typeName = mediaItem.getString("__typename");
-        switch (typeName) {
-            case "GraphImage":
-                return Stream.of(mediaItem.getString("display_url"));
-            case "GraphVideo":
-                return Stream.of(mediaItem.getString("video_url"));
-            case "GraphSidecar":
-                JSONArray sideCar = getJsonArrayByPath(mediaItem, "edge_sidecar_to_children.edges");
-                return getStreamOfJsonArray(sideCar).map(object -> object.getJSONObject("node"))
-                        .flatMap(this::parseRootForUrls);
-            default:
-                return Stream.empty();
-        }
-    }
-
-    private String getVideoUrlFromPage(String videoID) {
-        try {
-            Document doc = Http.url("https://www.instagram.com/p/" + videoID).cookies(cookies).get();
-            return doc.select("meta[property=og:video]").attr("content");
-        } catch (Exception e) {
-            logger.warn("Unable to get page " + "https://www.instagram.com/p/" + videoID);
-        }
-        return "";
-    }
-
-    @Override
-    protected void downloadURL(URL url, int index) {
-        if (Utils.getConfigBoolean("instagram.download_images_only", false) && url.toString().contains(".mp4?")) {
-            logger.info("Skipped video url: " + url);
-            return;
-        }
-        addURLToDownload(url, itemPrefixes.get(index - 1), "", null, cookies);
-    }
-
-    // Javascript parsing
-    /* ------------------------------------------------------------------------------------------------------- */
-    private String getHashValue(String js, String keyword, int fallbackOffset) {
-        // Match patterns like: loadProfilePageExtras:{queryId:"abc123..."}
-        Pattern pattern = Pattern.compile(keyword + "\\s*.*?queryId\\s*:\\s*\"([0-9a-f]+)\"");
-        Matcher matcher = pattern.matcher(js);
-        if (matcher.find()) {
-            return matcher.group(1);
-        }
-
-    // Fallback: search for any queryId if keyword failed
-    Pattern fallbackPattern = Pattern.compile("queryId\\s*:\\s*\"([0-9a-f]+)\"");
-    Matcher fallbackMatcher = fallbackPattern.matcher(js);
-    if (fallbackMatcher.find()) {
-        return fallbackMatcher.group(1);
-    }
-
-    return null;
-}
-
-
-    private <T> Stream<T> filterItems(Object obj, Class<T> aClass) {
-        return Stream.of(obj).filter(aClass::isInstance).map(aClass::cast);
-    }
-
-
-    // Some JSON helper methods below
-    /* ------------------------------------------------------------------------------------------------------- */
     private JSONObject getJsonObjectByPath(JSONObject object, String key) {
+        if (object == null) {
+            throw new IllegalArgumentException("Null JSON object for path: " + key);
+        }
         Pattern arrayPattern = Pattern.compile("(?<arr>.*)\\[(?<idx>\\d+)]");
         JSONObject result = object;
-        for (String s : key.split("[.]")) {
+        for (String s : key.split("\\.")) {
             Matcher m = arrayPattern.matcher(s);
             result = m.matches() ?
-                    result.getJSONArray(m.group("arr")).getJSONObject(Integer.parseInt(m.group("idx"))) :
-                    result.getJSONObject(s);
+                result.getJSONArray(m.group("arr")).getJSONObject(Integer.parseInt(m.group("idx"))) :
+                result.getJSONObject(s);
         }
         return result;
     }
 
-    private <T> T getByPath(BiFunction<JSONObject, String, T> func, JSONObject object, String key) {
-        int namePos = key.lastIndexOf('.');
-        JSONObject parent = namePos < 0 ? object : getJsonObjectByPath(object, key.substring(0, namePos));
-        return func.apply(parent, key.substring(namePos + 1));
-    }
-
-    private JSONArray getJsonArrayByPath(JSONObject object, String key) {
-        return getByPath(JSONObject::getJSONArray, object, key);
-    }
-
-    private String getJsonStringByPath(JSONObject object, String key) {
-        return getByPath(JSONObject::getString, object, key);
-    }
-
-    private Stream<JSONObject> getStreamOfJsonArray(JSONArray array) {
-        return StreamSupport.stream(new JSONSpliterator(array), false);
-    }
-
-    private class JSONSpliterator extends Spliterators.AbstractSpliterator<JSONObject> {
-        private JSONArray array;
-        private int index = 0;
-
-        JSONSpliterator(JSONArray array) {
-            super(array.length(), SIZED | ORDERED);
-            this.array = array;
-        }
-
-        @Override
-        public boolean tryAdvance(Consumer<? super JSONObject> action) {
-            if (index == array.length()) {
-                return false;
+    @Override
+    public List<String> getURLsFromJSON(JSONObject json) {
+        List<String> result = new ArrayList<>();
+        try {
+            JSONArray edges = getJsonObjectByPath(json, "entry_data.ProfilePage[0].graphql.user.edge_owner_to_timeline_media.edges").getJSONArray("edges");
+            for (int i = 0; i < edges.length(); i++) {
+                JSONObject node = edges.getJSONObject(i).getJSONObject("node");
+                if (node.optBoolean("is_video", false)) {
+                    result.add(node.getString("video_url"));
+                } else {
+                    result.add(node.getString("display_url"));
+                }
             }
-            action.accept(array.getJSONObject(index++));
-            return true;
+        } catch (Exception e) {
+            logger.warn("Failed to extract media URLs", e);
         }
+        return result;
+    }
+
+    @Override
+    protected void downloadURL(URL url, int index) {
+        addURLToDownload(url, getPrefix(index), "", null, cookies);
+    }
+
+    private String getPrefix(int index) {
+        return String.format("%03d_", index);
     }
 }
