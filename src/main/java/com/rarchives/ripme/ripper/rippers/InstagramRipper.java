@@ -178,8 +178,7 @@ public class InstagramRipper extends AbstractJSONRipper {
     }
 
     private String getProfileHash(String jsData) {
-        return getHashValue(jsData, "loadProfilePageExtras", -1,
-                s -> s.replaceAll(".*queryId\\s?:\\s?\"([0-9a-f]*)\".*", "$1"));
+        return getHashValue(jsData, "loadProfilePageExtras", -1);
     }
 
     private String getPinnedHash(String jsData) {
