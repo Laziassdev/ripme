@@ -5,14 +5,8 @@ import static java.lang.String.format;
 import java.io.IOException;
 import java.net.MalformedURLException;
 import java.net.URL;
-import java.time.Instant;
-import java.time.ZoneOffset;
-import java.time.ZonedDateTime;
-import java.time.format.DateTimeFormatter;
 import java.util.*;
-import java.util.function.*;
 import java.util.regex.*;
-import java.util.stream.*;
 
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -29,9 +23,10 @@ public class InstagramRipper extends AbstractJSONRipper {
 
     private static final Logger logger = LogManager.getLogger(InstagramRipper.class);
 
-    private String qHash;
-    private Map<String, String> cookies = new HashMap<>();
     private String idString;
+    private Map<String, String> cookies = new HashMap<>();
+    private String endCursor = null;
+    private boolean hasNextPage = true;
 
     public InstagramRipper(URL url) throws IOException {
         super(url);
@@ -70,7 +65,31 @@ public class InstagramRipper extends AbstractJSONRipper {
             throw new IOException("This Instagram profile is private. Set a valid 'instagram.session_id' in rip.properties.");
         }
         idString = user.getString("id");
+        JSONObject pageInfo = user.getJSONObject("edge_owner_to_timeline_media").getJSONObject("page_info");
+        hasNextPage = pageInfo.getBoolean("has_next_page");
+        endCursor = pageInfo.optString("end_cursor", null);
         return jsonObject;
+    }
+
+    @Override
+    public JSONObject getNextPage(JSONObject json) throws IOException {
+        if (!hasNextPage || endCursor == null || idString == null) {
+            return null;
+        }
+        JSONObject variables = new JSONObject();
+        variables.put("id", idString);
+        variables.put("first", 12);
+        variables.put("after", endCursor);
+
+        String queryHash = "c6809c9c025875ac6f02619eae97a80e"; // standard query hash for profile posts
+        String url = format("https://www.instagram.com/graphql/query/?query_hash=%s&variables=%s", queryHash, variables.toString());
+
+        JSONObject result = Http.url(url).cookies(cookies).getJSON();
+        JSONObject media = result.getJSONObject("data").getJSONObject("user").getJSONObject("edge_owner_to_timeline_media");
+        JSONObject pageInfo = media.getJSONObject("page_info");
+        hasNextPage = pageInfo.getBoolean("has_next_page");
+        endCursor = pageInfo.optString("end_cursor", null);
+        return result;
     }
 
     private void setAuthCookie() {
@@ -119,13 +138,29 @@ public class InstagramRipper extends AbstractJSONRipper {
             for (int i = 0; i < edges.length(); i++) {
                 JSONObject node = edges.getJSONObject(i).getJSONObject("node");
                 if (node.optBoolean("is_video", false)) {
-                    result.add(node.getString("video_url"));
+                    if (node.has("video_url")) {
+                        result.add(node.getString("video_url"));
+                    }
                 } else {
                     result.add(node.getString("display_url"));
                 }
             }
         } catch (Exception e) {
-            logger.warn("Failed to extract media URLs", e);
+            try {
+                JSONArray edges = json.getJSONObject("data").getJSONObject("user").getJSONObject("edge_owner_to_timeline_media").getJSONArray("edges");
+                for (int i = 0; i < edges.length(); i++) {
+                    JSONObject node = edges.getJSONObject(i).getJSONObject("node");
+                    if (node.optBoolean("is_video", false)) {
+                        if (node.has("video_url")) {
+                            result.add(node.getString("video_url"));
+                        }
+                    } else {
+                        result.add(node.getString("display_url"));
+                    }
+                }
+            } catch (Exception ex) {
+                logger.warn("Failed to extract media URLs", ex);
+            }
         }
         return result;
     }
