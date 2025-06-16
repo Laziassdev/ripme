@@ -160,42 +160,141 @@ public class InstagramRipper extends AbstractJSONRipper {
         }
 
         return json;
-    }
-
-    private JSONObject getGraphQLUserPage(String username, String endCursor) throws IOException {
+    }    private JSONObject getGraphQLUserPage(String username, String endCursor) throws IOException {
         String userId = getUserID(username);
-
-        JSONObject variables = new JSONObject();
-        variables.put("id", userId);
-        variables.put("first", 50);
-        if (endCursor != null) {
-            variables.put("after", endCursor);
+        if (userId == null || userId.isEmpty()) {
+            throw new IOException("Failed to get user ID for " + username);
+        }        // Use the user feed endpoint instead of GraphQL
+        StringBuilder urlBuilder = new StringBuilder(String.format("https://www.instagram.com/api/v1/feed/user/%s/?count=50", userId));
+        if (endCursor != null && !endCursor.isEmpty()) {
+            urlBuilder.append("&max_id=").append(endCursor);
         }
-
-        String encodedVariables = URLEncoder.encode(variables.toString(), StandardCharsets.UTF_8);
-        String url = String.format(
-            "https://www.instagram.com/graphql/query/?query_hash=69cba40317214236af40e7efa697781d&variables=%s",
-            encodedVariables
-        );
-
+        String url = urlBuilder.toString();
         logger.debug("Fetching API URL: " + url);
 
-        try {
-            Document doc = Http.url(url)
+        try {            Response response = Http.url(url)
                     .header("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36")
                     .header("Accept", "*/*")
                     .header("Accept-Language", "en-US,en;q=0.5")
                     .header("X-IG-App-ID", "936619743392459")
+                    .header("X-Requested-With", "XMLHttpRequest")
+                    .header("X-ASBD-ID", "129477")
+                    .header("X-IG-WWW-Claim", "0")
+                    .header("X-CSRFToken", cookies.getOrDefault("csrftoken", ""))
+                    .header("Origin", "https://www.instagram.com")
+                    .header("DNT", "1")
+                    .header("Connection", "keep-alive")
+                    .header("Referer", "https://www.instagram.com/" + username + "/")
+                    .header("Sec-Fetch-Dest", "empty")
+                    .header("Sec-Fetch-Mode", "cors")
+                    .header("Sec-Fetch-Site", "same-origin")
                     .cookies(cookies)
                     .ignoreContentType()
-                    .get();
+                    .response();
 
-            String jsonText = doc.text();
-            logger.debug("API Response: " + jsonText);
+            int statusCode = response.statusCode();
+            String jsonText = response.body();
 
-            return new JSONObject(jsonText);
-        } catch (HttpStatusException e) {
-            logger.error("HTTP error " + e.getStatusCode() + " while fetching " + url);
+            if (statusCode == 429) {
+                throw new IOException("Rate limited by Instagram. Please wait a few minutes before trying again.");
+            }
+            
+            if (statusCode != 200) {
+                throw new IOException("HTTP error " + statusCode + " while fetching " + url);
+            }
+
+            if (jsonText == null || jsonText.isEmpty()) {
+                throw new IOException("Empty response from Instagram API");
+            }
+
+            logger.debug("API Response: " + jsonText);            try {
+                // Debug the raw response
+                logger.debug("Raw response length: " + (jsonText != null ? jsonText.length() : 0));
+                logger.debug("First 1000 chars of response: " + (jsonText != null ? jsonText.substring(0, Math.min(1000, jsonText.length())) : "null"));
+
+                if (jsonText == null || jsonText.trim().isEmpty()) {
+                    throw new IOException("Empty response from Instagram API");
+                }
+
+                if (!jsonText.trim().startsWith("{")) {
+                    // Try to find JSON content within HTML response
+                    Pattern pattern = Pattern.compile("window\\._sharedData = (\\{.*?\\});");
+                    Matcher matcher = pattern.matcher(jsonText);
+                    if (matcher.find()) {
+                        jsonText = matcher.group(1);
+                        logger.debug("Extracted JSON from HTML response");
+                    } else {
+                        // Try another common pattern
+                        pattern = Pattern.compile("<script type=\"text/javascript\">window\\.__additionalDataLoaded\\('.*?',(\\{.*?\\})\\);</script>");
+                        matcher = pattern.matcher(jsonText);
+                        if (matcher.find()) {
+                            jsonText = matcher.group(1);
+                            logger.debug("Extracted JSON from additionalDataLoaded");
+                        } else {
+                            throw new IOException("Response is not valid JSON and couldn't extract JSON from HTML");
+                        }
+                    }
+                }
+
+                JSONObject json = new JSONObject(jsonText);
+                if (!json.has("items") && !json.has("data")) {
+                    if (json.has("message")) {
+                        throw new IOException("Instagram API error: " + json.getString("message"));
+                    }
+                    throw new IOException("Invalid JSON response - missing items/data objects");
+                }
+
+                // Convert feed API response to match GraphQL structure if needed
+                if (json.has("items")) {
+                    JSONObject graphqlStyle = new JSONObject();
+                    JSONObject data = new JSONObject();
+                    JSONObject user = new JSONObject();
+                    JSONObject timelineMedia = new JSONObject();
+                    JSONArray edges = new JSONArray();
+
+                    JSONArray items = json.getJSONArray("items");
+                    for (int i = 0; i < items.length(); i++) {
+                        JSONObject item = items.getJSONObject(i);
+                        JSONObject edge = new JSONObject();
+                        JSONObject node = new JSONObject();
+                        
+                        // Copy relevant fields
+                        node.put("__typename", item.has("video_versions") ? "GraphVideo" : "GraphImage");
+                        node.put("display_url", item.has("image_versions2") ? 
+                            item.getJSONObject("image_versions2").getJSONArray("candidates").getJSONObject(0).getString("url") : "");
+                        if (item.has("video_versions")) {
+                            node.put("video_url", item.getJSONArray("video_versions").getJSONObject(0).getString("url"));
+                        }
+                        
+                        edge.put("node", node);
+                        edges.put(edge);
+                    }
+
+                    timelineMedia.put("edges", edges);
+                    if (json.has("more_available")) {
+                        JSONObject pageInfo = new JSONObject();
+                        pageInfo.put("has_next_page", json.getBoolean("more_available"));
+                        if (json.has("next_max_id")) {
+                            pageInfo.put("end_cursor", json.getString("next_max_id"));
+                        }
+                        timelineMedia.put("page_info", pageInfo);
+                    }
+
+                    user.put("edge_owner_to_timeline_media", timelineMedia);
+                    data.put("user", user);
+                    graphqlStyle.put("data", data);
+                    
+                    return graphqlStyle;
+                }
+
+                return json;
+            } catch (JSONException e) {
+                logger.error("Error parsing JSON response: " + e.getMessage());
+                logger.debug("Raw response: " + jsonText);
+                throw new IOException("Failed to parse Instagram API response: " + e.getMessage());
+            }
+        } catch (IOException e) {
+            logger.error("Error fetching Instagram data: " + e.getMessage());
             throw e;
         }
     }
@@ -208,24 +307,41 @@ public class InstagramRipper extends AbstractJSONRipper {
         }
         
         // Otherwise fetch from profile page
-        String profileUrl = "https://www.instagram.com/" + username + "/?__a=1";
+        String profileUrl = "https://www.instagram.com/api/v1/users/web_profile_info/?username=" + username;
         logger.debug("Fetching user ID from " + profileUrl);
         
         try {
-            JSONObject json = Http.url(profileUrl)
+            Response response = Http.url(profileUrl)
+                    .header("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36")
+                    .header("Accept", "*/*")
+                    .header("Accept-Language", "en-US,en;q=0.5")
+                    .header("X-IG-App-ID", "936619743392459")
+                    .header("X-Requested-With", "XMLHttpRequest")
                     .cookies(cookies)
                     .ignoreContentType()
-                    .getJSON();
-                    
-            if (json.has("graphql") && json.getJSONObject("graphql").has("user")) {
-                return json.getJSONObject("graphql").getJSONObject("user").getString("id");
+                    .response();
+
+            int statusCode = response.statusCode();
+            String jsonText = response.body();
+
+            if (statusCode != 200) {
+                throw new IOException("Failed to get profile info: HTTP " + statusCode);
             }
-            
-            logger.error("Could not find user ID in profile response: " + json.toString(2));
-            throw new IOException("Failed to get user ID");
+
+            JSONObject json = new JSONObject(jsonText);
+            if (!json.has("data") || !json.getJSONObject("data").has("user")) {
+                throw new IOException("Invalid profile response - no user data found");
+            }
+
+            JSONObject user = json.getJSONObject("data").getJSONObject("user");
+            if (!user.has("id")) {
+                throw new IOException("No user ID found in profile response");
+            }
+
+            return user.getString("id");
         } catch (Exception e) {
             logger.error("Error getting user ID: " + e.getMessage());
-            throw new IOException("Could not fetch user ID. You must be logged in via Firefox cookies.");
+            throw new IOException("Could not fetch user ID. You must be logged in via Firefox cookies.", e);
         }
     }
 
