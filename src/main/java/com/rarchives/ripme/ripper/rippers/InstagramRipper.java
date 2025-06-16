@@ -24,6 +24,8 @@ public class InstagramRipper extends AbstractJSONRipper {
 
     private static final Logger logger = LogManager.getLogger(InstagramRipper.class);
     private static final int WAIT_TIME = 2000; // 2 seconds between requests
+    private static final int TIMEOUT = 20000; // 20 seconds timeout
+    private static final int MAX_RETRIES = 3;
 
     private String idString;
     private Map<String, String> cookies = new HashMap<>();
@@ -54,12 +56,17 @@ public class InstagramRipper extends AbstractJSONRipper {
             return matcher.group("username");
         }
         throw new MalformedURLException("Expected format: https://www.instagram.com/username/");
-    }
-
-    @Override
+    }    @Override
     public JSONObject getFirstPage() throws IOException {
         setAuthCookie();
-        Document document = Http.url(url).cookies(cookies).response().parse();
+        Document document = Http.url(url)
+            .cookies(cookies)
+            .timeout(TIMEOUT)
+            .maxBodySize(0) // No limit
+            .ignoreHttpErrors(true)
+            .response()
+            .parse();
+            
         JSONObject jsonObject = getJsonObjectFromDoc(document);
         if (jsonObject == null) {
             logger.warn("Failed to parse sharedData, falling back to GraphQL");
@@ -236,26 +243,61 @@ public class InstagramRipper extends AbstractJSONRipper {
                 result.getJSONObject(s);
         }
         return result;
-    }
-
-    @Override
+    }    @Override
     public List<String> getURLsFromJSON(JSONObject json) {
         List<String> result = new ArrayList<>();
         try {
-            JSONArray edges;
+            JSONArray items;
             if (fallbackToGraphQL) {
-                edges = json.getJSONObject("data").getJSONObject("user").getJSONObject("edge_owner_to_timeline_media").getJSONArray("edges");
-            } else {
-                edges = getJsonObjectByPath(json, "entry_data.ProfilePage[0].graphql.user.edge_owner_to_timeline_media.edges").getJSONArray("edges");
-            }
-            for (int i = 0; i < edges.length(); i++) {
-                JSONObject node = edges.getJSONObject(i).getJSONObject("node");
-                if (node.optBoolean("is_video", false)) {
-                    if (node.has("video_url")) {
-                        result.add(node.getString("video_url"));
+                if (json.has("items")) {
+                    // New API format
+                    items = json.getJSONArray("items");
+                    for (int i = 0; i < items.length(); i++) {
+                        JSONObject item = items.getJSONObject(i);
+                        if (item.has("carousel_media")) {
+                            // Handle carousel/multiple images
+                            JSONArray carousel = item.getJSONArray("carousel_media");
+                            for (int j = 0; j < carousel.length(); j++) {
+                                JSONObject media = carousel.getJSONObject(j);
+                                if (media.has("video_versions") && media.getJSONArray("video_versions").length() > 0) {
+                                    result.add(media.getJSONArray("video_versions").getJSONObject(0).getString("url"));
+                                } else if (media.has("image_versions2")) {
+                                    result.add(media.getJSONObject("image_versions2").getJSONArray("candidates").getJSONObject(0).getString("url"));
+                                }
+                            }
+                        } else if (item.has("video_versions") && item.getJSONArray("video_versions").length() > 0) {
+                            // Single video
+                            result.add(item.getJSONArray("video_versions").getJSONObject(0).getString("url"));
+                        } else if (item.has("image_versions2")) {
+                            // Single image
+                            result.add(item.getJSONObject("image_versions2").getJSONArray("candidates").getJSONObject(0).getString("url"));
+                        }
                     }
-                } else {
-                    result.add(node.getString("display_url"));
+                } else if (json.has("data")) {
+                    // Old GraphQL format
+                    items = json.getJSONObject("data").getJSONObject("user").getJSONObject("edge_owner_to_timeline_media").getJSONArray("edges");
+                    for (int i = 0; i < items.length(); i++) {
+                        JSONObject node = items.getJSONObject(i).getJSONObject("node");
+                        if (node.optBoolean("is_video", false)) {
+                            if (node.has("video_url")) {
+                                result.add(node.getString("video_url"));
+                            }
+                        } else {
+                            result.add(node.getString("display_url"));
+                        }
+                    }
+                }
+            } else {
+                items = getJsonObjectByPath(json, "entry_data.ProfilePage[0].graphql.user.edge_owner_to_timeline_media.edges").getJSONArray("edges");
+                for (int i = 0; i < items.length(); i++) {
+                    JSONObject node = items.getJSONObject(i).getJSONObject("node");
+                    if (node.optBoolean("is_video", false)) {
+                        if (node.has("video_url")) {
+                            result.add(node.getString("video_url"));
+                        }
+                    } else {
+                        result.add(node.getString("display_url"));
+                    }
                 }
             }
         } catch (Exception ex) {
