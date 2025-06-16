@@ -15,6 +15,7 @@ import org.apache.logging.log4j.Logger;
 import org.json.*;
 import org.jsoup.nodes.Document;
 import org.jsoup.nodes.Element;
+import org.jsoup.Connection;
 import org.jsoup.Connection.Response;
 
 import com.rarchives.ripme.ripper.AbstractJSONRipper;
@@ -102,13 +103,12 @@ public class InstagramRipper extends AbstractJSONRipper {    private static fina
             if (accessToken != null) {
                 // Use Graph API with access token
                 String fullUrlUser = format("https://graph.instagram.com/v18.0/me/media?fields=id,media_type,media_url,thumbnail_url,permalink,caption,children{media_type,media_url}&access_token=%s", 
-                    URLEncoder.encode(accessToken, StandardCharsets.UTF_8));
-                if (afterCursor != null) {
+                    URLEncoder.encode(accessToken, StandardCharsets.UTF_8));                if (afterCursor != null) {
                     fullUrlUser += "&after=" + afterCursor;
                 }
                 response = Http.url(fullUrlUser)
                     .ignoreContentType()
-                    .get();
+                    .execute();
             } else {
                 // Use cookie-based auth with proper CSRF token
                 String fullUrlUser = format("https://www.instagram.com/api/v1/users/web_profile_info/?username=%s", username);
@@ -125,12 +125,11 @@ public class InstagramRipper extends AbstractJSONRipper {    private static fina
                     .header("x-asbd-id", "129477")
                     .header("x-csrftoken", csrftoken)
                     .header("x-ig-app-id", "936619743392459")
-                    .header("x-requested-with", "XMLHttpRequest")
-                    .header("x-web-device-id", cookies.get("ig_did"))
-                    .get();
+                    .header("x-requested-with", "XMLHttpRequest")                    .header("x-web-device-id", cookies.get("ig_did"))
+                    .execute();
             }
             
-            String rawProfile = response.body().text();
+            String rawProfile = response.body();
             if (rawProfile.trim().startsWith("<")) {
                 throw new IOException("Instagram returned HTML instead of JSON. You may need to refresh your authentication.");
             }
@@ -167,8 +166,7 @@ public class InstagramRipper extends AbstractJSONRipper {    private static fina
         } catch (InterruptedException e) {
             logger.error("[!] Interrupted while waiting to load next page", e);
         }
-        
-        Response mediaResponse = Http.url(mediaUrl)
+          Connection conn = Http.url(mediaUrl)
             .cookies(cookies)
             .ignoreContentType()
             .userAgent("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/115.0.0.0 Safari/537.36")
@@ -179,14 +177,15 @@ public class InstagramRipper extends AbstractJSONRipper {    private static fina
             
         if (accessToken == null) {
             // Add additional headers for cookie auth
-            mediaResponse.header("x-asbd-id", "129477")
-                .header("x-csrftoken", csrftoken)
-                .header("x-ig-app-id", "936619743392459")
-                .header("x-requested-with", "XMLHttpRequest")
-                .header("x-web-device-id", cookies.get("ig_did"));
+            conn.header("x-asbd-id", "129477");
+            conn.header("x-csrftoken", csrftoken);
+            conn.header("x-ig-app-id", "936619743392459");
+            conn.header("x-requested-with", "XMLHttpRequest");
+            conn.header("x-web-device-id", cookies.get("ig_did"));
         }
         
-        String rawJson = mediaResponse.get().body().text();
+        Response mediaResponse = conn.execute();
+        String rawJson = mediaResponse.body();
         if (rawJson.trim().startsWith("<")) {
             throw new IOException("Instagram returned HTML instead of JSON. Authentication may have expired.");
         }
