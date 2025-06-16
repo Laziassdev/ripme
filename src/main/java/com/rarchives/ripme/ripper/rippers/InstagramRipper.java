@@ -19,20 +19,29 @@ import org.jsoup.nodes.Element;
 import com.rarchives.ripme.ripper.AbstractJSONRipper;
 import com.rarchives.ripme.utils.Http;
 import com.rarchives.ripme.utils.Utils;
+import java.sql.*;
+import java.nio.file.*;
 
-public class InstagramRipper extends AbstractJSONRipper {
-
-    private static final Logger logger = LogManager.getLogger(InstagramRipper.class);
+public class InstagramRipper extends AbstractJSONRipper {    private static final Logger logger = LogManager.getLogger(InstagramRipper.class);
     private static final int WAIT_TIME = 2000; // 2 seconds between requests
     private static final int TIMEOUT = 20000; // 20 seconds timeout
     private static final int MAX_RETRIES = 3;
+    
+    // SQLite driver registration
+    static {
+        try {
+            Class.forName("org.sqlite.JDBC");
+        } catch (ClassNotFoundException e) {
+            // Log warning but don't fail - SQLite is only needed for Firefox cookie auth
+            LogManager.getLogger(InstagramRipper.class).warn("SQLite JDBC driver not found. Firefox cookie authentication will not be available.");
+        }
+    }
 
-    private String idString;
-    private Map<String, String> cookies = new HashMap<>();
+    private String idString;    private Map<String, String> cookies = new HashMap<>();
     private String endCursor = null;
     private boolean hasNextPage = true;
-    private boolean fallbackToGraphQL = false;
-    private String csrftoken = null;
+    private boolean fallbackToGraphQL = true; // Always use Graph API in 2025
+    private String accessToken = null;
 
     public InstagramRipper(URL url) throws IOException {
         super(url);
@@ -58,43 +67,37 @@ public class InstagramRipper extends AbstractJSONRipper {
         throw new MalformedURLException("Expected format: https://www.instagram.com/username/");
     }    @Override
     public JSONObject getFirstPage() throws IOException {
-        setAuthCookie();
-        Http.url(url).timeout(TIMEOUT); // Set timeout first
-        Document document = Http.url(url)
-            .cookies(cookies)
-            .userAgent("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/115.0.0.0 Safari/537.36")
-            .ignoreContentType()
-            .response()
-            .parse();
-            
-        JSONObject jsonObject = getJsonObjectFromDoc(document);
-        if (jsonObject == null) {
-            logger.warn("Failed to parse sharedData, falling back to GraphQL");
-            fallbackToGraphQL = true;
-            String username = getGID(url);
-            return getGraphQLUserPage(username, null);
+        setAuthToken();
+        String username = getGID(url);
+        JSONObject json = getGraphQLUserPage(username, null);
+        
+        // Check if we got data back
+        if (!json.has("data")) {
+            throw new IOException("Failed to get media data from Instagram API. Check your access token.");
         }
-        JSONObject user = getJsonObjectByPath(jsonObject, "entry_data.ProfilePage[0].graphql.user");
-        if (user.optBoolean("is_private") && user.optJSONObject("edge_owner_to_timeline_media") == null) {
-            throw new IOException("This Instagram profile is private. Set a valid 'instagram.session_id' in rip.properties.");
+        
+        JSONObject paging = json.optJSONObject("paging");
+        if (paging != null) {
+            hasNextPage = paging.has("next");
+            endCursor = paging.optJSONObject("cursors") != null ? 
+                       paging.getJSONObject("cursors").optString("after", null) : null;
+        } else {
+            hasNextPage = false;
+            endCursor = null;
         }
-        idString = user.getString("id");
-        JSONObject pageInfo = user.getJSONObject("edge_owner_to_timeline_media").getJSONObject("page_info");
-        hasNextPage = pageInfo.getBoolean("has_next_page");
-        endCursor = pageInfo.optString("end_cursor", null);
-        return jsonObject;
-    }
-
-    @Override
+        
+        return json;
+    }    @Override
     public JSONObject getNextPage(JSONObject json) throws IOException {
-        if (!hasNextPage || idString == null) {
+        if (!hasNextPage || endCursor == null) {
             return null;
         }
         String username = getGID(url);
         return getGraphQLUserPage(username, endCursor);
-    }    private JSONObject getGraphQLUserPage(String username, String afterCursor) throws IOException {
-        if (idString == null) {
-            String fullUrlUser = format("https://www.instagram.com/api/v1/users/web_profile_info/?username=%s&include_highlight_reels=false", URLEncoder.encode(username, StandardCharsets.UTF_8));
+    }    private JSONObject getGraphQLUserPage(String username, String afterCursor) throws IOException {        if (idString == null) {
+            // Using Instagram Graph API endpoint
+            String fullUrlUser = format("https://graph.instagram.com/v18.0/me/media?fields=id,media_type,media_url,thumbnail_url,permalink&access_token=%s", 
+                URLEncoder.encode(Utils.getConfigString("instagram.access_token", ""), StandardCharsets.UTF_8));
             String rawProfile = Http.url(fullUrlUser)
                 .cookies(cookies)
                 .ignoreContentType()
@@ -177,41 +180,86 @@ public class InstagramRipper extends AbstractJSONRipper {
         }
 
         return new JSONObject(rawJson);
-    }    private void setAuthCookie() {
-        String sessionId = Utils.getConfigString("instagram.session_id", null);
-        if (sessionId != null) {
-            // Essential auth cookies
-            cookies.put("sessionid", sessionId);
-            String userId = sessionId.split(":")[0];
-            cookies.put("ds_user_id", userId);
-            
-            // Device and browser identification
-            cookies.put("ig_did", Utils.getConfigString("instagram.ig_did", null));
-            cookies.put("mid", Utils.getConfigString("instagram.mid", null));
-            cookies.put("datr", Utils.getConfigString("instagram.datr", null));
-            
-            // CSRF protection
-            csrftoken = Utils.getConfigString("instagram.csrftoken", null);
-            if (csrftoken != null) {
-                cookies.put("csrftoken", csrftoken);
+    }    private void setAuthToken() throws IOException {
+        // First try access token
+        accessToken = Utils.getConfigString("instagram.access_token", null);
+        
+        // If no access token, try getting cookies from Firefox
+        if (accessToken == null) {
+            try {
+                extractFirefoxCookies();
+            } catch (Exception e) {
+                logger.warn("Could not extract Firefox cookies: " + e.getMessage());
+                throw new IOException("No authentication method available. Please either:\n" +
+                                   "1. Set 'instagram.access_token' in rip.properties, or\n" +
+                                   "2. Login to Instagram in Firefox");
             }
-            
-            // Additional required cookies
-            cookies.put("ig_nrcb", "1");
-            cookies.put("dpr", "1");
-            cookies.put("igd_ls", "1");
-            cookies.put("igd_pr", "1");
-            cookies.put("ig_vw", "1920");
-            
-            // Browser capabilities
-            cookies.put("browser-platform", "Windows");
-            cookies.put("browser-version", "115.0");
-            cookies.put("browser-name", "Chrome");
-            
-            // Session routing
-            String rur = String.format("\"PRN\\054%s\\0541719062291:01f79942\"", userId);
-            cookies.put("rur", rur);
         }
+    }
+    
+    private void extractFirefoxCookies() throws IOException {
+        String cookiesPath = getFirefoxCookiesPath();
+        if (cookiesPath == null) {
+            throw new IOException("Firefox cookies.sqlite not found");
+        }
+        
+        try (Connection conn = DriverManager.getConnection("jdbc:sqlite:" + cookiesPath)) {
+            // Try newer Firefox cookie schema first
+            try (PreparedStatement stmt = conn.prepareStatement(
+                "SELECT name, value FROM moz_cookies WHERE baseDomain='instagram.com'")) {
+                cookies = extractCookiesFromQuery(stmt);
+            } catch (SQLException e) {
+                // Try older Firefox cookie schema
+                try (PreparedStatement stmt = conn.prepareStatement(
+                    "SELECT name, value FROM moz_cookies WHERE host LIKE '%instagram.com'")) {
+                    cookies = extractCookiesFromQuery(stmt);
+                }
+            }
+        } catch (SQLException e) {
+            throw new IOException("Failed to read Firefox cookies: " + e.getMessage());
+        }
+    }
+    
+    private String getFirefoxCookiesPath() {
+        String userHome = System.getProperty("user.home");
+        Path cookiesPath;
+        
+        if (System.getProperty("os.name").startsWith("Windows")) {
+            cookiesPath = Paths.get(userHome, "AppData", "Roaming", "Mozilla", "Firefox", "Profiles");
+        } else if (System.getProperty("os.name").startsWith("Mac")) {
+            cookiesPath = Paths.get(userHome, "Library", "Application Support", "Firefox", "Profiles");
+        } else {
+            cookiesPath = Paths.get(userHome, ".mozilla", "firefox");
+        }
+        
+        if (!Files.exists(cookiesPath)) {
+            return null;
+        }
+        
+        try {
+            return Files.walk(cookiesPath)
+                .filter(path -> path.getFileName().toString().equals("cookies.sqlite"))
+                .findFirst()
+                .map(Path::toString)
+                .orElse(null);
+        } catch (IOException e) {
+            return null;
+        }
+    }
+    
+    private Map<String, String> extractCookiesFromQuery(PreparedStatement stmt) throws SQLException {
+        Map<String, String> extractedCookies = new HashMap<>();
+        ResultSet rs = stmt.executeQuery();
+        while (rs.next()) {
+            extractedCookies.put(rs.getString("name"), rs.getString("value"));
+        }
+        
+        // Verify we got the essential cookies
+        if (!extractedCookies.containsKey("sessionid")) {
+            throw new SQLException("No valid Instagram session found in Firefox cookies");
+        }
+        
+        return extractedCookies;
     }
 
     private JSONObject getJsonObjectFromDoc(Document document) {
@@ -247,61 +295,36 @@ public class InstagramRipper extends AbstractJSONRipper {
     public List<String> getURLsFromJSON(JSONObject json) {
         List<String> result = new ArrayList<>();
         try {
-            JSONArray items;
-            if (fallbackToGraphQL) {
-                if (json.has("items")) {
-                    // New API format
-                    items = json.getJSONArray("items");
-                    for (int i = 0; i < items.length(); i++) {
-                        JSONObject item = items.getJSONObject(i);
-                        if (item.has("carousel_media")) {
-                            // Handle carousel/multiple images
-                            JSONArray carousel = item.getJSONArray("carousel_media");
-                            for (int j = 0; j < carousel.length(); j++) {
-                                JSONObject media = carousel.getJSONObject(j);
-                                if (media.has("video_versions") && media.getJSONArray("video_versions").length() > 0) {
-                                    result.add(media.getJSONArray("video_versions").getJSONObject(0).getString("url"));
-                                } else if (media.has("image_versions2")) {
-                                    result.add(media.getJSONObject("image_versions2").getJSONArray("candidates").getJSONObject(0).getString("url"));
+            JSONArray items = json.getJSONArray("data");
+            for (int i = 0; i < items.length(); i++) {
+                JSONObject item = items.getJSONObject(i);
+                String mediaType = item.getString("media_type");
+                
+                switch (mediaType) {
+                    case "IMAGE":
+                        result.add(item.getString("media_url"));
+                        break;
+                        
+                    case "VIDEO":
+                        result.add(item.getString("media_url"));
+                        break;
+                        
+                    case "CAROUSEL_ALBUM":
+                        if (item.has("children")) {
+                            JSONArray children = item.getJSONArray("children");
+                            for (int j = 0; j < children.length(); j++) {
+                                JSONObject child = children.getJSONObject(j);
+                                String childMediaUrl = child.getString("media_url");
+                                if (childMediaUrl != null) {
+                                    result.add(childMediaUrl);
                                 }
                             }
-                        } else if (item.has("video_versions") && item.getJSONArray("video_versions").length() > 0) {
-                            // Single video
-                            result.add(item.getJSONArray("video_versions").getJSONObject(0).getString("url"));
-                        } else if (item.has("image_versions2")) {
-                            // Single image
-                            result.add(item.getJSONObject("image_versions2").getJSONArray("candidates").getJSONObject(0).getString("url"));
                         }
-                    }
-                } else if (json.has("data")) {
-                    // Old GraphQL format
-                    items = json.getJSONObject("data").getJSONObject("user").getJSONObject("edge_owner_to_timeline_media").getJSONArray("edges");
-                    for (int i = 0; i < items.length(); i++) {
-                        JSONObject node = items.getJSONObject(i).getJSONObject("node");
-                        if (node.optBoolean("is_video", false)) {
-                            if (node.has("video_url")) {
-                                result.add(node.getString("video_url"));
-                            }
-                        } else {
-                            result.add(node.getString("display_url"));
-                        }
-                    }
-                }
-            } else {
-                items = getJsonObjectByPath(json, "entry_data.ProfilePage[0].graphql.user.edge_owner_to_timeline_media.edges").getJSONArray("edges");
-                for (int i = 0; i < items.length(); i++) {
-                    JSONObject node = items.getJSONObject(i).getJSONObject("node");
-                    if (node.optBoolean("is_video", false)) {
-                        if (node.has("video_url")) {
-                            result.add(node.getString("video_url"));
-                        }
-                    } else {
-                        result.add(node.getString("display_url"));
-                    }
+                        break;
                 }
             }
         } catch (Exception ex) {
-            logger.warn("Failed to extract media URLs", ex);
+            logger.warn("Failed to extract media URLs from Graph API response", ex);
         }
         return result;
     }
