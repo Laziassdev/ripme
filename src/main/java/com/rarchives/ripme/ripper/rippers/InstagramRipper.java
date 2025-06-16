@@ -59,10 +59,10 @@ public class InstagramRipper extends AbstractJSONRipper {
     }    @Override
     public JSONObject getFirstPage() throws IOException {
         setAuthCookie();
+        Http.url(url).timeout(TIMEOUT); // Set timeout first
         Document document = Http.url(url)
             .cookies(cookies)
-            .timeout(TIMEOUT)
-            .maxBodySize(0) // No limit
+            .ignoreContentType()
             .ignoreHttpErrors(true)
             .response()
             .parse();
