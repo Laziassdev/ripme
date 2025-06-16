@@ -91,6 +91,7 @@ public class InstagramRipper extends AbstractJSONRipper {
                 .cookies(cookies)
                 .ignoreContentType()
                 .userAgent("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/114.0.0.0 Safari/537.36")
+                .header("authority", "www.instagram.com")
                 .header("X-IG-App-ID", "936619743392459")
                 .header("X-ASBD-ID", "198387")
                 .header("X-IG-WWW-Claim", "hmac.AR2oFTCuitCzXvttHXW3DD1kZLwzL7oaLyP-3JUDK_KJ5AIg")
@@ -115,11 +116,12 @@ public class InstagramRipper extends AbstractJSONRipper {
         variables.put("first", 12);
         if (afterCursor != null) {
             variables.put("after", afterCursor);
-        }        // Using updated query hash for timeline media        // Use Instagram's current feed query hash
-        String queryHash = "69cba40317214236af40e7efa697781d";
+        }        // Using updated query hash for timeline media        // Use Instagram's current feed query hash        String queryHash = "8c2a529969ee035a5063f2fc8602a0fd";
         variables.put("fetch_mutual", false);
-        variables.put("has_threaded_comments", false);
+        variables.put("has_threaded_comments", true);
         variables.put("include_reel", true);
+        variables.put("include_highlight_reels", false);
+        variables.put("include_live_status", false);
         String encodedVariables = URLEncoder.encode(variables.toString(), StandardCharsets.UTF_8);
         String fullUrl = format("https://www.instagram.com/graphql/query/?query_hash=%s&variables=%s", queryHash, encodedVariables);try {
             Thread.sleep(WAIT_TIME);
@@ -161,7 +163,9 @@ public class InstagramRipper extends AbstractJSONRipper {
             cookies.put("csrftoken", csrftoken);
             cookies.put("ig_nrcb", "1");
             cookies.put("mid", Utils.getConfigString("instagram.mid", java.util.UUID.randomUUID().toString()));
-            cookies.put("rur", "\"CLN\\05449462557\\0541719022291:01f7994243c1ab77adce0376935b1cc4c1177ad4a39cb3391b72d778880560f3c88a7fc0\"");
+            cookies.put("datr", Utils.getConfigString("instagram.datr", java.util.UUID.randomUUID().toString()));
+            cookies.put("dpr", "1.25");
+            cookies.put("rur", "\"LDC\\05449462557\\0541719022291:01f7994243c1ab77adce0376935b1cc4c1177ad4a39cb3391b72d778880560f3c88a7fc0\"");
         }
     }
 
