@@ -106,21 +106,23 @@ public class InstagramRipper extends AbstractJSONRipper {
                 .get().body().text();
             JSONObject shared = new JSONObject(rawProfile);
             idString = shared.getJSONObject("data").getJSONObject("user").getString("id");
-        }
-
-        JSONObject variables = new JSONObject();
-        variables.put("id", idString);        variables.put("first", 12);
+        }        JSONObject variables = new JSONObject();
+        variables.put("id", idString);
+        variables.put("first", 12);
         if (afterCursor != null) {
             variables.put("after", afterCursor);
         }
         
-        // Using updated query hash for timeline media
-        String queryHash = "8c2a529969ee035a5063f2fc8602a0fd";
+        // Using updated query hash and parameters for 2025 Instagram API
+        String queryHash = "69cba40317214236af40e7efa697781d";
         variables.put("fetch_mutual", false);
-        variables.put("has_threaded_comments", true);
-        variables.put("include_reel", true);
+        variables.put("has_threaded_comments", false);
+        variables.put("include_reel", false);
         variables.put("include_highlight_reels", false);
         variables.put("include_live_status", false);
+        variables.put("include_stories", false);
+        variables.put("include_related_profiles", false);
+        variables.put("is_prefetch", false);
         
         String encodedVariables= URLEncoder.encode(variables.toString(), StandardCharsets.UTF_8);
         String fullUrl = format("https://www.instagram.com/graphql/query/?query_hash=%s&variables=%s", queryHash, encodedVariables);
@@ -130,24 +132,27 @@ public class InstagramRipper extends AbstractJSONRipper {
         } catch (InterruptedException e) {
             logger.error("[!] Interrupted while waiting to load next page", e);
         }
-        
-        String rawJson = Http.url(fullUrl)
+          String rawJson = Http.url(fullUrl)
             .cookies(cookies)
             .ignoreContentType()
             .userAgent("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/115.0.0.0 Safari/537.36")
-            .header("authority", "www.instagram.com")
             .header("accept", "*/*")
             .header("accept-language", "en-US,en;q=0.9")
-            .header("dpr", "1")
-            .header("referer", url.toExternalForm())
             .header("origin", "https://www.instagram.com")
+            .header("referer", url.toExternalForm())
+            .header("sec-ch-ua", "\"Not.A/Brand\";v=\"8\", \"Chromium\";v=\"115\", \"Google Chrome\";v=\"115\"")
+            .header("sec-ch-ua-mobile", "?0")
+            .header("sec-ch-ua-platform", "\"Windows\"")
+            .header("sec-fetch-dest", "empty")
+            .header("sec-fetch-mode", "cors")
+            .header("sec-fetch-site", "same-origin")
             .header("x-asbd-id", "129477")
             .header("x-csrftoken", csrftoken)
             .header("x-ig-app-id", "936619743392459")
-            .header("x-ig-www-claim", "hmac.AR3czXW1ZM4wGWYW-gxYZBJcXARnPY8tt4QbgsOiPQXaeTFz")
+            .header("x-ig-www-claim", "0")
             .header("x-requested-with", "XMLHttpRequest")
             .header("x-web-device-id", cookies.get("ig_did"))
-            .header("x-instagram-ajax", "1")
+            .header("x-instagram-ajax", "1008722363")
             .get().body().text();
 
         if (!rawJson.trim().startsWith("{")) {
