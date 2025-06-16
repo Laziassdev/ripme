@@ -95,22 +95,14 @@ public class InstagramRipper extends AbstractJSONRipper {
                 .header("accept-language", "en-US,en;q=0.9")
                 .header("dpr", "1")
                 .header("referer", "https://www.instagram.com/")
-                .header("sec-ch-prefers-color-scheme", "light")
-                .header("sec-ch-ua", "\"Not.A/Brand\";v=\"8\", \"Chromium\";v=\"115\", \"Google Chrome\";v=\"115\"")
-                .header("sec-ch-ua-full-version-list", "\"Not.A/Brand\";v=\"8.0.0.0\", \"Chromium\";v=\"115.0.5790.171\", \"Google Chrome\";v=\"115.0.5790.171\"")
-                .header("sec-ch-ua-mobile", "?0")
-                .header("sec-ch-ua-model", "\"\"")
-                .header("sec-ch-ua-platform", "\"Windows\"")
-                .header("sec-ch-ua-platform-version", "\"15.0.0\"")
-                .header("sec-fetch-dest", "empty")
-                .header("sec-fetch-mode", "cors")
-                .header("sec-fetch-site", "same-origin")
-                .header("viewport-width", "1920")
+                .header("origin", "https://www.instagram.com")
                 .header("x-asbd-id", "129477")
                 .header("x-csrftoken", csrftoken)
                 .header("x-ig-app-id", "936619743392459")
                 .header("x-ig-www-claim", "hmac.AR3czXW1ZM4wGWYW-gxYZBJcXARnPY8tt4QbgsOiPQXaeTFz")
                 .header("x-requested-with", "XMLHttpRequest")
+                .header("x-web-device-id", cookies.get("ig_did"))
+                .header("x-instagram-ajax", "1")
                 .get().body().text();
             JSONObject shared = new JSONObject(rawProfile);
             idString = shared.getJSONObject("data").getJSONObject("user").getString("id");
@@ -137,7 +129,9 @@ public class InstagramRipper extends AbstractJSONRipper {
             Thread.sleep(WAIT_TIME);
         } catch (InterruptedException e) {
             logger.error("[!] Interrupted while waiting to load next page", e);
-        }        String rawJson = Http.url(fullUrl)
+        }
+        
+        String rawJson = Http.url(fullUrl)
             .cookies(cookies)
             .ignoreContentType()
             .userAgent("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/115.0.0.0 Safari/537.36")
@@ -146,22 +140,14 @@ public class InstagramRipper extends AbstractJSONRipper {
             .header("accept-language", "en-US,en;q=0.9")
             .header("dpr", "1")
             .header("referer", url.toExternalForm())
-            .header("sec-ch-prefers-color-scheme", "light")
-            .header("sec-ch-ua", "\"Not.A/Brand\";v=\"8\", \"Chromium\";v=\"115\", \"Google Chrome\";v=\"115\"")
-            .header("sec-ch-ua-full-version-list", "\"Not.A/Brand\";v=\"8.0.0.0\", \"Chromium\";v=\"115.0.5790.171\", \"Google Chrome\";v=\"115.0.5790.171\"")
-            .header("sec-ch-ua-mobile", "?0")
-            .header("sec-ch-ua-model", "\"\"")
-            .header("sec-ch-ua-platform", "\"Windows\"")
-            .header("sec-ch-ua-platform-version", "\"15.0.0\"")
-            .header("sec-fetch-dest", "empty")
-            .header("sec-fetch-mode", "cors")
-            .header("sec-fetch-site", "same-origin")
-            .header("viewport-width", "1920")
+            .header("origin", "https://www.instagram.com")
             .header("x-asbd-id", "129477")
             .header("x-csrftoken", csrftoken)
             .header("x-ig-app-id", "936619743392459")
             .header("x-ig-www-claim", "hmac.AR3czXW1ZM4wGWYW-gxYZBJcXARnPY8tt4QbgsOiPQXaeTFz")
             .header("x-requested-with", "XMLHttpRequest")
+            .header("x-web-device-id", cookies.get("ig_did"))
+            .header("x-instagram-ajax", "1")
             .get().body().text();
 
         if (!rawJson.trim().startsWith("{")) {
@@ -173,28 +159,37 @@ public class InstagramRipper extends AbstractJSONRipper {
     }    private void setAuthCookie() {
         String sessionId = Utils.getConfigString("instagram.session_id", null);
         if (sessionId != null) {
+            // Essential auth cookies
             cookies.put("sessionid", sessionId);
-            cookies.put("ds_user_id", sessionId.split(":")[0]);
-            cookies.put("ig_did", Utils.getConfigString("instagram.ig_did", java.util.UUID.randomUUID().toString()));
-            csrftoken = Utils.getConfigString("instagram.csrftoken", java.util.UUID.randomUUID().toString().replace("-", ""));
-            cookies.put("csrftoken", csrftoken);
+            String userId = sessionId.split(":")[0];
+            cookies.put("ds_user_id", userId);
+            
+            // Device and browser identification
+            cookies.put("ig_did", Utils.getConfigString("instagram.ig_did", null));
+            cookies.put("mid", Utils.getConfigString("instagram.mid", null));
+            cookies.put("datr", Utils.getConfigString("instagram.datr", null));
+            
+            // CSRF protection
+            csrftoken = Utils.getConfigString("instagram.csrftoken", null);
+            if (csrftoken != null) {
+                cookies.put("csrftoken", csrftoken);
+            }
+            
+            // Additional required cookies
             cookies.put("ig_nrcb", "1");
-            cookies.put("mid", Utils.getConfigString("instagram.mid", java.util.UUID.randomUUID().toString()));
-            // Required auth cookies for 2025
-            cookies.put("datr", Utils.getConfigString("instagram.datr", java.util.UUID.randomUUID().toString()));
-            cookies.put("ds_user_id", sessionId.split(":")[0]);
-            cookies.put("ig_did", Utils.getConfigString("instagram.ig_did", java.util.UUID.randomUUID().toString()));
-            cookies.put("ig_pr", "1");
-            cookies.put("ig_vw", "1920");
-            cookies.put("rur", "\"PRN\\05449462557\\0541719022291:01f79942\"");
             cookies.put("dpr", "1");
-            // Set additional security headers
-            cookies.put("sec-ch-prefers-color-scheme", "light");
-            cookies.put("sec-ch-ua-platform-version", "15.0.0");
-            cookies.put("sec-fetch-site", "same-origin");
-            cookies.put("sec-fetch-mode", "cors");
-            cookies.put("sec-fetch-dest", "empty");
-            cookies.put("viewport-width", "1920");
+            cookies.put("igd_ls", "1");
+            cookies.put("igd_pr", "1");
+            cookies.put("ig_vw", "1920");
+            
+            // Browser capabilities
+            cookies.put("browser-platform", "Windows");
+            cookies.put("browser-version", "115.0");
+            cookies.put("browser-name", "Chrome");
+            
+            // Session routing
+            String rur = String.format("\"PRN\\054%s\\0541719062291:01f79942\"", userId);
+            cookies.put("rur", rur);
         }
     }
 
