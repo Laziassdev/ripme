@@ -1,7 +1,7 @@
 {
-  "latestVersion": "2.1.60-1-b2d05c4",
-  "currentHash": "ddba9465ecedb45ab5e11b2ee519c31b165a88cdc344cabb976cef36eff3705d",
+  "latestVersion": "2.1.61-1-791143a",
+  "currentHash": "32795d63c605d647083b25ae032dcc6a85c0883b351a43450fa5fd769dd96757",
   "changeList": [
-    "2.1.60-1-b2d05c4: Update InstagramRipper.java", "2.1.60-1-b2d05c4: Built at 2025-06-16T11:29:33Z"
+    "2.1.61-1-791143a: Update InstagramRipper.java", "2.1.61-1-791143a: Built at 2025-06-16T11:39:32Z"
   ]
 }
