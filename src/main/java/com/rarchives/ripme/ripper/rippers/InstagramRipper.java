@@ -26,7 +26,8 @@ public class InstagramRipper extends AbstractJSONRipper {    private static fina
     private static final int WAIT_TIME = 2000; // 2 seconds between requests
     private static final int TIMEOUT = 20000; // 20 seconds timeout
     private static final int MAX_RETRIES = 3;
-    
+    private String csrftoken = null; // Added CSRF token variable
+
     // SQLite driver registration
     static {
         try {
@@ -35,9 +36,8 @@ public class InstagramRipper extends AbstractJSONRipper {    private static fina
             // Log warning but don't fail - SQLite is only needed for Firefox cookie auth
             LogManager.getLogger(InstagramRipper.class).warn("SQLite JDBC driver not found. Firefox cookie authentication will not be available.");
         }
-    }
-
-    private String idString;    private Map<String, String> cookies = new HashMap<>();
+    }    private String idString;
+    private Map<String, String> cookies = new HashMap<>();
     private String endCursor = null;
     private boolean hasNextPage = true;
     private boolean fallbackToGraphQL = true; // Always use Graph API in 2025
@@ -94,55 +94,71 @@ public class InstagramRipper extends AbstractJSONRipper {    private static fina
         }
         String username = getGID(url);
         return getGraphQLUserPage(username, endCursor);
-    }    private JSONObject getGraphQLUserPage(String username, String afterCursor) throws IOException {        if (idString == null) {
-            // Using Instagram Graph API endpoint
-            String fullUrlUser = format("https://graph.instagram.com/v18.0/me/media?fields=id,media_type,media_url,thumbnail_url,permalink&access_token=%s", 
-                URLEncoder.encode(Utils.getConfigString("instagram.access_token", ""), StandardCharsets.UTF_8));
-            String rawProfile = Http.url(fullUrlUser)
-                .cookies(cookies)
-                .ignoreContentType()
-                .userAgent("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/115.0.0.0 Safari/537.36")
-                .header("authority", "www.instagram.com")
-                .header("accept", "*/*")
-                .header("accept-language", "en-US,en;q=0.9")
-                .header("dpr", "1")
-                .header("referer", "https://www.instagram.com/")
-                .header("origin", "https://www.instagram.com")
-                .header("x-asbd-id", "129477")
-                .header("x-csrftoken", csrftoken)
-                .header("x-ig-app-id", "936619743392459")
-                .header("x-ig-www-claim", "hmac.AR3czXW1ZM4wGWYW-gxYZBJcXARnPY8tt4QbgsOiPQXaeTFz")
-                .header("x-requested-with", "XMLHttpRequest")
-                .header("x-web-device-id", cookies.get("ig_did"))
-                .header("x-instagram-ajax", "1")
-                .get().body().text();
+    }    private JSONObject getGraphQLUserPage(String username, String afterCursor) throws IOException {
+        if (idString == null) {
+            Http.Response response;
+            
+            if (accessToken != null) {
+                // Use Graph API with access token
+                String fullUrlUser = format("https://graph.instagram.com/v18.0/me/media?fields=id,media_type,media_url,thumbnail_url,permalink,caption,children{media_type,media_url}&access_token=%s", 
+                    URLEncoder.encode(accessToken, StandardCharsets.UTF_8));
+                if (afterCursor != null) {
+                    fullUrlUser += "&after=" + afterCursor;
+                }
+                response = Http.url(fullUrlUser)
+                    .ignoreContentType()
+                    .get();
+            } else {
+                // Use cookie-based auth with proper CSRF token
+                String fullUrlUser = format("https://www.instagram.com/api/v1/users/web_profile_info/?username=%s", username);
+                response = Http.url(fullUrlUser)
+                    .cookies(cookies)
+                    .ignoreContentType()
+                    .userAgent("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/115.0.0.0 Safari/537.36")
+                    .header("authority", "www.instagram.com")
+                    .header("accept", "*/*")
+                    .header("accept-language", "en-US,en;q=0.9")
+                    .header("dpr", "1")
+                    .header("referer", "https://www.instagram.com/")
+                    .header("origin", "https://www.instagram.com")
+                    .header("x-asbd-id", "129477")
+                    .header("x-csrftoken", csrftoken)
+                    .header("x-ig-app-id", "936619743392459")
+                    .header("x-requested-with", "XMLHttpRequest")
+                    .header("x-web-device-id", cookies.get("ig_did"))
+                    .get();
+            }
+            
+            String rawProfile = response.body().text();
+            if (rawProfile.trim().startsWith("<")) {
+                throw new IOException("Instagram returned HTML instead of JSON. You may need to refresh your authentication.");
+            }
+            
             JSONObject shared = new JSONObject(rawProfile);
-            idString = shared.getJSONObject("data").getJSONObject("user").getString("id");
-        }        JSONObject variables = new JSONObject();
-        variables.put("id", idString);
-        variables.put("first", 12);
-        if (afterCursor != null) {
-            variables.put("after", afterCursor);
+            if (shared.has("status") && !shared.getString("status").equals("ok")) {
+                throw new IOException("Instagram API error: " + shared.optString("message", "Unknown error"));
+            }
+            
+            try {
+                idString = shared.getJSONObject("data").getJSONObject("user").getString("id");
+            } catch (JSONException e) {
+                throw new IOException("Failed to get user ID from Instagram response: " + e.getMessage());
+            }
         }
-          // Using updated query hash and parameters for 2025 Instagram API
-        String queryHash = "003056d32c2554def87228bc3fd9668a";
-        variables.put("id", idString);
-        variables.put("first", 12);
-        variables.put("max_id", afterCursor);
         
-        // Required timeline media query parameters
-        JSONObject mediaVariables = new JSONObject();
-        mediaVariables.put("has_threaded_comments", false);
-        mediaVariables.put("has_likes", true);
-        mediaVariables.put("media_type", "all");
-        mediaVariables.put("only_stories", false);
-        mediaVariables.put("stories", false);
-        mediaVariables.put("timeline_media", true);
-        variables.put("media_config", mediaVariables);
-        
-        String encodedVariables = URLEncoder.encode(variables.toString(), StandardCharsets.UTF_8);        String fullUrl = format("https://www.instagram.com/api/v1/feed/user/%s/username/?count=12", idString);
-        if (afterCursor != null) {
-            fullUrl += "&max_id=" + afterCursor;
+        // Get user media
+        String mediaUrl;
+        if (accessToken != null) {
+            mediaUrl = format("https://graph.instagram.com/v18.0/%s/media?fields=id,media_type,media_url,thumbnail_url,permalink,caption,children{media_type,media_url}&access_token=%s",
+                idString, URLEncoder.encode(accessToken, StandardCharsets.UTF_8));
+            if (afterCursor != null) {
+                mediaUrl += "&after=" + afterCursor;
+            }
+        } else {
+            mediaUrl = format("https://www.instagram.com/api/v1/feed/user/%s/username/?count=12", idString);
+            if (afterCursor != null) {
+                mediaUrl += "&max_id=" + afterCursor;
+            }
         }
         
         try {
@@ -151,35 +167,51 @@ public class InstagramRipper extends AbstractJSONRipper {    private static fina
             logger.error("[!] Interrupted while waiting to load next page", e);
         }
         
-        String rawJson = Http.url(fullUrl)
+        Http.Response mediaResponse = Http.url(mediaUrl)
             .cookies(cookies)
             .ignoreContentType()
             .userAgent("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/115.0.0.0 Safari/537.36")
             .header("accept", "*/*")
             .header("accept-language", "en-US,en;q=0.9")
             .header("origin", "https://www.instagram.com")
-            .header("referer", url.toExternalForm())
-            .header("sec-ch-ua", "\"Not.A/Brand\";v=\"8\", \"Chromium\";v=\"115\", \"Google Chrome\";v=\"115\"")
-            .header("sec-ch-ua-mobile", "?0")
-            .header("sec-ch-ua-platform", "\"Windows\"")
-            .header("sec-fetch-dest", "empty")
-            .header("sec-fetch-mode", "cors")
-            .header("sec-fetch-site", "same-origin")
-            .header("x-asbd-id", "129477")
-            .header("x-csrftoken", csrftoken)
-            .header("x-ig-app-id", "936619743392459")
-            .header("x-ig-www-claim", "0")
-            .header("x-requested-with", "XMLHttpRequest")
-            .header("x-web-device-id", cookies.get("ig_did"))
-            .header("x-instagram-ajax", "1008722363")
-            .get().body().text();
-
-        if (!rawJson.trim().startsWith("{")) {
-            logger.error("Expected JSON, but got HTML:\n{}", rawJson.length() > 500 ? rawJson.substring(0, 500) + "..." : rawJson);
-            throw new IOException("Instagram GraphQL response is not valid JSON.");
+            .header("referer", url.toExternalForm());
+            
+        if (accessToken == null) {
+            // Add additional headers for cookie auth
+            mediaResponse.header("x-asbd-id", "129477")
+                .header("x-csrftoken", csrftoken)
+                .header("x-ig-app-id", "936619743392459")
+                .header("x-requested-with", "XMLHttpRequest")
+                .header("x-web-device-id", cookies.get("ig_did"));
         }
-
-        return new JSONObject(rawJson);
+        
+        String rawJson = mediaResponse.get().body().text();
+        if (rawJson.trim().startsWith("<")) {
+            throw new IOException("Instagram returned HTML instead of JSON. Authentication may have expired.");
+        }
+        
+        JSONObject json = new JSONObject(rawJson);
+        if (json.has("status") && !json.getString("status").equals("ok")) {
+            throw new IOException("Instagram API error: " + json.optString("message", "Unknown error"));
+        }
+        
+        // Update pagination info
+        if (accessToken != null) {
+            JSONObject paging = json.optJSONObject("paging");
+            if (paging != null) {
+                hasNextPage = paging.has("next");
+                endCursor = paging.optJSONObject("cursors") != null ? 
+                           paging.getJSONObject("cursors").optString("after", null) : null;
+            } else {
+                hasNextPage = false;
+                endCursor = null;
+            }
+        } else {
+            hasNextPage = json.optBoolean("more_available", false);
+            endCursor = json.optString("next_max_id", null);
+        }
+        
+        return json;
     }    private void setAuthToken() throws IOException {
         // First try access token
         accessToken = Utils.getConfigString("instagram.access_token", null);
@@ -197,27 +229,30 @@ public class InstagramRipper extends AbstractJSONRipper {    private static fina
         }
     }
     
-    private void extractFirefoxCookies() throws IOException {
-        String cookiesPath = getFirefoxCookiesPath();
-        if (cookiesPath == null) {
-            throw new IOException("Firefox cookies.sqlite not found");
+    private Map<String, String> extractCookiesFromQuery(PreparedStatement stmt) throws SQLException {
+        Map<String, String> extractedCookies = new HashMap<>();
+        ResultSet rs = stmt.executeQuery();
+        while (rs.next()) {
+            String name = rs.getString("name");
+            String value = rs.getString("value");
+            extractedCookies.put(name, value);
+            
+            // Store CSRF token if we find it
+            if ("csrftoken".equals(name)) {
+                this.csrftoken = value;
+            }
         }
         
-        try (Connection conn = DriverManager.getConnection("jdbc:sqlite:" + cookiesPath)) {
-            // Try newer Firefox cookie schema first
-            try (PreparedStatement stmt = conn.prepareStatement(
-                "SELECT name, value FROM moz_cookies WHERE baseDomain='instagram.com'")) {
-                cookies = extractCookiesFromQuery(stmt);
-            } catch (SQLException e) {
-                // Try older Firefox cookie schema
-                try (PreparedStatement stmt = conn.prepareStatement(
-                    "SELECT name, value FROM moz_cookies WHERE host LIKE '%instagram.com'")) {
-                    cookies = extractCookiesFromQuery(stmt);
-                }
-            }
-        } catch (SQLException e) {
-            throw new IOException("Failed to read Firefox cookies: " + e.getMessage());
+        // Verify we got the essential cookies
+        if (!extractedCookies.containsKey("sessionid")) {
+            throw new SQLException("No valid Instagram session found in Firefox cookies");
         }
+        
+        if (this.csrftoken == null) {
+            throw new SQLException("No CSRF token found in Instagram cookies");
+        }
+        
+        return extractedCookies;
     }
     
     private String getFirefoxCookiesPath() {
@@ -246,22 +281,30 @@ public class InstagramRipper extends AbstractJSONRipper {    private static fina
             return null;
         }
     }
-    
-    private Map<String, String> extractCookiesFromQuery(PreparedStatement stmt) throws SQLException {
-        Map<String, String> extractedCookies = new HashMap<>();
-        ResultSet rs = stmt.executeQuery();
-        while (rs.next()) {
-            extractedCookies.put(rs.getString("name"), rs.getString("value"));
-        }
-        
-        // Verify we got the essential cookies
-        if (!extractedCookies.containsKey("sessionid")) {
-            throw new SQLException("No valid Instagram session found in Firefox cookies");
-        }
-        
-        return extractedCookies;
-    }
 
+    private void extractFirefoxCookies() throws IOException {
+        String cookiesPath = getFirefoxCookiesPath();
+        if (cookiesPath == null) {
+            throw new IOException("Firefox cookies.sqlite not found");
+        }
+        
+        try (Connection conn = DriverManager.getConnection("jdbc:sqlite:" + cookiesPath)) {
+            // Try newer Firefox cookie schema first
+            try (PreparedStatement stmt = conn.prepareStatement(
+                "SELECT name, value FROM moz_cookies WHERE baseDomain='instagram.com'")) {
+                cookies = extractCookiesFromQuery(stmt);
+            } catch (SQLException e) {
+                // Try older Firefox cookie schema
+                try (PreparedStatement stmt = conn.prepareStatement(
+                    "SELECT name, value FROM moz_cookies WHERE host LIKE '%instagram.com'")) {
+                    cookies = extractCookiesFromQuery(stmt);
+                }
+            }
+        } catch (SQLException e) {
+            throw new IOException("Failed to read Firefox cookies: " + e.getMessage());
+        }
+    }
+    
     private JSONObject getJsonObjectFromDoc(Document document) {
         for (Element script : document.select("script[type=text/javascript]")) {
             String scriptText = script.data();
@@ -295,36 +338,98 @@ public class InstagramRipper extends AbstractJSONRipper {    private static fina
     public List<String> getURLsFromJSON(JSONObject json) {
         List<String> result = new ArrayList<>();
         try {
-            JSONArray items = json.getJSONArray("data");
-            for (int i = 0; i < items.length(); i++) {
-                JSONObject item = items.getJSONObject(i);
-                String mediaType = item.getString("media_type");
-                
-                switch (mediaType) {
-                    case "IMAGE":
-                        result.add(item.getString("media_url"));
-                        break;
-                        
-                    case "VIDEO":
-                        result.add(item.getString("media_url"));
-                        break;
-                        
-                    case "CAROUSEL_ALBUM":
-                        if (item.has("children")) {
-                            JSONArray children = item.getJSONArray("children");
-                            for (int j = 0; j < children.length(); j++) {
-                                JSONObject child = children.getJSONObject(j);
-                                String childMediaUrl = child.getString("media_url");
-                                if (childMediaUrl != null) {
-                                    result.add(childMediaUrl);
+            if (accessToken != null) {
+                // Handle Graph API response format
+                JSONArray items = json.getJSONArray("data");
+                for (int i = 0; i < items.length(); i++) {
+                    JSONObject item = items.getJSONObject(i);
+                    String mediaType = item.getString("media_type");
+                    
+                    switch (mediaType) {
+                        case "IMAGE":
+                            result.add(item.getString("media_url"));
+                            break;
+                            
+                        case "VIDEO":
+                            result.add(item.getString("media_url"));
+                            break;
+                            
+                        case "CAROUSEL_ALBUM":
+                            if (item.has("children")) {
+                                JSONObject children = item.getJSONObject("children");
+                                if (children.has("data")) {
+                                    JSONArray childrenData = children.getJSONArray("data");
+                                    for (int j = 0; j < childrenData.length(); j++) {
+                                        JSONObject child = childrenData.getJSONObject(j);
+                                        String childMediaUrl = child.getString("media_url");
+                                        if (childMediaUrl != null) {
+                                            result.add(childMediaUrl);
+                                        }
+                                    }
                                 }
                             }
-                        }
-                        break;
+                            break;
+                    }
+                }
+            } else {
+                // Handle cookie-based API response format
+                JSONArray items = json.getJSONArray("items");
+                for (int i = 0; i < items.length(); i++) {
+                    JSONObject item = items.getJSONObject(i);
+                    String mediaType = item.getString("media_type");
+                    
+                    switch (mediaType) {
+                        case "1": // IMAGE
+                            if (item.has("image_versions2")) {
+                                JSONArray candidates = item.getJSONObject("image_versions2")
+                                    .getJSONArray("candidates");
+                                if (candidates.length() > 0) {
+                                    result.add(candidates.getJSONObject(0).getString("url"));
+                                }
+                            }
+                            break;
+                            
+                        case "2": // VIDEO
+                            if (item.has("video_versions")) {
+                                JSONArray versions = item.getJSONArray("video_versions");
+                                if (versions.length() > 0) {
+                                    result.add(versions.getJSONObject(0).getString("url"));
+                                }
+                            }
+                            break;
+                            
+                        case "8": // CAROUSEL
+                            if (item.has("carousel_media")) {
+                                JSONArray carousel = item.getJSONArray("carousel_media");
+                                for (int j = 0; j < carousel.length(); j++) {
+                                    JSONObject carouselItem = carousel.getJSONObject(j);
+                                    String carouselType = carouselItem.getString("media_type");
+                                    
+                                    if (carouselType.equals("1")) { // Image
+                                        if (carouselItem.has("image_versions2")) {
+                                            JSONArray candidates = carouselItem.getJSONObject("image_versions2")
+                                                .getJSONArray("candidates");
+                                            if (candidates.length() > 0) {
+                                                result.add(candidates.getJSONObject(0).getString("url"));
+                                            }
+                                        }
+                                    } else if (carouselType.equals("2")) { // Video
+                                        if (carouselItem.has("video_versions")) {
+                                            JSONArray versions = carouselItem.getJSONArray("video_versions");
+                                            if (versions.length() > 0) {
+                                                result.add(versions.getJSONObject(0).getString("url"));
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                            break;
+                    }
                 }
             }
         } catch (Exception ex) {
-            logger.warn("Failed to extract media URLs from Graph API response", ex);
+            logger.error("Failed to extract media URLs from response", ex);
+            logger.debug("JSON response was: " + json.toString());
         }
         return result;
     }
