@@ -94,6 +94,8 @@ public class InstagramRipper extends AbstractJSONRipper {
                 .userAgent("Instagram 155.0.0.37.107 Android")
                 .header("X-IG-App-ID", "936619743392459")
                 .referrer("https://www.instagram.com/")
+                .header("Accept", "application/json")
+                .header("Accept-Language", "en-US,en;q=0.9")
                 .get().body().text();
             JSONObject shared = new JSONObject(rawProfile);
             idString = shared.getJSONObject("data").getJSONObject("user").getString("id");
@@ -113,13 +115,13 @@ public class InstagramRipper extends AbstractJSONRipper {
         String rawJson = Http.url(fullUrl)
             .cookies(cookies)
             .ignoreContentType()
-            .userAgent("Mozilla/5.0 (Windows NT 10.0; Win64; x64)")
-            .referrer("https://www.instagram.com/")
+            .userAgent("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/114.0.0.0 Safari/537.36")
+            .referrer(url.toExternalForm())
             .header("X-Requested-With", "XMLHttpRequest")
             .header("X-IG-App-ID", "936619743392459")
-            .get()
-            .body()
-            .text();
+            .header("Accept", "application/json")
+            .header("Accept-Language", "en-US,en;q=0.9")
+            .get().body().text();
 
         if (!rawJson.trim().startsWith("{")) {
             logger.error("Expected JSON, but got HTML:\n{}", rawJson.length() > 500 ? rawJson.substring(0, 500) + "..." : rawJson);
