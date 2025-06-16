@@ -62,8 +62,8 @@ public class InstagramRipper extends AbstractJSONRipper {
         Http.url(url).timeout(TIMEOUT); // Set timeout first
         Document document = Http.url(url)
             .cookies(cookies)
+            .userAgent("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/115.0.0.0 Safari/537.36")
             .ignoreContentType()
-            .ignoreHttpErrors(true)
             .response()
             .parse();
             
