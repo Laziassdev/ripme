@@ -15,6 +15,7 @@ import org.apache.logging.log4j.Logger;
 import org.json.*;
 import org.jsoup.nodes.Document;
 import org.jsoup.nodes.Element;
+import org.jsoup.Connection.Response;
 
 import com.rarchives.ripme.ripper.AbstractJSONRipper;
 import com.rarchives.ripme.utils.Http;
@@ -96,7 +97,7 @@ public class InstagramRipper extends AbstractJSONRipper {    private static fina
         return getGraphQLUserPage(username, endCursor);
     }    private JSONObject getGraphQLUserPage(String username, String afterCursor) throws IOException {
         if (idString == null) {
-            Http.Response response;
+            Response response;
             
             if (accessToken != null) {
                 // Use Graph API with access token
@@ -167,7 +168,7 @@ public class InstagramRipper extends AbstractJSONRipper {    private static fina
             logger.error("[!] Interrupted while waiting to load next page", e);
         }
         
-        Http.Response mediaResponse = Http.url(mediaUrl)
+        Response mediaResponse = Http.url(mediaUrl)
             .cookies(cookies)
             .ignoreContentType()
             .userAgent("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/115.0.0.0 Safari/537.36")
