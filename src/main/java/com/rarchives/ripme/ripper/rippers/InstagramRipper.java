@@ -23,12 +23,14 @@ import com.rarchives.ripme.utils.Utils;
 public class InstagramRipper extends AbstractJSONRipper {
 
     private static final Logger logger = LogManager.getLogger(InstagramRipper.class);
+    private static final int WAIT_TIME = 2000; // 2 seconds between requests
 
     private String idString;
     private Map<String, String> cookies = new HashMap<>();
     private String endCursor = null;
     private boolean hasNextPage = true;
     private boolean fallbackToGraphQL = false;
+    private String csrftoken = null;
 
     public InstagramRipper(URL url) throws IOException {
         super(url);
@@ -84,26 +86,25 @@ public class InstagramRipper extends AbstractJSONRipper {
         String username = getGID(url);
         return getGraphQLUserPage(username, endCursor);
     }    private JSONObject getGraphQLUserPage(String username, String afterCursor) throws IOException {
-        if (idString == null) {
-            String fullUrlUser = format("https://i.instagram.com/api/v1/users/web_profile_info/?username=%s", username);
+        if (idString == null) {            String fullUrlUser = format("https://www.instagram.com/api/v1/users/web_profile_info/?username=%s", username);
             String rawProfile = Http.url(fullUrlUser)
                 .cookies(cookies)
                 .ignoreContentType()
-                .userAgent("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/114.0.0.0 Safari/537.36")
+                .userAgent("Instagram 76.0.0.15.395 Android (24/7.0; 640dpi; 1440x2560; samsung; SM-G930F; herolte; samsungexynos8890; en_US; 138226743)")
                 .header("X-IG-App-ID", "936619743392459")
-                .header("X-ASBD-ID", "129477")
-                .header("X-IG-WWW-Claim", "0")
+                .header("X-ASBD-ID", "198387")
+                .header("X-IG-WWW-Claim", "hmac.AR2oFTCuitCzXvttHXW3DD1kZLwzL7oaLyP-3JUDK_KJ5AIg")
                 .header("X-Requested-With", "XMLHttpRequest")
+                .header("X-CSRFToken", csrftoken)
                 .header("Sec-Fetch-Site", "same-origin")
                 .header("Sec-Fetch-Mode", "cors")
                 .header("Sec-Fetch-Dest", "empty")
-                .header("Accept", "*/*")
+                .header("Accept", "application/json, text/plain, */*")
                 .header("Accept-Language", "en-US,en;q=0.9")
-                .header("Accept-Encoding", "gzip, deflate, br")
+                .header("Accept-Encoding", "gzip, deflate")
                 .header("Origin", "https://www.instagram.com")
-                .header("DNT", "1")
                 .header("Connection", "keep-alive")
-                .referrer("https://www.instagram.com/")
+                .header("Referer", "https://www.instagram.com/")
                 .get().body().text();
             JSONObject shared = new JSONObject(rawProfile);
             idString = shared.getJSONObject("data").getJSONObject("user").getString("id");
@@ -118,24 +119,30 @@ public class InstagramRipper extends AbstractJSONRipper {
 
         String queryHash = "c6809c9c025875ac6f02619eae97a80e";
         String encodedVariables = URLEncoder.encode(variables.toString(), StandardCharsets.UTF_8);
-        String fullUrl = format("https://www.instagram.com/graphql/query/?query_hash=%s&variables=%s", queryHash, encodedVariables);        String rawJson = Http.url(fullUrl)
+        String fullUrl = format("https://www.instagram.com/graphql/query/?query_hash=%s&variables=%s", queryHash, encodedVariables);        try {
+            Thread.sleep(WAIT_TIME);
+        } catch (InterruptedException e) {
+            logger.error("[!] Interrupted while waiting to load next page", e);
+        }
+
+        String rawJson = Http.url(fullUrl)
             .cookies(cookies)
             .ignoreContentType()
-            .userAgent("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/114.0.0.0 Safari/537.36")
+            .userAgent("Instagram 76.0.0.15.395 Android (24/7.0; 640dpi; 1440x2560; samsung; SM-G930F; herolte; samsungexynos8890; en_US; 138226743)")
             .header("X-IG-App-ID", "936619743392459")
-            .header("X-ASBD-ID", "129477")
-            .header("X-IG-WWW-Claim", "0")
+            .header("X-ASBD-ID", "198387")
+            .header("X-IG-WWW-Claim", "hmac.AR2oFTCuitCzXvttHXW3DD1kZLwzL7oaLyP-3JUDK_KJ5AIg")
             .header("X-Requested-With", "XMLHttpRequest")
+            .header("X-CSRFToken", csrftoken)
             .header("Sec-Fetch-Site", "same-origin")
             .header("Sec-Fetch-Mode", "cors")
             .header("Sec-Fetch-Dest", "empty")
-            .header("Accept", "*/*")
+            .header("Accept", "application/json, text/plain, */*")
             .header("Accept-Language", "en-US,en;q=0.9")
-            .header("Accept-Encoding", "gzip, deflate, br")
+            .header("Accept-Encoding", "gzip, deflate")
             .header("Origin", "https://www.instagram.com")
-            .header("DNT", "1")
             .header("Connection", "keep-alive")
-            .referrer(url.toExternalForm())
+            .header("Referer", url.toExternalForm())
             .get().body().text();
 
         if (!rawJson.trim().startsWith("{")) {
@@ -150,7 +157,11 @@ public class InstagramRipper extends AbstractJSONRipper {
             cookies.put("sessionid", sessionId);
             cookies.put("ds_user_id", sessionId.split(":")[0]);
             cookies.put("ig_did", Utils.getConfigString("instagram.ig_did", java.util.UUID.randomUUID().toString()));
-            cookies.put("csrftoken", Utils.getConfigString("instagram.csrftoken", java.util.UUID.randomUUID().toString().replace("-", "")));
+            csrftoken = Utils.getConfigString("instagram.csrftoken", java.util.UUID.randomUUID().toString().replace("-", ""));
+            cookies.put("csrftoken", csrftoken);
+            cookies.put("ig_nrcb", "1");
+            cookies.put("mid", Utils.getConfigString("instagram.mid", java.util.UUID.randomUUID().toString()));
+            cookies.put("rur", "\"CLN\\05449462557\\0541719022291:01f7994243c1ab77adce0376935b1cc4c1177ad4a39cb3391b72d778880560f3c88a7fc0\"");
         }
     }
 
