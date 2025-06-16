@@ -121,13 +121,14 @@ public class InstagramRipper extends AbstractJSONRipper {
         variables.put("has_threaded_comments", true);
         variables.put("include_reel", true);
         variables.put("include_highlight_reels", false);
-        variables.put("include_live_status", false);
-        String encodedVariables = URLEncoder.encode(variables.toString(), StandardCharsets.UTF_8);
-        String fullUrl = format("https://www.instagram.com/graphql/query/?query_hash=%s&variables=%s", queryHash, encodedVariables);try {
+        variables.put("include_live_status", false);        String encodedVariables = URLEncoder.encode(variables.toString(), StandardCharsets.UTF_8);
+        String fullUrl = format("https://www.instagram.com/graphql/query/?query_hash=%s&variables=%s", queryHash, encodedVariables);
+        
+        try {
             Thread.sleep(WAIT_TIME);
         } catch (InterruptedException e) {
             logger.error("[!] Interrupted while waiting to load next page", e);
-        }        String rawJson = Http.url(fullUrl)
+        }String rawJson = Http.url(fullUrl)
             .cookies(cookies)
             .ignoreContentType()
             .userAgent("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/114.0.0.0 Safari/537.36")
