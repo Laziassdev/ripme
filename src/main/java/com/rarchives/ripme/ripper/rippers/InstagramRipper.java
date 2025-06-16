@@ -120,15 +120,12 @@ public class InstagramRipper extends AbstractJSONRipper {
             .get()
             .body()
             .text();
-        
+
         if (!rawJson.trim().startsWith("{")) {
             logger.error("Expected JSON, but got HTML:\n{}", rawJson.length() > 500 ? rawJson.substring(0, 500) + "..." : rawJson);
             throw new IOException("Instagram GraphQL response is not valid JSON.");
-}
-return new JSONObject(rawJson);
-
         }
-        
+
         return new JSONObject(rawJson);
     }
 
