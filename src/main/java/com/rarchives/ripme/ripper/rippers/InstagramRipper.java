@@ -86,26 +86,31 @@ public class InstagramRipper extends AbstractJSONRipper {
         String username = getGID(url);
         return getGraphQLUserPage(username, endCursor);
     }    private JSONObject getGraphQLUserPage(String username, String afterCursor) throws IOException {
-        if (idString == null) {            String fullUrlUser = format("https://www.instagram.com/api/v1/users/web_profile_info/?username=%s", URLEncoder.encode(username, StandardCharsets.UTF_8));
-            String rawProfile = Http.url(fullUrlUser)
+        if (idString == null) {            String fullUrlUser = format("https://www.instagram.com/api/v1/users/web_profile_info/?username=%s", URLEncoder.encode(username, StandardCharsets.UTF_8));            String rawProfile = Http.url(fullUrlUser)
                 .cookies(cookies)
                 .ignoreContentType()
-                .userAgent("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/114.0.0.0 Safari/537.36")
+                .userAgent("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/115.0.0.0 Safari/537.36")
                 .header("authority", "www.instagram.com")
-                .header("X-IG-App-ID", "936619743392459")
-                .header("X-ASBD-ID", "198387")
-                .header("X-IG-WWW-Claim", "hmac.AR2oFTCuitCzXvttHXW3DD1kZLwzL7oaLyP-3JUDK_KJ5AIg")
-                .header("X-Requested-With", "XMLHttpRequest")
-                .header("X-CSRFToken", csrftoken)
-                .header("Sec-Fetch-Site", "same-origin")
-                .header("Sec-Fetch-Mode", "cors")
-                .header("Sec-Fetch-Dest", "empty")
-                .header("Accept", "application/json, text/plain, */*")
-                .header("Accept-Language", "en-US,en;q=0.9")
-                .header("Accept-Encoding", "gzip, deflate")
-                .header("Origin", "https://www.instagram.com")
-                .header("Connection", "keep-alive")
-                .header("Referer", "https://www.instagram.com/")
+                .header("accept", "*/*")
+                .header("accept-language", "en-US,en;q=0.9")
+                .header("dpr", "1")
+                .header("referer", "https://www.instagram.com/")
+                .header("sec-ch-prefers-color-scheme", "light")
+                .header("sec-ch-ua", "\"Not.A/Brand\";v=\"8\", \"Chromium\";v=\"115\", \"Google Chrome\";v=\"115\"")
+                .header("sec-ch-ua-full-version-list", "\"Not.A/Brand\";v=\"8.0.0.0\", \"Chromium\";v=\"115.0.5790.171\", \"Google Chrome\";v=\"115.0.5790.171\"")
+                .header("sec-ch-ua-mobile", "?0")
+                .header("sec-ch-ua-model", "\"\"")
+                .header("sec-ch-ua-platform", "\"Windows\"")
+                .header("sec-ch-ua-platform-version", "\"15.0.0\"")
+                .header("sec-fetch-dest", "empty")
+                .header("sec-fetch-mode", "cors")
+                .header("sec-fetch-site", "same-origin")
+                .header("viewport-width", "1920")
+                .header("x-asbd-id", "129477")
+                .header("x-csrftoken", csrftoken)
+                .header("x-ig-app-id", "936619743392459")
+                .header("x-ig-www-claim", "hmac.AR3czXW1ZM4wGWYW-gxYZBJcXARnPY8tt4QbgsOiPQXaeTFz")
+                .header("x-requested-with", "XMLHttpRequest")
                 .get().body().text();
             JSONObject shared = new JSONObject(rawProfile);
             idString = shared.getJSONObject("data").getJSONObject("user").getString("id");
@@ -132,24 +137,31 @@ public class InstagramRipper extends AbstractJSONRipper {
             Thread.sleep(WAIT_TIME);
         } catch (InterruptedException e) {
             logger.error("[!] Interrupted while waiting to load next page", e);
-        }String rawJson = Http.url(fullUrl)
+        }        String rawJson = Http.url(fullUrl)
             .cookies(cookies)
             .ignoreContentType()
-            .userAgent("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/114.0.0.0 Safari/537.36")
-            .header("X-IG-App-ID", "936619743392459")
-            .header("X-ASBD-ID", "198387")
-            .header("X-IG-WWW-Claim", "hmac.AR2oFTCuitCzXvttHXW3DD1kZLwzL7oaLyP-3JUDK_KJ5AIg")
-            .header("X-Requested-With", "XMLHttpRequest")
-            .header("X-CSRFToken", csrftoken)
-            .header("Sec-Fetch-Site", "same-origin")
-            .header("Sec-Fetch-Mode", "cors")
-            .header("Sec-Fetch-Dest", "empty")
-            .header("Accept", "application/json, text/plain, */*")
-            .header("Accept-Language", "en-US,en;q=0.9")
-            .header("Accept-Encoding", "gzip, deflate")
-            .header("Origin", "https://www.instagram.com")
-            .header("Connection", "keep-alive")
-            .header("Referer", url.toExternalForm())
+            .userAgent("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/115.0.0.0 Safari/537.36")
+            .header("authority", "www.instagram.com")
+            .header("accept", "*/*")
+            .header("accept-language", "en-US,en;q=0.9")
+            .header("dpr", "1")
+            .header("referer", url.toExternalForm())
+            .header("sec-ch-prefers-color-scheme", "light")
+            .header("sec-ch-ua", "\"Not.A/Brand\";v=\"8\", \"Chromium\";v=\"115\", \"Google Chrome\";v=\"115\"")
+            .header("sec-ch-ua-full-version-list", "\"Not.A/Brand\";v=\"8.0.0.0\", \"Chromium\";v=\"115.0.5790.171\", \"Google Chrome\";v=\"115.0.5790.171\"")
+            .header("sec-ch-ua-mobile", "?0")
+            .header("sec-ch-ua-model", "\"\"")
+            .header("sec-ch-ua-platform", "\"Windows\"")
+            .header("sec-ch-ua-platform-version", "\"15.0.0\"")
+            .header("sec-fetch-dest", "empty")
+            .header("sec-fetch-mode", "cors")
+            .header("sec-fetch-site", "same-origin")
+            .header("viewport-width", "1920")
+            .header("x-asbd-id", "129477")
+            .header("x-csrftoken", csrftoken)
+            .header("x-ig-app-id", "936619743392459")
+            .header("x-ig-www-claim", "hmac.AR3czXW1ZM4wGWYW-gxYZBJcXARnPY8tt4QbgsOiPQXaeTFz")
+            .header("x-requested-with", "XMLHttpRequest")
             .get().body().text();
 
         if (!rawJson.trim().startsWith("{")) {
@@ -168,9 +180,21 @@ public class InstagramRipper extends AbstractJSONRipper {
             cookies.put("csrftoken", csrftoken);
             cookies.put("ig_nrcb", "1");
             cookies.put("mid", Utils.getConfigString("instagram.mid", java.util.UUID.randomUUID().toString()));
+            // Required auth cookies for 2025
             cookies.put("datr", Utils.getConfigString("instagram.datr", java.util.UUID.randomUUID().toString()));
-            cookies.put("dpr", "1.25");
-            cookies.put("rur", "\"LDC\\05449462557\\0541719022291:01f7994243c1ab77adce0376935b1cc4c1177ad4a39cb3391b72d778880560f3c88a7fc0\"");
+            cookies.put("ds_user_id", sessionId.split(":")[0]);
+            cookies.put("ig_did", Utils.getConfigString("instagram.ig_did", java.util.UUID.randomUUID().toString()));
+            cookies.put("ig_pr", "1");
+            cookies.put("ig_vw", "1920");
+            cookies.put("rur", "\"PRN\\05449462557\\0541719022291:01f79942\"");
+            cookies.put("dpr", "1");
+            // Set additional security headers
+            cookies.put("sec-ch-prefers-color-scheme", "light");
+            cookies.put("sec-ch-ua-platform-version", "15.0.0");
+            cookies.put("sec-fetch-site", "same-origin");
+            cookies.put("sec-fetch-mode", "cors");
+            cookies.put("sec-fetch-dest", "empty");
+            cookies.put("viewport-width", "1920");
         }
     }
 
