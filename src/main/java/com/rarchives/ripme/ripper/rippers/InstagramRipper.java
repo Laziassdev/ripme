@@ -86,11 +86,11 @@ public class InstagramRipper extends AbstractJSONRipper {
         String username = getGID(url);
         return getGraphQLUserPage(username, endCursor);
     }    private JSONObject getGraphQLUserPage(String username, String afterCursor) throws IOException {
-        if (idString == null) {            String fullUrlUser = format("https://www.instagram.com/api/v1/users/web_profile_info/?username=%s", username);
+        if (idString == null) {            String fullUrlUser = format("https://www.instagram.com/api/v1/users/web_profile_info/?username=%s", URLEncoder.encode(username, StandardCharsets.UTF_8));
             String rawProfile = Http.url(fullUrlUser)
                 .cookies(cookies)
                 .ignoreContentType()
-                .userAgent("Instagram 76.0.0.15.395 Android (24/7.0; 640dpi; 1440x2560; samsung; SM-G930F; herolte; samsungexynos8890; en_US; 138226743)")
+                .userAgent("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/114.0.0.0 Safari/537.36")
                 .header("X-IG-App-ID", "936619743392459")
                 .header("X-ASBD-ID", "198387")
                 .header("X-IG-WWW-Claim", "hmac.AR2oFTCuitCzXvttHXW3DD1kZLwzL7oaLyP-3JUDK_KJ5AIg")
@@ -115,20 +115,20 @@ public class InstagramRipper extends AbstractJSONRipper {
         variables.put("first", 12);
         if (afterCursor != null) {
             variables.put("after", afterCursor);
-        }
-
-        String queryHash = "c6809c9c025875ac6f02619eae97a80e";
+        }        // Using updated query hash for timeline media        // Use Instagram's current feed query hash
+        String queryHash = "69cba40317214236af40e7efa697781d";
+        variables.put("fetch_mutual", false);
+        variables.put("has_threaded_comments", false);
+        variables.put("include_reel", true);
         String encodedVariables = URLEncoder.encode(variables.toString(), StandardCharsets.UTF_8);
-        String fullUrl = format("https://www.instagram.com/graphql/query/?query_hash=%s&variables=%s", queryHash, encodedVariables);        try {
+        String fullUrl = format("https://www.instagram.com/graphql/query/?query_hash=%s&variables=%s", queryHash, encodedVariables);try {
             Thread.sleep(WAIT_TIME);
         } catch (InterruptedException e) {
             logger.error("[!] Interrupted while waiting to load next page", e);
-        }
-
-        String rawJson = Http.url(fullUrl)
+        }        String rawJson = Http.url(fullUrl)
             .cookies(cookies)
             .ignoreContentType()
-            .userAgent("Instagram 76.0.0.15.395 Android (24/7.0; 640dpi; 1440x2560; samsung; SM-G930F; herolte; samsungexynos8890; en_US; 138226743)")
+            .userAgent("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/114.0.0.0 Safari/537.36")
             .header("X-IG-App-ID", "936619743392459")
             .header("X-ASBD-ID", "198387")
             .header("X-IG-WWW-Claim", "hmac.AR2oFTCuitCzXvttHXW3DD1kZLwzL7oaLyP-3JUDK_KJ5AIg")
