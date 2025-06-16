@@ -86,7 +86,9 @@ public class InstagramRipper extends AbstractJSONRipper {
         String username = getGID(url);
         return getGraphQLUserPage(username, endCursor);
     }    private JSONObject getGraphQLUserPage(String username, String afterCursor) throws IOException {
-        if (idString == null) {            String fullUrlUser = format("https://www.instagram.com/api/v1/users/web_profile_info/?username=%s", URLEncoder.encode(username, StandardCharsets.UTF_8));            String rawProfile = Http.url(fullUrlUser)
+        if (idString == null) {
+            String fullUrlUser = format("https://www.instagram.com/api/v1/users/web_profile_info/?username=%s&include_highlight_reels=false", URLEncoder.encode(username, StandardCharsets.UTF_8));
+            String rawProfile = Http.url(fullUrlUser)
                 .cookies(cookies)
                 .ignoreContentType()
                 .userAgent("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/115.0.0.0 Safari/537.36")
@@ -112,27 +114,34 @@ public class InstagramRipper extends AbstractJSONRipper {
         if (afterCursor != null) {
             variables.put("after", afterCursor);
         }
+          // Using updated query hash and parameters for 2025 Instagram API
+        String queryHash = "003056d32c2554def87228bc3fd9668a";
+        variables.put("id", idString);
+        variables.put("first", 12);
+        variables.put("max_id", afterCursor);
         
-        // Using updated query hash and parameters for 2025 Instagram API
-        String queryHash = "69cba40317214236af40e7efa697781d";
-        variables.put("fetch_mutual", false);
-        variables.put("has_threaded_comments", false);
-        variables.put("include_reel", false);
-        variables.put("include_highlight_reels", false);
-        variables.put("include_live_status", false);
-        variables.put("include_stories", false);
-        variables.put("include_related_profiles", false);
-        variables.put("is_prefetch", false);
+        // Required timeline media query parameters
+        JSONObject mediaVariables = new JSONObject();
+        mediaVariables.put("has_threaded_comments", false);
+        mediaVariables.put("has_likes", true);
+        mediaVariables.put("media_type", "all");
+        mediaVariables.put("only_stories", false);
+        mediaVariables.put("stories", false);
+        mediaVariables.put("timeline_media", true);
+        variables.put("media_config", mediaVariables);
         
-        String encodedVariables= URLEncoder.encode(variables.toString(), StandardCharsets.UTF_8);
-        String fullUrl = format("https://www.instagram.com/graphql/query/?query_hash=%s&variables=%s", queryHash, encodedVariables);
+        String encodedVariables = URLEncoder.encode(variables.toString(), StandardCharsets.UTF_8);        String fullUrl = format("https://www.instagram.com/api/v1/feed/user/%s/username/?count=12", idString);
+        if (afterCursor != null) {
+            fullUrl += "&max_id=" + afterCursor;
+        }
         
         try {
             Thread.sleep(WAIT_TIME);
         } catch (InterruptedException e) {
             logger.error("[!] Interrupted while waiting to load next page", e);
         }
-          String rawJson = Http.url(fullUrl)
+        
+        String rawJson = Http.url(fullUrl)
             .cookies(cookies)
             .ignoreContentType()
             .userAgent("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/115.0.0.0 Safari/537.36")
