@@ -83,19 +83,27 @@ public class InstagramRipper extends AbstractJSONRipper {
         }
         String username = getGID(url);
         return getGraphQLUserPage(username, endCursor);
-    }
-
-    private JSONObject getGraphQLUserPage(String username, String afterCursor) throws IOException {
+    }    private JSONObject getGraphQLUserPage(String username, String afterCursor) throws IOException {
         if (idString == null) {
             String fullUrlUser = format("https://i.instagram.com/api/v1/users/web_profile_info/?username=%s", username);
             String rawProfile = Http.url(fullUrlUser)
                 .cookies(cookies)
                 .ignoreContentType()
-                .userAgent("Instagram 155.0.0.37.107 Android")
+                .userAgent("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/114.0.0.0 Safari/537.36")
                 .header("X-IG-App-ID", "936619743392459")
-                .referrer("https://www.instagram.com/")
-                .header("Accept", "application/json")
+                .header("X-ASBD-ID", "129477")
+                .header("X-IG-WWW-Claim", "0")
+                .header("X-Requested-With", "XMLHttpRequest")
+                .header("Sec-Fetch-Site", "same-origin")
+                .header("Sec-Fetch-Mode", "cors")
+                .header("Sec-Fetch-Dest", "empty")
+                .header("Accept", "*/*")
                 .header("Accept-Language", "en-US,en;q=0.9")
+                .header("Accept-Encoding", "gzip, deflate, br")
+                .header("Origin", "https://www.instagram.com")
+                .header("DNT", "1")
+                .header("Connection", "keep-alive")
+                .referrer("https://www.instagram.com/")
                 .get().body().text();
             JSONObject shared = new JSONObject(rawProfile);
             idString = shared.getJSONObject("data").getJSONObject("user").getString("id");
@@ -110,17 +118,24 @@ public class InstagramRipper extends AbstractJSONRipper {
 
         String queryHash = "c6809c9c025875ac6f02619eae97a80e";
         String encodedVariables = URLEncoder.encode(variables.toString(), StandardCharsets.UTF_8);
-        String fullUrl = format("https://www.instagram.com/graphql/query/?query_hash=%s&variables=%s", queryHash, encodedVariables);
-
-        String rawJson = Http.url(fullUrl)
+        String fullUrl = format("https://www.instagram.com/graphql/query/?query_hash=%s&variables=%s", queryHash, encodedVariables);        String rawJson = Http.url(fullUrl)
             .cookies(cookies)
             .ignoreContentType()
             .userAgent("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/114.0.0.0 Safari/537.36")
-            .referrer(url.toExternalForm())
-            .header("X-Requested-With", "XMLHttpRequest")
             .header("X-IG-App-ID", "936619743392459")
-            .header("Accept", "application/json")
+            .header("X-ASBD-ID", "129477")
+            .header("X-IG-WWW-Claim", "0")
+            .header("X-Requested-With", "XMLHttpRequest")
+            .header("Sec-Fetch-Site", "same-origin")
+            .header("Sec-Fetch-Mode", "cors")
+            .header("Sec-Fetch-Dest", "empty")
+            .header("Accept", "*/*")
             .header("Accept-Language", "en-US,en;q=0.9")
+            .header("Accept-Encoding", "gzip, deflate, br")
+            .header("Origin", "https://www.instagram.com")
+            .header("DNT", "1")
+            .header("Connection", "keep-alive")
+            .referrer(url.toExternalForm())
             .get().body().text();
 
         if (!rawJson.trim().startsWith("{")) {
@@ -129,12 +144,13 @@ public class InstagramRipper extends AbstractJSONRipper {
         }
 
         return new JSONObject(rawJson);
-    }
-
-    private void setAuthCookie() {
+    }    private void setAuthCookie() {
         String sessionId = Utils.getConfigString("instagram.session_id", null);
         if (sessionId != null) {
             cookies.put("sessionid", sessionId);
+            cookies.put("ds_user_id", sessionId.split(":")[0]);
+            cookies.put("ig_did", Utils.getConfigString("instagram.ig_did", java.util.UUID.randomUUID().toString()));
+            cookies.put("csrftoken", Utils.getConfigString("instagram.csrftoken", java.util.UUID.randomUUID().toString().replace("-", "")));
         }
     }
 
