@@ -112,16 +112,20 @@ public class InstagramRipper extends AbstractJSONRipper {
         }
 
         JSONObject variables = new JSONObject();
-        variables.put("id", idString);
-        variables.put("first", 12);
+        variables.put("id", idString);        variables.put("first", 12);
         if (afterCursor != null) {
             variables.put("after", afterCursor);
-        }        // Using updated query hash for timeline media        // Use Instagram's current feed query hash        String queryHash = "8c2a529969ee035a5063f2fc8602a0fd";
+        }
+        
+        // Using updated query hash for timeline media
+        String queryHash = "8c2a529969ee035a5063f2fc8602a0fd";
         variables.put("fetch_mutual", false);
         variables.put("has_threaded_comments", true);
         variables.put("include_reel", true);
         variables.put("include_highlight_reels", false);
-        variables.put("include_live_status", false);        String encodedVariables = URLEncoder.encode(variables.toString(), StandardCharsets.UTF_8);
+        variables.put("include_live_status", false);
+        
+        String encodedVariables= URLEncoder.encode(variables.toString(), StandardCharsets.UTF_8);
         String fullUrl = format("https://www.instagram.com/graphql/query/?query_hash=%s&variables=%s", queryHash, encodedVariables);
         
         try {
