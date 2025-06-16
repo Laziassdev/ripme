@@ -138,12 +138,17 @@ public class InstagramRipper extends AbstractJSONRipper {
                 }
             }
         }
-    }
-
-    @Override
+    }    @Override
     protected JSONObject getFirstPage() throws IOException {
         String username = getGID(url);
-        extractFirefoxCookies(); // Always try Firefox cookies first
+        logger.info("Ripping Instagram profile: " + username);
+        
+        // Always try Firefox cookies first
+        extractFirefoxCookies();
+        if (cookies.isEmpty()) {
+            throw new IOException("No Instagram cookies found. Please log in to Instagram using Firefox and try again.");
+        }
+        
         JSONObject json = getGraphQLUserPage(username, null);
         
         // Enhanced debug logging
@@ -298,13 +303,8 @@ public class InstagramRipper extends AbstractJSONRipper {
             throw e;
         }
     }
-
-
     private String getUserID(String username) throws IOException {
-        // First try getting from cached cookies
-        if (cookies.containsKey("ds_user_id")) {
-            return cookies.get("ds_user_id");
-        }
+        logger.debug("Getting user ID for username: " + username);
         
         // Otherwise fetch from profile page
         String profileUrl = "https://www.instagram.com/api/v1/users/web_profile_info/?username=" + username;
