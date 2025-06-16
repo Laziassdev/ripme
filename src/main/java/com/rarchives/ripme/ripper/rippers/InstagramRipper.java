@@ -115,13 +115,18 @@ public class InstagramRipper extends AbstractJSONRipper {
             .ignoreContentType()
             .userAgent("Mozilla/5.0 (Windows NT 10.0; Win64; x64)")
             .referrer("https://www.instagram.com/")
+            .header("X-Requested-With", "XMLHttpRequest")
+            .header("X-IG-App-ID", "936619743392459")
             .get()
             .body()
             .text();
         
         if (!rawJson.trim().startsWith("{")) {
-            logger.error("Expected JSON, but got: {}", rawJson.length() > 500 ? rawJson.substring(0, 500) + "..." : rawJson);
+            logger.error("Expected JSON, but got HTML:\n{}", rawJson.length() > 500 ? rawJson.substring(0, 500) + "..." : rawJson);
             throw new IOException("Instagram GraphQL response is not valid JSON.");
+}
+return new JSONObject(rawJson);
+
         }
         
         return new JSONObject(rawJson);
