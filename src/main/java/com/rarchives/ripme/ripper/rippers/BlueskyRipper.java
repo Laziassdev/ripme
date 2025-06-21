@@ -181,7 +181,7 @@ public class BlueskyRipper extends AbstractJSONRipper {
         } else {
             conn.header("Authorization", "Bearer " + sessionToken);
         }
-        Connection.Response resp = conn.response();
+        Connection.Response resp = conn.execute();
         int status = resp.statusCode();
         String body = resp.body();
         if (status == 401) {
