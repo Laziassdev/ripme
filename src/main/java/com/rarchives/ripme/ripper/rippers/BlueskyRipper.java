@@ -71,8 +71,8 @@ public class BlueskyRipper extends AbstractJSONRipper {
     }
 
     @Override
-    protected String getDomain() {
-        return DOMAIN;
+    public String getDomain() {
+        return "bsky.app";
     }
 
     @Override
@@ -82,14 +82,13 @@ public class BlueskyRipper extends AbstractJSONRipper {
 
     @Override
     public String getGID(URL url) throws MalformedURLException {
-        // Accept both bsky.app and bsky.social profile URLs, handle dots in handle
-        Pattern p = Pattern.compile("https?://bsky\\.(app|social)/profile/([^/?#]+)");
-        Matcher m = p.matcher(url.toExternalForm());
+        Matcher m = Pattern.compile("^https?://bsky\\.(?:app|social)/profile/([^/]+)").matcher(url.toExternalForm());
         if (m.find()) {
-            return m.group(2);
+            return m.group(1);
         }
-        throw new MalformedURLException("Expected format: https://bsky.app/profile/{handle} or https://bsky.social/profile/{handle}");
+        throw new MalformedURLException("Expected format: https://bsky.app/profile/username or https://bsky.social/profile/username");
     }
+
 
     @Override
     protected JSONObject getFirstPage() throws IOException {
