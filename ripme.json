@@ -1,7 +1,7 @@
 {
-  "latestVersion": "2.1.75-1-062f2c3",
-  "currentHash": "a7cd438563f89f70ae6f8d0fd8ec669b792caef67b201553c370554ced23f869",
+  "latestVersion": "2.1.76-1-9235d2d",
+  "currentHash": "b293fb34dce102a3b96da872cf9a35bb253cc9ad5ac17538a72fffbc0e365917",
   "changeList": [
-    "2.1.75-1-062f2c3: adding blueskyripper", "2.1.75-1-062f2c3: Built at 2025-06-21T23:01:56Z"
+    "2.1.76-1-9235d2d: additional logging", "2.1.76-1-9235d2d: Built at 2025-06-21T23:06:35Z"
   ]
 }
