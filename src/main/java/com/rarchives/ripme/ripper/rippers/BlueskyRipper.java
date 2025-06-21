@@ -26,16 +26,21 @@ public class BlueskyRipper extends AbstractJSONRipper {
     public BlueskyRipper(URL url) throws IOException {
         super(url);
         this.handle = getGID(url);
-        // Try to get credentials from config
-        this.username = Utils.getConfigString("bluesky.username", null);
-        this.appPassword = Utils.getConfigString("bluesky.apppassword", null);
-        if (this.username == null || this.appPassword == null) {
-            throw new IOException("Bluesky username and app password must be set in ripme config (bluesky.username, bluesky.apppassword)");
-        }
-        this.sessionToken = getSessionToken();
     }
 
+    // Simple static cache for session tokens per username
+    private static final java.util.Map<String, String> SESSION_TOKEN_CACHE = new java.util.HashMap<>();
+
+    // Persistent session token cache file
+    private static final String SESSION_TOKEN_FILE = System.getProperty("user.home") + "/.ripme_bluesky_token.json";
+
     private String getSessionToken() throws IOException {
+        // Try persistent cache first
+        String diskToken = loadTokenFromDisk(username);
+        if (diskToken != null) {
+            SESSION_TOKEN_CACHE.put(username, diskToken);
+            return diskToken;
+        }
         String loginUrl = "https://bsky.social/xrpc/com.atproto.server.createSession";
         JSONObject loginPayload = new JSONObject();
         loginPayload.put("identifier", username);
@@ -48,6 +53,15 @@ public class BlueskyRipper extends AbstractJSONRipper {
         Connection.Response resp = conn.execute();
         int status = resp.statusCode();
         String body = resp.body();
+        if (status == 429) {
+            // Rate limited: wait and retry once
+            try {
+                Thread.sleep(60000); // Wait 60 seconds
+            } catch (InterruptedException ignored) {}
+            resp = conn.execute();
+            status = resp.statusCode();
+            body = resp.body();
+        }
         if (status != 200) {
             throw new IOException("Bluesky login failed (HTTP " + status + "): " + body);
         }
@@ -55,7 +69,62 @@ public class BlueskyRipper extends AbstractJSONRipper {
         if (!json.has("accessJwt")) {
             throw new IOException("Bluesky login response missing accessJwt: " + body);
         }
-        return json.getString("accessJwt");
+        String token = json.getString("accessJwt");
+        SESSION_TOKEN_CACHE.put(username, token);
+        saveTokenToDisk(username, token);
+        return token;
+    }
+
+    private static void saveTokenToDisk(String username, String token) {
+        try {
+            org.json.JSONObject obj = new org.json.JSONObject();
+            obj.put(username, token);
+            java.nio.file.Files.write(java.nio.file.Paths.get(SESSION_TOKEN_FILE), obj.toString().getBytes());
+        } catch (Exception ignored) {}
+    }
+
+    private static String loadTokenFromDisk(String username) {
+        try {
+            java.nio.file.Path path = java.nio.file.Paths.get(SESSION_TOKEN_FILE);
+            if (!java.nio.file.Files.exists(path)) return null;
+            String content = new String(java.nio.file.Files.readAllBytes(path));
+            org.json.JSONObject obj = new org.json.JSONObject(content);
+            if (obj.has(username)) return obj.getString(username);
+        } catch (Exception ignored) {}
+        return null;
+    }
+
+    // Loads Bluesky cookies from Firefox (Windows)
+    private static java.util.Map<String, String> loadBlueskyCookiesFromFirefox() {
+        java.util.Map<String, String> cookies = new java.util.HashMap<>();
+        try {
+            String userHome = System.getProperty("user.home");
+            String profilesIniPath = userHome + "/AppData/Roaming/Mozilla/Firefox/profiles.ini";
+            java.nio.file.Path iniPath = java.nio.file.Paths.get(profilesIniPath);
+            if (!java.nio.file.Files.exists(iniPath)) return cookies;
+            java.util.List<String> lines = java.nio.file.Files.readAllLines(iniPath);
+            String profilePath = null;
+            for (String line : lines) {
+                if (line.trim().startsWith("Path=")) {
+                    profilePath = line.trim().substring(5);
+                    break;
+                }
+            }
+            if (profilePath == null) return cookies;
+            String sqlitePath = userHome + "/AppData/Roaming/Mozilla/Firefox/Profiles/" + profilePath + "/cookies.sqlite";
+            Class.forName("org.sqlite.JDBC");
+            try (java.sql.Connection conn = java.sql.DriverManager.getConnection("jdbc:sqlite:" + sqlitePath)) {
+                String sql = "SELECT name, value FROM moz_cookies WHERE (host LIKE '%bsky.app' OR host LIKE '%bsky.social')";
+                try (java.sql.Statement stmt = conn.createStatement(); java.sql.ResultSet rs = stmt.executeQuery(sql)) {
+                    while (rs.next()) {
+                        cookies.put(rs.getString("name"), rs.getString("value"));
+                    }
+                }
+            }
+        } catch (Exception e) {
+            // Ignore errors, just return empty map
+        }
+        return cookies;
     }
 
     @Override
@@ -97,11 +166,22 @@ public class BlueskyRipper extends AbstractJSONRipper {
 
     @Override
     protected JSONObject getFirstPage() throws IOException {
+        // Try to use Firefox cookies if available
+        java.util.Map<String, String> cookies = loadBlueskyCookiesFromFirefox();
         String apiUrl = "https://bsky.social/xrpc/app.bsky.feed.getAuthorFeed?actor=" + handle + "&limit=100";
-        Connection.Response resp = Http.url(apiUrl)
+        Connection conn = Http.url(apiUrl)
                 .ignoreContentType()
-                .header("Authorization", "Bearer " + sessionToken)
-                .response();
+                .connection();
+        if (!cookies.isEmpty()) {
+            StringBuilder cookieHeader = new StringBuilder();
+            for (java.util.Map.Entry<String, String> entry : cookies.entrySet()) {
+                cookieHeader.append(entry.getKey()).append("=").append(entry.getValue()).append("; ");
+            }
+            conn.header("Cookie", cookieHeader.toString());
+        } else {
+            conn.header("Authorization", "Bearer " + sessionToken);
+        }
+        Connection.Response resp = conn.response();
         int status = resp.statusCode();
         String body = resp.body();
         if (status == 401) {

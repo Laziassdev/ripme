@@ -34,7 +34,7 @@ dependencies {
   implementation("org.apache.logging.log4j:log4j-core:2.20.0")
   implementation("com.squareup.okhttp3:okhttp:4.12.0")
   implementation("org.graalvm.js:js:22.3.2")
-  implementation("org.xerial:sqlite-jdbc:3.45.1.0")
+  implementation("org.xerial:sqlite-jdbc:3.45.3.0")
   implementation("org.slf4j:slf4j-api:2.0.12")
   implementation("org.slf4j:slf4j-simple:2.0.12")
   testImplementation(enforcedPlatform("org.junit:junit-bom:5.10.0"))
