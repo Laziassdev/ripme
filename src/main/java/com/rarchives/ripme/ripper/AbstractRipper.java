@@ -604,22 +604,28 @@ public abstract class AbstractRipper
     public static AbstractRipper getRipper(URL url) throws Exception {
         for (Constructor<?> constructor : getRipperConstructors("com.rarchives.ripme.ripper.rippers")) {
             try {
-                // by design: can throw ClassCastException
                 AbstractRipper ripper = (AbstractRipper) constructor.newInstance(url);
-                logger.debug("Found album ripper: " + ripper.getClass().getName());
-                return ripper;
+                // DEBUG: Log ripper class and canRip result
+                logger.info("Trying ripper: {} canRip: {}", ripper.getClass().getName(), ripper.canRip(url));
+                if (ripper.canRip(url)) {
+                    logger.debug("Found album ripper: " + ripper.getClass().getName());
+                    return ripper;
+                }
             } catch (Exception e) {
                 // Incompatible rippers *will* throw exceptions during instantiation.
+                logger.debug("Exception instantiating ripper: {}: {}", constructor.getDeclaringClass().getName(), e.getMessage());
             }
         }
         for (Constructor<?> constructor : getRipperConstructors("com.rarchives.ripme.ripper.rippers.video")) {
             try {
-                // by design: can throw ClassCastException
                 VideoRipper ripper = (VideoRipper) constructor.newInstance(url);
-                logger.debug("Found video ripper: " + ripper.getClass().getName());
-                return ripper;
+                logger.info("Trying video ripper: {} canRip: {}", ripper.getClass().getName(), ripper.canRip(url));
+                if (ripper.canRip(url)) {
+                    logger.debug("Found video ripper: " + ripper.getClass().getName());
+                    return ripper;
+                }
             } catch (Exception e) {
-                // Incompatible rippers *will* throw exceptions during instantiation.
+                logger.debug("Exception instantiating video ripper: {}: {}", constructor.getDeclaringClass().getName(), e.getMessage());
             }
         }
         throw new Exception("No compatible ripper found");

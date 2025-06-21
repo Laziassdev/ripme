@@ -2,6 +2,7 @@ package com.rarchives.ripme.ripper.rippers;
 
 import java.io.IOException;
 import java.net.MalformedURLException;
+import java.net.URI;
 import java.net.URL;
 import java.util.ArrayList;
 import java.util.List;
@@ -20,10 +21,9 @@ import com.rarchives.ripme.ripper.AbstractJSONRipper;
 import com.rarchives.ripme.utils.Http;
 import com.rarchives.ripme.utils.Utils;
 
-public class TwitterRipper extends AbstractJSONRipper {
+public class TwitterRipper extends AbstractJSONRipper {    private static final Logger logger = LogManager.getLogger(TwitterRipper.class);
 
-    private static final Logger logger = LogManager.getLogger(TwitterRipper.class);
-
+    private static final String[] DOMAINS = {"twitter.com", "x.com"};
     private static final String DOMAIN = "twitter.com", HOST = "twitter";
 
     private static final int MAX_REQUESTS = Utils.getConfigInteger("twitter.max_requests", 10);
@@ -53,13 +53,14 @@ public class TwitterRipper extends AbstractJSONRipper {
         if (authKey == null) {
             throw new IOException("Could not find twitter authentication key in configuration");
         }
-    }
-
-    @Override
+    }    @Override
     public URL sanitizeURL(URL url) throws MalformedURLException {
+        // Convert x.com URLs to twitter.com
+        String urlString = url.toExternalForm().replace("x.com", "twitter.com");
+        
         // https://twitter.com/search?q=from%3Apurrbunny%20filter%3Aimages&src=typd
         Pattern p = Pattern.compile("^https?://(m\\.)?twitter\\.com/search\\?(.*)q=(?<search>[a-zA-Z0-9%\\-_]+).*$");
-        Matcher m = p.matcher(url.toExternalForm());
+        Matcher m = p.matcher(urlString);
         if (m.matches()) {
             albumType = ALBUM_TYPE.SEARCH;
             searchText = m.group("search");
@@ -71,15 +72,14 @@ public class TwitterRipper extends AbstractJSONRipper {
             if (searchText.contains("x")) {
                 // x character not supported
                 searchText = searchText.replace("x", "");
-            }
-            return url;
+            }            return URI.create(urlString).toURL();
         }
-        p = Pattern.compile("^https?://(m\\.)?twitter\\.com/([a-zA-Z0-9\\-_]+).*$");
-        m = p.matcher(url.toExternalForm());
+        p = Pattern.compile("^https?://(m\\.)?(twitter|x)\\.com/([a-zA-Z0-9\\-_]+).*$");
+        m = p.matcher(urlString);
         if (m.matches()) {
             albumType = ALBUM_TYPE.ACCOUNT;
-            accountName = m.group(2);
-            return url;
+            accountName = m.group(3);
+            return URI.create(urlString).toURL();
         }
         throw new MalformedURLException("Expected username or search string in url: " + url);
     }
@@ -200,11 +200,10 @@ public class TwitterRipper extends AbstractJSONRipper {
     @Override
     public String getHost() {
         return HOST;
-    }
-
-    @Override
+    }    @Override
     protected String getDomain() {
-        return DOMAIN;
+        // Check URL and return appropriate domain
+        return url.getHost().contains("x.com") ? "x.com" : DOMAIN;
     }
 
     @Override
@@ -321,6 +320,12 @@ public class TwitterRipper extends AbstractJSONRipper {
     @Override
     protected void downloadURL(URL url, int index) {
         addURLToDownload(url, getPrefix(index));
+    }
+
+    @Override
+    public boolean canRip(URL url) {
+        String host = url.getHost().toLowerCase();
+        return host.endsWith("twitter.com") || host.endsWith("x.com");
     }
 
 }

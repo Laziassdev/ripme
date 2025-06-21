@@ -349,29 +349,33 @@ public class WordpressComicRipper extends AbstractHTMLRipper {
             if (elem == null) {
                 elem = doc.select("div.comic-table > div#comic > img").first();
             }
-            // Check if this is a site where we can get the page number from the title
-            if (url.toExternalForm().contains("buttsmithy.com")) {
-                // Set the page title
-                pageTitle = doc.select("meta[property=og:title]").attr("content");
-                pageTitle = pageTitle.replace(" ", "");
-                pageTitle = pageTitle.replace("P", "p");
+            // Fallback for prismblush.com: try to grab the first large image in the article
+            if (elem == null && url.toExternalForm().contains("prismblush.com")) {
+                elem = doc.select("article img").first();
             }
-            if (url.toExternalForm().contains("www.totempole666.com")) {
-                String postDate = doc.select("span.post-date").first().text().replaceAll("/", "_");
-                String postTitle = doc.select("h2.post-title").first().text().replaceAll("#", "");
-                pageTitle = postDate + "_" + postTitle;
+            // Final fallback: select the largest <img> on the page
+            if (elem == null) {
+                Element largestImg = null;
+                int maxArea = 0;
+                for (Element img : doc.select("img")) {
+                    int width = 0, height = 0;
+                    try {
+                        width = Integer.parseInt(img.attr("width"));
+                        height = Integer.parseInt(img.attr("height"));
+                    } catch (NumberFormatException e) { /* ignore */ }
+                    int area = width * height;
+                    if (area > maxArea) {
+                        maxArea = area;
+                        largestImg = img;
+                    }
+                }
+                if (largestImg != null) {
+                    elem = largestImg;
+                }
             }
-            if (url.toExternalForm().contains("themonsterunderthebed.net")) {
-                pageTitle = doc.select("title").first().text().replaceAll("#", "");
-                pageTitle = pageTitle.replace("“", "");
-                pageTitle = pageTitle.replace("”", "");
-                pageTitle = pageTitle.replace("The Monster Under the Bed", "");
-                pageTitle = pageTitle.replace("–", "");
-                pageTitle = pageTitle.replace(",", "");
-                pageTitle = pageTitle.replace(" ", "");
+            if (elem != null) {
+                result.add(elem.attr("src"));
             }
-
-            result.add(elem.attr("src"));
         }
 
         // freeadultcomix gets it own if because it needs to add http://freeadultcomix.com to the start of each link
