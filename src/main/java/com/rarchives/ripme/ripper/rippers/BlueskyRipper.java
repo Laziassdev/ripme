@@ -82,9 +82,14 @@ public class BlueskyRipper extends AbstractJSONRipper {
 
     @Override
     public String getGID(URL url) throws MalformedURLException {
-        Matcher m = Pattern.compile("^https?://bsky\\.(?:app|social)/profile/([^/]+)").matcher(url.toExternalForm());
-        if (m.find()) {
-            return m.group(1);
+        try {
+            System.out.println("🔍 Checking GID for: " + url);
+            Matcher m = Pattern.compile("^https?://bsky\\.(?:app|social)/profile/([^/]+)").matcher(url.toExternalForm());
+            if (m.find()) {
+                return m.group(1);
+            }
+        } catch (Exception e) {
+            e.printStackTrace();
         }
         throw new MalformedURLException("Expected format: https://bsky.app/profile/username or https://bsky.social/profile/username");
     }
