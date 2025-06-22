@@ -314,6 +314,7 @@ public class BlueskyRipper extends AbstractJSONRipper {
             JSONObject post = feed.getJSONObject(i).getJSONObject("post");
             if (post.has("embed")) {
                 JSONObject embed = post.getJSONObject("embed");
+                // Images
                 if (embed.has("images")) {
                     JSONArray images = embed.getJSONArray("images");
                     for (int j = 0; j < images.length(); j++) {
@@ -321,6 +322,28 @@ public class BlueskyRipper extends AbstractJSONRipper {
                         String imgUrl = images.getJSONObject(j).getString("fullsize");
                         urls.add(imgUrl);
                         totalDownloaded++;
+                    }
+                }
+                // Videos (Bluesky video embeds)
+                if (embed.has("video")) {
+                    JSONObject video = embed.getJSONObject("video");
+                    if (video.has("uri")) {
+                        if (maxDownloads > 0 && totalDownloaded >= maxDownloads) break;
+                        urls.add(video.getString("uri"));
+                        totalDownloaded++;
+                    }
+                }
+                // External (could be a video, e.g. mp4/gif hosted elsewhere)
+                if (embed.has("external")) {
+                    JSONObject external = embed.getJSONObject("external");
+                    if (external.has("uri")) {
+                        String extUrl = external.getString("uri");
+                        // Only add if it looks like a video (mp4, webm, etc)
+                        if (extUrl.matches(".*\\.(mp4|webm|mov|m4v|gif)(\\?.*)?$")) {
+                            if (maxDownloads > 0 && totalDownloaded >= maxDownloads) break;
+                            urls.add(extUrl);
+                            totalDownloaded++;
+                        }
                     }
                 }
             }
