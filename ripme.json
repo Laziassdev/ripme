@@ -1,7 +1,7 @@
 {
-  "latestVersion": "2.1.77-1-0b6e764",
-  "currentHash": "ce4412107a1f6817379e9eaf4938939ace7eab4e0f15e39fea6d202e9917555e",
+  "latestVersion": "2.1.78-1-0a61d26",
+  "currentHash": "ae5a9d709f8da9a84b184ba28f096f6cb802ae38f1964f342bd24e180f5e4bfe",
   "changeList": [
-    "2.1.77-1-0b6e764: load session from cookie", "2.1.77-1-0b6e764: Built at 2025-06-21T23:29:52Z"
+    "2.1.78-1-0a61d26: adding blueskyripper", "2.1.78-1-0a61d26: Built at 2025-06-22T00:58:30Z"
   ]
 }
