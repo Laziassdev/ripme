@@ -23,9 +23,26 @@ public class BlueskyRipper extends AbstractJSONRipper {
     private String appPassword = null;
     private String username = null;
 
+    private static final org.apache.logging.log4j.Logger logger = org.apache.logging.log4j.LogManager.getLogger(BlueskyRipper.class);
+
     public BlueskyRipper(URL url) throws IOException {
         super(url);
+        logger.info("BlueskyRipper constructor called for URL: {}", url);
         this.handle = getGID(url);
+        // Try to get credentials from config
+        this.username = Utils.getConfigString("bluesky.username", null);
+        this.appPassword = Utils.getConfigString("bluesky.apppassword", null);
+        if (this.username == null || this.appPassword == null) {
+            logger.error("Bluesky username and app password must be set in ripme config (bluesky.username, bluesky.apppassword)");
+            throw new IOException("Bluesky username and app password must be set in ripme config (bluesky.username, bluesky.apppassword)");
+        }
+        logger.info("Attempting to get session token for user: {}", this.username);
+        this.sessionToken = getSessionToken();
+        logger.info("Session token after getSessionToken(): {}", this.sessionToken);
+        if (this.sessionToken == null) {
+            logger.error("Session token is null after login! Aborting.");
+            throw new IOException("Bluesky session token is null after login!");
+        }
     }
 
     // Simple static cache for session tokens per username
@@ -38,41 +55,49 @@ public class BlueskyRipper extends AbstractJSONRipper {
         // Try persistent cache first
         String diskToken = loadTokenFromDisk(username);
         if (diskToken != null) {
+            logger.info("Loaded session token from disk for {}: {}", username, diskToken);
             SESSION_TOKEN_CACHE.put(username, diskToken);
             return diskToken;
         }
+        logger.info("No valid session token found on disk for {}. Logging in...", username);
         String loginUrl = "https://bsky.social/xrpc/com.atproto.server.createSession";
         JSONObject loginPayload = new JSONObject();
         loginPayload.put("identifier", username);
         loginPayload.put("password", appPassword);
-        // Use Jsoup's requestBody for raw JSON POST
-        Connection conn = Http.url(loginUrl).ignoreContentType().connection();
-        conn.header("Content-Type", "application/json");
-        conn.requestBody(loginPayload.toString());
-        conn.method(Connection.Method.POST);
-        Connection.Response resp = conn.execute();
-        int status = resp.statusCode();
-        String body = resp.body();
-        if (status == 429) {
-            // Rate limited: wait and retry once
-            try {
-                Thread.sleep(60000); // Wait 60 seconds
-            } catch (InterruptedException ignored) {}
-            resp = conn.execute();
-            status = resp.statusCode();
-            body = resp.body();
+        try {
+            Connection conn = Http.url(loginUrl).ignoreContentType().connection();
+            conn.header("Content-Type", "application/json");
+            conn.requestBody(loginPayload.toString());
+            conn.method(Connection.Method.POST);
+            Connection.Response resp = conn.execute();
+            int status = resp.statusCode();
+            String body = resp.body();
+            logger.info("Bluesky login response: HTTP {} - {}", status, body);
+            if (status != 200) {
+                logger.error("Bluesky login failed (HTTP {}): {}", status, body);
+                throw new IOException("Bluesky login failed (HTTP " + status + "): " + body);
+            }
+            JSONObject json = new JSONObject(body);
+            if (!json.has("accessJwt")) {
+                logger.error("Bluesky login response missing accessJwt: {}", body);
+                throw new IOException("Bluesky login response missing accessJwt: " + body);
+            }
+            String token = json.getString("accessJwt");
+            logger.info("Obtained new session token for {}: {}", username, token);
+            SESSION_TOKEN_CACHE.put(username, token);
+            saveTokenToDisk(username, token);
+            // Check if file was written
+            java.nio.file.Path tokenPath = java.nio.file.Paths.get(SESSION_TOKEN_FILE);
+            if (java.nio.file.Files.exists(tokenPath)) {
+                logger.info("Token file successfully written: {}", tokenPath);
+            } else {
+                logger.error("Token file was NOT written: {}", tokenPath);
+            }
+            return token;
+        } catch (Exception e) {
+            logger.error("Exception during Bluesky login: {}", e.getMessage(), e);
+            throw new IOException("Bluesky login error: " + e.getMessage(), e);
         }
-        if (status != 200) {
-            throw new IOException("Bluesky login failed (HTTP " + status + "): " + body);
-        }
-        JSONObject json = new JSONObject(body);
-        if (!json.has("accessJwt")) {
-            throw new IOException("Bluesky login response missing accessJwt: " + body);
-        }
-        String token = json.getString("accessJwt");
-        SESSION_TOKEN_CACHE.put(username, token);
-        saveTokenToDisk(username, token);
-        return token;
     }
 
     private static void saveTokenToDisk(String username, String token) {
@@ -163,34 +188,98 @@ public class BlueskyRipper extends AbstractJSONRipper {
         throw new MalformedURLException("Expected format: https://bsky.app/profile/username or https://bsky.social/profile/username");
     }
 
+    // Resolves a Bluesky handle to a DID using the Bluesky API
+    private String resolveHandleToDID(String handle) throws IOException {
+        String url = "https://bsky.social/xrpc/com.atproto.identity.resolveHandle?handle=" + handle;
+        Connection.Response resp = Http.url(url)
+                .ignoreContentType()
+                .connection()
+                .execute();
+        int status = resp.statusCode();
+        String body = resp.body();
+        logger.info("resolveHandleToDID: HTTP {} - {}", status, body);
+        if (status != 200) {
+            throw new IOException("Failed to resolve handle to DID (HTTP " + status + "): " + body);
+        }
+        org.json.JSONObject json = new org.json.JSONObject(body);
+        if (!json.has("did")) {
+            throw new IOException("No DID found in resolveHandleToDID response: " + body);
+        }
+        return json.getString("did");
+    }
+
+    private static void logRequestAndResponse(Connection conn, Connection.Response resp) {
+        try {
+            logger.info("Request URL: {}", conn.request().url());
+            logger.info("Request Method: {}", conn.request().method());
+            logger.info("Request Headers: {}", conn.request().headers());
+            logger.info("Request Body: {}", conn.request().requestBody());
+            logger.info("Response Status: {}", resp.statusCode());
+            logger.info("Response Headers: {}", resp.headers());
+            logger.info("Response Body: {}", resp.body());
+        } catch (Exception e) {
+            logger.warn("Error logging request/response: {}", e.getMessage());
+        }
+    }
 
     @Override
     protected JSONObject getFirstPage() throws IOException {
         // Try to use Firefox cookies if available
         java.util.Map<String, String> cookies = loadBlueskyCookiesFromFirefox();
-        String apiUrl = "https://bsky.social/xrpc/app.bsky.feed.getAuthorFeed?actor=" + handle + "&limit=100";
-        Connection conn = Http.url(apiUrl)
-                .ignoreContentType()
-                .connection();
-        if (!cookies.isEmpty()) {
-            StringBuilder cookieHeader = new StringBuilder();
-            for (java.util.Map.Entry<String, String> entry : cookies.entrySet()) {
-                cookieHeader.append(entry.getKey()).append("=").append(entry.getValue()).append("; ");
+        // Always resolve handle to DID for API call
+        String did = resolveHandleToDID(handle);
+        String apiUrl = "https://bsky.social/xrpc/app.bsky.feed.getAuthorFeed?actor=" + did + "&limit=100";
+        Connection.Response resp = null;
+        int status = -1;
+        String body = null;
+        boolean triedCookies = false;
+        boolean triedToken = false;
+        try {
+            // Try with cookies first
+            if (!cookies.isEmpty()) {
+                triedCookies = true;
+                logger.info("Trying Bluesky API with Firefox cookies");
+                Connection conn = Http.url(apiUrl)
+                        .ignoreContentType()
+                        .connection();
+                conn.ignoreHttpErrors(true);
+                StringBuilder cookieHeader = new StringBuilder();
+                for (java.util.Map.Entry<String, String> entry : cookies.entrySet()) {
+                    cookieHeader.append(entry.getKey()).append("=").append(entry.getValue()).append("; ");
+                }
+                conn.header("Cookie", cookieHeader.toString());
+                resp = conn.execute();
+                logRequestAndResponse(conn, resp);
+                status = resp.statusCode();
+                body = resp.body();
+                logger.info("Bluesky API with cookies: HTTP {} - {}", status, body);
             }
-            conn.header("Cookie", cookieHeader.toString());
-        } else {
-            conn.header("Authorization", "Bearer " + sessionToken);
+            // If cookies failed or not present, try with session token
+            if (status != 200) {
+                triedToken = true;
+                logger.info("Trying Bluesky API with session token");
+                Connection conn = Http.url(apiUrl)
+                        .ignoreContentType()
+                        .connection();
+                conn.ignoreHttpErrors(true);
+                conn.header("Authorization", "Bearer " + sessionToken);
+                resp = conn.execute();
+                logRequestAndResponse(conn, resp);
+                status = resp.statusCode();
+                body = resp.body();
+                logger.info("Bluesky API with token: HTTP {} - {}", status, body);
+            }
+        } catch (Exception e) {
+            logger.error("Exception during Bluesky API call: {}", e.getMessage());
+            throw new IOException("Bluesky API error: " + e.getMessage(), e);
         }
-        Connection.Response resp = conn.execute();
-        int status = resp.statusCode();
-        String body = resp.body();
         if (status == 401) {
             throw new IOException("Bluesky API returned 401 Unauthorized. Please check your username/app password in the config.");
         }
         if (status != 200) {
-            throw new IOException("Bluesky API error (HTTP " + status + "): " + body);
+            throw new IOException("Bluesky API error (HTTP " + status + "): " + body + (triedCookies ? " (tried cookies)" : "") + (triedToken ? " (tried token)" : ""));
         }
-        return new JSONObject(body);
+        return new org.json.JSONObject(body);
     }
 
     @Override
@@ -213,19 +302,25 @@ public class BlueskyRipper extends AbstractJSONRipper {
         return new JSONObject(body);
     }
 
+    private int totalDownloaded = 0; // Track total downloads across all pages
+
     @Override
     protected List<String> getURLsFromJSON(JSONObject json) {
         List<String> urls = new ArrayList<>();
         JSONArray feed = json.getJSONArray("feed");
+        int maxDownloads = Utils.getConfigInteger("maxdownloads", -1);
         for (int i = 0; i < feed.length(); i++) {
+            if (maxDownloads > 0 && totalDownloaded >= maxDownloads) break;
             JSONObject post = feed.getJSONObject(i).getJSONObject("post");
             if (post.has("embed")) {
                 JSONObject embed = post.getJSONObject("embed");
                 if (embed.has("images")) {
                     JSONArray images = embed.getJSONArray("images");
                     for (int j = 0; j < images.length(); j++) {
+                        if (maxDownloads > 0 && totalDownloaded >= maxDownloads) break;
                         String imgUrl = images.getJSONObject(j).getString("fullsize");
                         urls.add(imgUrl);
+                        totalDownloaded++;
                     }
                 }
             }
@@ -235,7 +330,32 @@ public class BlueskyRipper extends AbstractJSONRipper {
 
     @Override
     protected void downloadURL(URL url, int index) {
-        addURLToDownload(url, getPrefix(index));
+        // Fix @ext to .ext in filename
+        String fileName = url.getPath();
+        String ext = null;
+        int atIdx = fileName.lastIndexOf('@');
+        if (atIdx != -1 && atIdx < fileName.length() - 1) {
+            ext = fileName.substring(atIdx + 1);
+        } else {
+            int lastDot = fileName.lastIndexOf('.');
+            if (lastDot != -1 && lastDot < fileName.length() - 1) {
+                ext = fileName.substring(lastDot + 1);
+            }
+        }
+        String prefix = getPrefix(index);
+        java.util.HashMap<String, String> options = new java.util.HashMap<>();
+        options.put("prefix", prefix);
+        if (ext != null) {
+            options.put("extension", ext);
+        }
+        // Remove @ext from the fileName if present
+        if (atIdx != -1) {
+            fileName = fileName.substring(fileName.lastIndexOf('/') + 1, atIdx);
+        } else {
+            fileName = fileName.substring(fileName.lastIndexOf('/') + 1);
+        }
+        options.put("fileName", fileName);
+        addURLToDownload(url, options);
     }
 
     @Override
