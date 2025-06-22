@@ -54,7 +54,7 @@ public class BlueskyRipper extends AbstractJSONRipper {
     private String getSessionToken() throws IOException {
         // Try persistent cache first
         String diskToken = loadTokenFromDisk(username);
-        if (diskToken != null) {
+        if (diskToken != null && !diskToken.trim().isEmpty()) {
             logger.info("Loaded session token from disk for {}: {}", username, diskToken);
             SESSION_TOKEN_CACHE.put(username, diskToken);
             return diskToken;
@@ -113,10 +113,27 @@ public class BlueskyRipper extends AbstractJSONRipper {
             java.nio.file.Path path = java.nio.file.Paths.get(SESSION_TOKEN_FILE);
             if (!java.nio.file.Files.exists(path)) return null;
             String content = new String(java.nio.file.Files.readAllBytes(path));
+            if (content.trim().isEmpty()) return null;
             org.json.JSONObject obj = new org.json.JSONObject(content);
-            if (obj.has(username)) return obj.getString(username);
+            if (obj.has(username)) {
+                String token = obj.getString(username);
+                if (token == null || token.trim().isEmpty()) return null;
+                return token;
+            }
         } catch (Exception ignored) {}
         return null;
+    }
+
+    // Remove token for a username from disk
+    private static void removeTokenFromDisk(String username) {
+        try {
+            java.nio.file.Path path = java.nio.file.Paths.get(SESSION_TOKEN_FILE);
+            if (!java.nio.file.Files.exists(path)) return;
+            String content = new String(java.nio.file.Files.readAllBytes(path));
+            org.json.JSONObject obj = new org.json.JSONObject(content);
+            obj.remove(username);
+            java.nio.file.Files.write(path, obj.toString().getBytes());
+        } catch (Exception ignored) {}
     }
 
     // Loads Bluesky cookies from Firefox (Windows)
@@ -224,15 +241,14 @@ public class BlueskyRipper extends AbstractJSONRipper {
 
     @Override
     protected JSONObject getFirstPage() throws IOException {
-        // Try to use Firefox cookies if available
         java.util.Map<String, String> cookies = loadBlueskyCookiesFromFirefox();
-        // Always resolve handle to DID for API call
         String did = resolveHandleToDID(handle);
         String apiUrl = "https://bsky.social/xrpc/app.bsky.feed.getAuthorFeed?actor=" + did + "&limit=100";
         Connection.Response resp = null;
         int status = -1;
         String body = null;
         boolean triedCookies = false;
+        boolean retriedToken = false;
         boolean triedToken = false;
         try {
             // Try with cookies first
@@ -268,6 +284,25 @@ public class BlueskyRipper extends AbstractJSONRipper {
                 status = resp.statusCode();
                 body = resp.body();
                 logger.info("Bluesky API with token: HTTP {} - {}", status, body);
+                // If token expired, clear cache and retry ONCE
+                if (status == 400 && body != null && body.contains("ExpiredToken") && !retriedToken) {
+                    logger.warn("Session token expired, clearing cache and retrying login...");
+                    SESSION_TOKEN_CACHE.remove(username);
+                    removeTokenFromDisk(username); // Remove from disk
+                    this.sessionToken = null;
+                    this.sessionToken = getSessionToken(); // Force new login
+                    retriedToken = true;
+                    conn = Http.url(apiUrl)
+                        .ignoreContentType()
+                        .connection();
+                    conn.ignoreHttpErrors(true);
+                    conn.header("Authorization", "Bearer " + sessionToken);
+                    resp = conn.execute();
+                    logRequestAndResponse(conn, resp);
+                    status = resp.statusCode();
+                    body = resp.body();
+                    logger.info("Bluesky API with new token: HTTP {} - {}", status, body);
+                }
             }
         } catch (Exception e) {
             logger.error("Exception during Bluesky API call: {}", e.getMessage());
