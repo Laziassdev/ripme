@@ -1,7 +1,7 @@
 {
-  "latestVersion": "2.1.82-1-f2ad99c",
-  "currentHash": "e2b51531f3cdcd76445195a68fbf6831dec763df24191c66ed8e8a8d923284fc",
+  "latestVersion": "2.1.83-1-8bd1233",
+  "currentHash": "9910b10da8c611e1c6942f58f806cf20387f7241e297338468c12bd4da4fbe28",
   "changeList": [
-    "2.1.82-1-f2ad99c: Merge pull request #2 from Laziassdev/codex/update-coomerpartyripper-for-coomer.st", "2.1.82-1-f2ad99c: Built at 2025-08-03T15:44:10Z"
+    "2.1.83-1-8bd1233: fix reddit", "2.1.83-1-8bd1233: Built at 2025-08-03T23:42:06Z"
   ]
 }
