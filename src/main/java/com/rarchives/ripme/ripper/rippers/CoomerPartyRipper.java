@@ -23,14 +23,14 @@ import com.rarchives.ripme.ui.RipStatusMessage;
 import com.rarchives.ripme.ripper.AbstractRipper;
 
 /**
- * <a href="https://coomer.su/api/schema">See this link for the API schema</a>.
+ * <a href="https://coomer.st/api/schema">See this link for the API schema</a>.
  */
 public class CoomerPartyRipper extends AbstractJSONRipper {
 
     private static final Logger logger = LogManager.getLogger(CoomerPartyRipper.class);
 
-    private static final String IMG_URL_BASE = "https://c3.coomer.su/data";
-    private static final String VID_URL_BASE = "https://c1.coomer.su/data";
+    private static final String IMG_URL_BASE = "https://c3.coomer.st/data";
+    private static final String VID_URL_BASE = "https://c1.coomer.st/data";
     private static final Pattern IMG_PATTERN = Pattern.compile("^.*\\.(jpg|jpeg|png|gif|apng|webp|tif|tiff)$", Pattern.CASE_INSENSITIVE);
     private static final Pattern VID_PATTERN = Pattern.compile("^.*\\.(webm|mp4|m4v)$", Pattern.CASE_INSENSITIVE);
 
@@ -42,7 +42,7 @@ public class CoomerPartyRipper extends AbstractJSONRipper {
     private static final String KEY_ATTACHMENTS = "attachments";
 
     // Posts Request Endpoint
-    private static final String POSTS_ENDPOINT = "https://coomer.su/api/v1/%s/user/%s?o=%d";
+    private static final String POSTS_ENDPOINT = "https://coomer.st/api/v1/%s/user/%s?o=%d";
 
     // Pagination is strictly 50 posts per page, per API schema.
     private Integer pageCount = 0;
@@ -89,7 +89,7 @@ public class CoomerPartyRipper extends AbstractJSONRipper {
     @Override
     public boolean canRip(URL url) {
         String host = url.getHost();
-        return host.endsWith("coomer.party") || host.endsWith("coomer.su");
+        return host.endsWith("coomer.party") || host.endsWith("coomer.st");
     }
 
     @Override
