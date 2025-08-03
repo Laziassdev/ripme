@@ -41,12 +41,63 @@ import com.rarchives.ripme.ui.UpdateUtils;
 import com.rarchives.ripme.utils.Http;
 import com.rarchives.ripme.utils.RipUtils;
 import com.rarchives.ripme.utils.Utils;
-
 import j2html.TagCreator;
 import j2html.tags.ContainerTag;
 import j2html.tags.specialized.DivTag;
+import j2html.TagCreator;
+import j2html.tags.ContainerTag;
+import j2html.tags.specialized.DivTag;
+import java.sql.*;
 
 public class RedditRipper extends AlbumRipper {
+
+
+    // Loads Reddit session cookie from Firefox (Windows), tries all profiles
+    private static String getRedditSessionCookieFromFirefox() {
+        try {
+            String userHome = System.getProperty("user.home");
+            String profilesIniPath = userHome + "/AppData/Roaming/Mozilla/Firefox/profiles.ini";
+            java.nio.file.Path iniPath = java.nio.file.Paths.get(profilesIniPath);
+            if (!java.nio.file.Files.exists(iniPath)) return null;
+            java.util.List<String> lines = java.nio.file.Files.readAllLines(iniPath);
+            java.util.List<String> profilePaths = new java.util.ArrayList<>();
+            for (String line : lines) {
+                if (line.trim().startsWith("Path=")) {
+                    String path = line.trim().substring(5);
+                    profilePaths.add(path);
+                }
+            }
+            logger.info("Found Firefox profiles: {}", profilePaths);
+            for (String profilePath : profilePaths) {
+                String sqlitePath = userHome + "/AppData/Roaming/Mozilla/Firefox/Profiles/" + profilePath + "/cookies.sqlite";
+                // Remove duplicate Profiles/ if present
+                sqlitePath = sqlitePath.replace("Profiles/Profiles/", "Profiles/");
+                logger.info("Trying cookies.sqlite at: {}", sqlitePath);
+                try {
+                    Class.forName("org.sqlite.JDBC");
+                    // Copy to temp file to avoid lock issues
+                    java.nio.file.Path tempCopy = java.nio.file.Files.createTempFile("cookies", ".sqlite");
+                    java.nio.file.Files.copy(java.nio.file.Paths.get(sqlitePath), tempCopy, java.nio.file.StandardCopyOption.REPLACE_EXISTING);
+                    try (Connection conn = DriverManager.getConnection("jdbc:sqlite:" + tempCopy.toString())) {
+                        String sql = "SELECT value FROM moz_cookies WHERE host LIKE '%reddit.com' AND name='reddit_session' ORDER BY lastAccessed DESC LIMIT 1";
+                        try (Statement stmt = conn.createStatement(); ResultSet rs = stmt.executeQuery(sql)) {
+                            if (rs.next()) {
+                                String val = rs.getString("value");
+                                logger.info("Found reddit_session in profile {}: {}", profilePath, val.length() > 8 ? val.substring(0,4)+"..."+val.substring(val.length()-4) : val);
+                                return val;
+                            }
+                        }
+                    }
+                    java.nio.file.Files.deleteIfExists(tempCopy);
+                } catch (Exception e) {
+                    logger.warn("Failed to read cookies from profile {}: {}", profilePath, e.getMessage());
+                }
+            }
+        } catch (Exception e) {
+            logger.warn("Error reading Firefox profiles.ini: {}", e.getMessage());
+        }
+        return null;
+    }
 
     private static final Logger logger = LogManager.getLogger(RedditRipper.class);
 
@@ -208,7 +259,20 @@ public class RedditRipper extends AlbumRipper {
         }
         lastRequestTime = System.currentTimeMillis();
 
-        String jsonString = Http.getWith429Retry(url, 5, 15, REDDIT_USER_AGENT);
+        String redditSession = getRedditSessionCookieFromFirefox();
+        String jsonString;
+        if (redditSession != null && !redditSession.isEmpty()) {
+            String masked = redditSession.length() > 8 ? redditSession.substring(0, 4) + "..." + redditSession.substring(redditSession.length() - 4) : redditSession;
+            logger.info("Using reddit_session cookie: {}", masked);
+            jsonString = Http.url(url)
+                .userAgent(REDDIT_USER_AGENT)
+                .header("Cookie", "reddit_session=" + redditSession)
+                .ignoreContentType()
+                .response().body();
+        } else {
+            logger.warn("No reddit_session cookie found; requests will not be authenticated.");
+            jsonString = Http.getWith429Retry(url, 5, 15, REDDIT_USER_AGENT);
+        }
 
         Object jsonObj = new JSONTokener(jsonString).nextValue();
         JSONArray jsonArray = new JSONArray();
