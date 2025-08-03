@@ -58,12 +58,12 @@ public class CoomerPartyRipperTest extends RippersTest {
     public void testAbsoluteFileUrl() throws Exception {
         URL base = new URI("https://coomer.st/onlyfans/user/soogsx").toURL();
         TestableCoomerRipper ripper = new TestableCoomerRipper(base);
-        JSONObject fileObj = new JSONObject().put("path", "https://c3.coomer.st/data/test.jpg");
+        JSONObject fileObj = new JSONObject().put("path", "https://img.coomer.st/thumbnail/data/test.jpg");
         JSONObject postObj = new JSONObject().put("file", fileObj);
         JSONArray posts = new JSONArray().put(postObj);
         JSONObject wrapper = new JSONObject().put("array", posts);
         List<String> urls = ripper.publicGetURLsFromJSON(wrapper);
         assertEquals(1, urls.size());
-        assertEquals("https://c3.coomer.st/data/test.jpg", urls.get(0));
+        assertEquals("https://img.coomer.st/thumbnail/data/test.jpg", urls.get(0));
     }
 }

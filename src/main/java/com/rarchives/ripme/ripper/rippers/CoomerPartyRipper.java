@@ -31,7 +31,7 @@ public class CoomerPartyRipper extends AbstractJSONRipper {
 
     private static final Logger logger = LogManager.getLogger(CoomerPartyRipper.class);
 
-    private String IMG_URL_BASE = "https://c3.coomer.st/data";
+    private String IMG_URL_BASE = "https://img.coomer.st";
     private String VID_URL_BASE = "https://c1.coomer.st/data";
     private static final Pattern IMG_PATTERN = Pattern.compile("^.*\\.(jpg|jpeg|png|gif|apng|webp|tif|tiff)$", Pattern.CASE_INSENSITIVE);
     private static final Pattern VID_PATTERN = Pattern.compile("^.*\\.(webm|mp4|m4v)$", Pattern.CASE_INSENSITIVE);
@@ -107,7 +107,7 @@ public class CoomerPartyRipper extends AbstractJSONRipper {
 
     private void setDomain(String newDomain) {
         domain = newDomain;
-        IMG_URL_BASE = "https://c3." + newDomain + "/data";
+        IMG_URL_BASE = "https://img." + newDomain;
         VID_URL_BASE = "https://c1." + newDomain + "/data";
         POSTS_ENDPOINT = "https://" + newDomain + "/api/v1/%s/user/%s?o=%d";
     }
