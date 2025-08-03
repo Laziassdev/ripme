@@ -32,7 +32,7 @@ public class CoomerPartyRipper extends AbstractJSONRipper {
     private static final Logger logger = LogManager.getLogger(CoomerPartyRipper.class);
 
     private String IMG_URL_BASE = "https://img.coomer.st";
-    private String VID_URL_BASE = "https://c1.coomer.st/data";
+    private String VID_URL_BASE = "https://c1.coomer.st";
     private static final Pattern IMG_PATTERN = Pattern.compile("^.*\\.(jpg|jpeg|png|gif|apng|webp|tif|tiff)$", Pattern.CASE_INSENSITIVE);
     private static final Pattern VID_PATTERN = Pattern.compile("^.*\\.(webm|mp4|m4v)$", Pattern.CASE_INSENSITIVE);
 
@@ -108,7 +108,7 @@ public class CoomerPartyRipper extends AbstractJSONRipper {
     private void setDomain(String newDomain) {
         domain = newDomain;
         IMG_URL_BASE = "https://img." + newDomain;
-        VID_URL_BASE = "https://c1." + newDomain + "/data";
+        VID_URL_BASE = "https://c1." + newDomain;
         POSTS_ENDPOINT = "https://" + newDomain + "/api/v1/%s/user/%s?o=%d";
     }
 
@@ -241,6 +241,16 @@ public class CoomerPartyRipper extends AbstractJSONRipper {
         }
     }
 
+    private String buildMediaUrl(String base, String path) {
+        if (!path.startsWith("/")) {
+            path = "/" + path;
+        }
+        if (!path.startsWith("/data/") && !path.startsWith("/thumbnail/") && !path.startsWith("/original/")) {
+            path = "/data" + path;
+        }
+        return base + path;
+    }
+
     private void pullFileUrl(JSONObject post, ArrayList<String> results) {
         if (post == null) {
             logger.warn("Attempted to parse null post object");
@@ -275,9 +285,9 @@ public class CoomerPartyRipper extends AbstractJSONRipper {
                     return;
                 }
             } else if (isImage(path)) {
-                url = IMG_URL_BASE + path;
+                url = buildMediaUrl(IMG_URL_BASE, path);
             } else if (isVideo(path)) {
-                url = VID_URL_BASE + path;
+                url = buildMediaUrl(VID_URL_BASE, path);
             } else {
                 logger.warn("Unsupported media extension in path: " + path);
                 return;
