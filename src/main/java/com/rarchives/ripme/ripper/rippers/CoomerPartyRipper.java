@@ -268,15 +268,22 @@ public class CoomerPartyRipper extends AbstractJSONRipper {
             }
 
             String url;
-            if (isImage(path)) {
+            if (path.startsWith("http")) {
+                url = path;
+                if (!isImage(url) && !isVideo(url)) {
+                    logger.warn("Unsupported media extension in path: " + path);
+                    return;
+                }
+            } else if (isImage(path)) {
                 url = IMG_URL_BASE + path;
-                results.add(url);
             } else if (isVideo(path)) {
                 url = VID_URL_BASE + path;
-                results.add(url);
             } else {
                 logger.warn("Unsupported media extension in path: " + path);
+                return;
             }
+
+            results.add(url);
 
         } catch (JSONException e) {
             logger.error("Error parsing 'file' object from post: " + e.getMessage());
