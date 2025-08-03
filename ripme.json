@@ -1,7 +1,7 @@
 {
-  "latestVersion": "2.1.80-1-d7f1593",
-  "currentHash": "7c35fa32af294846a56735893cf8869b1d6bfb6829dc4aae35d6c6cb3ba392d1",
+  "latestVersion": "2.1.81-1-47d7152",
+  "currentHash": "9f9b8e18fdd50bc76e3e6eb602cbde959a60d20ac997d9e699e021895742c315",
   "changeList": [
-    "2.1.80-1-d7f1593: adding blueskyripper", "2.1.80-1-d7f1593: Built at 2025-06-22T02:44:03Z"
+    "2.1.81-1-47d7152: update domain", "2.1.81-1-47d7152: Built at 2025-08-03T14:50:59Z"
   ]
 }
