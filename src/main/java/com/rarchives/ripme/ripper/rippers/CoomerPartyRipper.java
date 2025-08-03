@@ -246,7 +246,7 @@ public class CoomerPartyRipper extends AbstractJSONRipper {
             path = "/" + path;
         }
         if (!path.startsWith("/data/") && !path.startsWith("/thumbnail/") && !path.startsWith("/original/")) {
-            path = "/data" + path;
+            path = "/thumbnail/data" + path;
         }
         return base + path;
     }
