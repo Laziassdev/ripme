@@ -52,8 +52,8 @@ import java.sql.*;
 public class RedditRipper extends AlbumRipper {
 
 
-    // Loads Reddit session cookie from Firefox (Windows), tries all profiles
-    private static String getRedditSessionCookieFromFirefox() {
+    // Loads all Reddit cookies from Firefox (Windows), tries all profiles, returns cookie string for HTTP header
+    private static String getRedditCookiesFromFirefox() {
         try {
             String userHome = System.getProperty("user.home");
             String profilesIniPath = userHome + "/AppData/Roaming/Mozilla/Firefox/profiles.ini";
@@ -79,12 +79,20 @@ public class RedditRipper extends AlbumRipper {
                     java.nio.file.Path tempCopy = java.nio.file.Files.createTempFile("cookies", ".sqlite");
                     java.nio.file.Files.copy(java.nio.file.Paths.get(sqlitePath), tempCopy, java.nio.file.StandardCopyOption.REPLACE_EXISTING);
                     try (Connection conn = DriverManager.getConnection("jdbc:sqlite:" + tempCopy.toString())) {
-                        String sql = "SELECT value FROM moz_cookies WHERE host LIKE '%reddit.com' AND name='reddit_session' ORDER BY lastAccessed DESC LIMIT 1";
+                        String sql = "SELECT name, value FROM moz_cookies WHERE host LIKE '%reddit.com'";
                         try (Statement stmt = conn.createStatement(); ResultSet rs = stmt.executeQuery(sql)) {
-                            if (rs.next()) {
-                                String val = rs.getString("value");
-                                logger.info("Found reddit_session in profile {}: {}", profilePath, val.length() > 8 ? val.substring(0,4)+"..."+val.substring(val.length()-4) : val);
-                                return val;
+                            StringBuilder cookieStr = new StringBuilder();
+                            boolean found = false;
+                            while (rs.next()) {
+                                String name = rs.getString("name");
+                                String value = rs.getString("value");
+                                if (cookieStr.length() > 0) cookieStr.append("; ");
+                                cookieStr.append(name).append("=").append(value);
+                                found = true;
+                            }
+                            if (found) {
+                                logger.info("Found Reddit cookies in profile {}: {}", profilePath, cookieStr.length() > 16 ? cookieStr.substring(0,8)+"..."+cookieStr.substring(cookieStr.length()-8) : cookieStr);
+                                return cookieStr.toString();
                             }
                         }
                     }
@@ -259,19 +267,53 @@ public class RedditRipper extends AlbumRipper {
         }
         lastRequestTime = System.currentTimeMillis();
 
-        String redditSession = getRedditSessionCookieFromFirefox();
-        String jsonString;
-        if (redditSession != null && !redditSession.isEmpty()) {
-            String masked = redditSession.length() > 8 ? redditSession.substring(0, 4) + "..." + redditSession.substring(redditSession.length() - 4) : redditSession;
-            logger.info("Using reddit_session cookie: {}", masked);
-            jsonString = Http.url(url)
-                .userAgent(REDDIT_USER_AGENT)
-                .header("Cookie", "reddit_session=" + redditSession)
-                .ignoreContentType()
-                .response().body();
-        } else {
-            logger.warn("No reddit_session cookie found; requests will not be authenticated.");
-            jsonString = Http.getWith429Retry(url, 5, 15, REDDIT_USER_AGENT);
+        String redditCookies = getRedditCookiesFromFirefox();
+        String jsonString = null;
+        int maxAttempts = 6;
+        int baseSleep = 2000;
+        int attempt = 0;
+        boolean success = false;
+        Exception lastEx = null;
+        while (attempt < maxAttempts && !success) {
+            try {
+                if (redditCookies != null && !redditCookies.isEmpty()) {
+                    String masked = redditCookies.length() > 16 ? redditCookies.substring(0, 8) + "..." + redditCookies.substring(redditCookies.length() - 8) : redditCookies;
+                    logger.info("Using Reddit cookies: {}", masked);
+                    jsonString = Http.url(url)
+                        .userAgent(REDDIT_USER_AGENT)
+                        .header("Cookie", redditCookies)
+                        .header("Accept", "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8")
+                        .header("Accept-Language", "en-US,en;q=0.9")
+                        .header("Accept-Encoding", "gzip, deflate, br")
+                        .header("Referer", "https://www.reddit.com/")
+                        .header("DNT", "1")
+                        .header("Connection", "keep-alive")
+                        .header("Upgrade-Insecure-Requests", "1")
+                        .ignoreContentType()
+                        .response().body();
+                } else {
+                    logger.warn("No Reddit cookies found; requests will not be authenticated.");
+                    jsonString = Http.getWith429Retry(url, 5, 15, REDDIT_USER_AGENT);
+                }
+                success = true;
+            } catch (org.jsoup.HttpStatusException e) {
+                if (e.getStatusCode() == 429) {
+                    int sleep = baseSleep * (int)Math.pow(2, attempt); // exponential backoff
+                    logger.warn("HTTP 429 Too Many Requests, sleeping {} ms before retrying (attempt {}/{})", sleep, attempt+1, maxAttempts);
+                    try { Thread.sleep(sleep); } catch (InterruptedException ie) {}
+                    attempt++;
+                    lastEx = e;
+                } else {
+                    throw e;
+                }
+            } catch (Exception e) {
+                lastEx = e;
+                break;
+            }
+        }
+        if (!success) {
+            logger.error("Failed to fetch Reddit JSON after {} attempts: {}", maxAttempts, lastEx != null ? lastEx.getMessage() : "unknown error");
+            throw new IOException("Failed to fetch Reddit JSON: " + (lastEx != null ? lastEx.getMessage() : "unknown error"), lastEx);
         }
 
         Object jsonObj = new JSONTokener(jsonString).nextValue();
