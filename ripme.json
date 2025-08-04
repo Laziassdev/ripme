@@ -1,7 +1,7 @@
 {
-  "latestVersion": "2.1.84-1-bdd3e4e",
-  "currentHash": "c6447516fa8bc18f56b5dcb25e0e0df03fab2e3386bfad97a15ef2e3fb41454f",
+  "latestVersion": "2.1.85-1-d0b1f9d",
+  "currentHash": "e3c0276f305ad6df407c826cd1d0a12c5893ed420937f65a4e1690438fac5a1d",
   "changeList": [
-    "2.1.84-1-bdd3e4e: fix reddit", "2.1.84-1-bdd3e4e: Built at 2025-08-04T00:05:10Z"
+    "2.1.85-1-d0b1f9d: fix reddit", "2.1.85-1-d0b1f9d: Built at 2025-08-04T01:02:08Z"
   ]
 }
