@@ -199,10 +199,15 @@ public class RedditRipper extends AlbumRipper {
 
 
     private URL getAndParseAndReturnNext(URL url) throws IOException, URISyntaxException {
+        if (maxDownloads > 0 && downloadCounter >= maxDownloads) {
+            logger.info("Download limit reached before parsing next page.");
+            return null;
+        }
         JSONArray jsonArray = getJsonArrayFromURL(url), children;
         JSONObject json, data;
         URL nextURL = null;
         for (int i = 0; i < jsonArray.length(); i++) {
+            if (maxDownloads > 0 && downloadCounter >= maxDownloads) break;
             json = jsonArray.getJSONObject(i);
             if (!json.has("data")) {
                 continue;
@@ -213,9 +218,12 @@ public class RedditRipper extends AlbumRipper {
             }
             children = data.getJSONArray("children");
             for (int j = 0; j < children.length(); j++) {
+                if (maxDownloads > 0 && downloadCounter >= maxDownloads) break;
                 try {
+                    if (maxDownloads > 0 && downloadCounter >= maxDownloads) break;
                     parseJsonChild(children.getJSONObject(j));
 
+                    if (maxDownloads > 0 && downloadCounter >= maxDownloads) break;
                     if (children.getJSONObject(j).getString("kind").equals("t3") &&
                             children.getJSONObject(j).getJSONObject("data").getBoolean("is_self")
                     ) {
@@ -227,6 +235,7 @@ public class RedditRipper extends AlbumRipper {
                     logger.debug("at index " + i + ", for this data: "  + data.toString() + e);
                 }
             }
+            if (maxDownloads > 0 && downloadCounter >= maxDownloads) break;
             if (data.has("after") && !data.isNull("after")) {
                 String nextURLString = Utils.stripURLParameter(url.toExternalForm(), "after");
                 if (nextURLString.contains("?")) {
@@ -276,25 +285,24 @@ public class RedditRipper extends AlbumRipper {
         Exception lastEx = null;
         while (attempt < maxAttempts && !success) {
             try {
-                if (redditCookies != null && !redditCookies.isEmpty()) {
-                    String masked = redditCookies.length() > 16 ? redditCookies.substring(0, 8) + "..." + redditCookies.substring(redditCookies.length() - 8) : redditCookies;
-                    logger.info("Using Reddit cookies: {}", masked);
-                    jsonString = Http.url(url)
+                // Always use the same request logic, with or without cookies
+                org.jsoup.Connection connection = org.jsoup.Jsoup.connect(url.toString())
                         .userAgent(REDDIT_USER_AGENT)
-                        .header("Cookie", redditCookies)
                         .header("Accept", "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8")
                         .header("Accept-Language", "en-US,en;q=0.9")
                         .header("Accept-Encoding", "gzip, deflate, br")
                         .header("Referer", "https://www.reddit.com/")
                         .header("DNT", "1")
                         .header("Connection", "keep-alive")
-                        .header("Upgrade-Insecure-Requests", "1")
-                        .ignoreContentType()
-                        .response().body();
+                        .header("Upgrade-Insecure-Requests", "1");
+                if (redditCookies != null && !redditCookies.isEmpty()) {
+                    String masked = redditCookies.length() > 16 ? redditCookies.substring(0, 8) + "..." + redditCookies.substring(redditCookies.length() - 8) : redditCookies;
+                    logger.info("Using Reddit cookies: {}", masked);
+                    connection.header("Cookie", redditCookies);
                 } else {
                     logger.warn("No Reddit cookies found; requests will not be authenticated.");
-                    jsonString = Http.getWith429Retry(url, 5, 15, REDDIT_USER_AGENT);
                 }
+                jsonString = connection.ignoreContentType(true).execute().body();
                 success = true;
             } catch (org.jsoup.HttpStatusException e) {
                 if (e.getStatusCode() == 429) {
@@ -335,6 +343,7 @@ public class RedditRipper extends AlbumRipper {
      * @param child The child to process
      */
     private void parseJsonChild(JSONObject child) {
+        if (maxDownloads > 0 && downloadCounter >= maxDownloads) return;
         String kind = child.getString("kind");
         JSONObject data = child.getJSONObject("data");
 
@@ -345,13 +354,13 @@ public class RedditRipper extends AlbumRipper {
             int minScore = Utils.getConfigInteger("reddit.min_upvotes", Integer.MIN_VALUE);
 
             if (score > maxScore || score < minScore) {
-
                 String message = "Skipping post with score outside specified range of " + minScore + " to " + maxScore;
                 sendUpdate(RipStatusMessage.STATUS.DOWNLOAD_WARN, message);
                 return; //Outside specified range, do not download
             }
         }
 
+        if (maxDownloads > 0 && downloadCounter >= maxDownloads) return;
         if (kind.equals("t1")) {
             // Comment
             handleBody(data.getString("body"), data.getString("id"), "");
@@ -367,11 +376,13 @@ public class RedditRipper extends AlbumRipper {
                 // Get link
                 handleURL(data.getString("url"), data.getString("id"), data.getString("title"));
             }
+            if (maxDownloads > 0 && downloadCounter >= maxDownloads) return;
             if (data.has("replies") && data.get("replies") instanceof JSONObject) {
                 JSONArray replies = data.getJSONObject("replies")
                                         .getJSONObject("data")
                                         .getJSONArray("children");
                 for (int i = 0; i < replies.length(); i++) {
+                    if (maxDownloads > 0 && downloadCounter >= maxDownloads) break;
                     parseJsonChild(replies.getJSONObject(i));
                 }
             }
