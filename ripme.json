@@ -1,7 +1,7 @@
 {
-  "latestVersion": "2.1.86-1-53c8984",
-  "currentHash": "836be67b33c9aa0fb55dc94213de418a25907a8928d1ffdbf7e8f6b289016305",
+  "latestVersion": "2.1.87-1-568c97e",
+  "currentHash": "8a2783c8e15318c848eb3bce5f6741e98503a6a077ea72a6a13f469e22dd6521",
   "changeList": [
-    "2.1.86-1-53c8984: Merge pull request #3 from Laziassdev/codex/investigate-404-errors-for-coomer-ripper", "2.1.86-1-53c8984: Built at 2025-08-14T07:10:44Z"
+    "2.1.87-1-568c97e: Merge pull request #5 from Laziassdev/codex/investigate-404-errors-for-coomer-ripper-iouzsc", "2.1.87-1-568c97e: Built at 2025-08-14T07:33:22Z"
   ]
 }
