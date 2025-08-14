@@ -43,8 +43,9 @@ public class CoomerPartyRipper extends AbstractJSONRipper {
     private static final String KEY_PATH = "path";
     private static final String KEY_ATTACHMENTS = "attachments";
 
-    // Posts Request Endpoint
-    private String POSTS_ENDPOINT = "https://coomer.st/api/v1/%s/user/%s?o=%d";
+    // Posts Request Endpoint templates
+    private static final String POSTS_ENDPOINT = "https://%s/api/v1/%s/user/%s/posts?o=%d";
+    private static final String LEGACY_POSTS_ENDPOINT = "https://%s/api/v1/%s/user/%s?o=%d";
 
     // Pagination is strictly 50 posts per page, per API schema.
     private Integer pageCount = 0;
@@ -109,39 +110,43 @@ public class CoomerPartyRipper extends AbstractJSONRipper {
         domain = newDomain;
         IMG_URL_BASE = "https://img." + newDomain;
         VID_URL_BASE = "https://c1." + newDomain;
-        POSTS_ENDPOINT = "https://" + newDomain + "/api/v1/%s/user/%s?o=%d";
     }
 
     private JSONObject getJsonPostsForOffset(Integer offset) throws IOException {
         Set<String> domainsToTry = new LinkedHashSet<>();
         domainsToTry.add(domain);
+        domainsToTry.add("coomer.party");
         domainsToTry.add("coomer.su");
         domainsToTry.add("coomer.st");
+
+        List<String> endpointTemplates = Arrays.asList(POSTS_ENDPOINT, LEGACY_POSTS_ENDPOINT);
 
         IOException lastException = null;
         for (String dom : domainsToTry) {
             setDomain(dom);
-            String apiUrl = String.format(POSTS_ENDPOINT, service, user, offset);
-            try {
-                String jsonArrayString = Http.url(apiUrl)
-                        .ignoreContentType()
-                        .response()
-                        .body();
+            for (String endpoint : endpointTemplates) {
+                String apiUrl = String.format(endpoint, dom, service, user, offset);
+                try {
+                    String jsonArrayString = Http.url(apiUrl)
+                            .ignoreContentType()
+                            .response()
+                            .body();
 
-                logger.debug("Raw JSON from API for offset " + offset + ": " + jsonArrayString);
+                    logger.debug("Raw JSON from API for offset " + offset + ": " + jsonArrayString);
 
-                JSONArray jsonArray = new JSONArray(jsonArrayString);
+                    JSONArray jsonArray = new JSONArray(jsonArrayString);
 
-                if (jsonArray.isEmpty()) {
-                    logger.warn("No posts found at offset " + offset + " for user: " + user);
+                    if (jsonArray.isEmpty()) {
+                        logger.warn("No posts found at offset " + offset + " for user: " + user);
+                    }
+
+                    JSONObject wrapperObject = new JSONObject();
+                    wrapperObject.put(KEY_WRAPPER_JSON_ARRAY, jsonArray);
+                    return wrapperObject;
+                } catch (IOException e) {
+                    lastException = e;
+                    logger.warn("Failed to fetch posts from {}: {}", apiUrl, e.getMessage());
                 }
-
-                JSONObject wrapperObject = new JSONObject();
-                wrapperObject.put(KEY_WRAPPER_JSON_ARRAY, jsonArray);
-                return wrapperObject;
-            } catch (IOException e) {
-                lastException = e;
-                logger.warn("Failed to fetch posts from {}: {}", apiUrl, e.getMessage());
             }
         }
         throw lastException;
