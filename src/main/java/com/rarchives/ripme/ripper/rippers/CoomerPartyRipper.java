@@ -246,12 +246,12 @@ public class CoomerPartyRipper extends AbstractJSONRipper {
         }
     }
 
-    private String buildMediaUrl(String base, String path) {
+    private String buildMediaUrl(String base, String path, boolean isVideo) {
         if (!path.startsWith("/")) {
             path = "/" + path;
         }
         if (!path.startsWith("/data/") && !path.startsWith("/thumbnail/") && !path.startsWith("/original/")) {
-            path = "/thumbnail/data" + path;
+            path = (isVideo ? "/data" : "/thumbnail/data") + path;
         }
         return base + path;
     }
@@ -290,9 +290,9 @@ public class CoomerPartyRipper extends AbstractJSONRipper {
                     return;
                 }
             } else if (isImage(path)) {
-                url = buildMediaUrl(IMG_URL_BASE, path);
+                url = buildMediaUrl(IMG_URL_BASE, path, false);
             } else if (isVideo(path)) {
-                url = buildMediaUrl(VID_URL_BASE, path);
+                url = buildMediaUrl(VID_URL_BASE, path, true);
             } else {
                 logger.warn("Unsupported media extension in path: " + path);
                 return;
