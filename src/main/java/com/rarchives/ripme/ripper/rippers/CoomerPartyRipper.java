@@ -17,6 +17,7 @@ import org.apache.logging.log4j.Logger;
 import org.json.JSONArray;
 import org.json.JSONException;
 import org.json.JSONObject;
+import org.jsoup.HttpStatusException;
 
 import com.rarchives.ripme.ripper.AbstractJSONRipper;
 import com.rarchives.ripme.utils.Http;
@@ -108,8 +109,8 @@ public class CoomerPartyRipper extends AbstractJSONRipper {
 
     private void setDomain(String newDomain) {
         domain = newDomain;
-        IMG_URL_BASE = "https://img." + newDomain;
-        VID_URL_BASE = "https://c1." + newDomain;
+        IMG_URL_BASE = "https://" + newDomain;
+        VID_URL_BASE = "https://" + newDomain;
     }
 
     private JSONObject getJsonPostsForOffset(Integer offset) throws IOException {
@@ -143,6 +144,15 @@ public class CoomerPartyRipper extends AbstractJSONRipper {
                     JSONObject wrapperObject = new JSONObject();
                     wrapperObject.put(KEY_WRAPPER_JSON_ARRAY, jsonArray);
                     return wrapperObject;
+                } catch (HttpStatusException e) {
+                    if (e.getStatusCode() == 400) {
+                        logger.info("Offset {} out of range for user {}, treating as no more posts", offset, user);
+                        JSONObject wrapperObject = new JSONObject();
+                        wrapperObject.put(KEY_WRAPPER_JSON_ARRAY, new JSONArray());
+                        return wrapperObject;
+                    }
+                    lastException = e;
+                    logger.warn("Failed to fetch posts from {}: {}", apiUrl, e.getMessage());
                 } catch (IOException e) {
                     lastException = e;
                     logger.warn("Failed to fetch posts from {}: {}", apiUrl, e.getMessage());
@@ -246,12 +256,12 @@ public class CoomerPartyRipper extends AbstractJSONRipper {
         }
     }
 
-    private String buildMediaUrl(String base, String path) {
+    private String buildMediaUrl(String base, String path, boolean isVideo) {
         if (!path.startsWith("/")) {
             path = "/" + path;
         }
         if (!path.startsWith("/data/") && !path.startsWith("/thumbnail/") && !path.startsWith("/original/")) {
-            path = "/thumbnail/data" + path;
+            path = (isVideo ? "/data" : "/thumbnail/data") + path;
         }
         return base + path;
     }
@@ -290,9 +300,9 @@ public class CoomerPartyRipper extends AbstractJSONRipper {
                     return;
                 }
             } else if (isImage(path)) {
-                url = buildMediaUrl(IMG_URL_BASE, path);
+                url = buildMediaUrl(IMG_URL_BASE, path, false);
             } else if (isVideo(path)) {
-                url = buildMediaUrl(VID_URL_BASE, path);
+                url = buildMediaUrl(VID_URL_BASE, path, true);
             } else {
                 logger.warn("Unsupported media extension in path: " + path);
                 return;
