@@ -130,6 +130,7 @@ public class CoomerPartyRipper extends AbstractJSONRipper {
                 try {
                     String jsonArrayString = Http.url(apiUrl)
                             .ignoreContentType()
+                            .header("Accept", "application/json")
                             .response()
                             .body();
 

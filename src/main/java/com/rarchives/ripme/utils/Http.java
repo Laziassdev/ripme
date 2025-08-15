@@ -39,6 +39,7 @@ public class Http {
 
     private static final int TIMEOUT = Utils.getConfigInteger("page.timeout", 5 * 1000);
     private static final Logger logger = LogManager.getLogger(Http.class);
+    private static final String DEFAULT_ACCEPT_HEADER = "*/*";
 
     private int retries;
     private int retrySleep = 0;
@@ -357,7 +358,7 @@ public class Http {
     }
 
     public static URL followRedirectsWithRetry(URL originalUrl, int maxRetries, int baseDelaySeconds, String userAgent) throws IOException {
-        return followRedirectsWithRetry(originalUrl, maxRetries, baseDelaySeconds, userAgent, "*/*");
+        return followRedirectsWithRetry(originalUrl, maxRetries, baseDelaySeconds, userAgent, DEFAULT_ACCEPT_HEADER);
     }
 
     public static URL followRedirectsWithRetry(URL originalUrl, int maxRetries, int baseDelaySeconds, String userAgent, String acceptHeader) throws IOException {
@@ -372,7 +373,9 @@ public class Http {
                 connection = (HttpURLConnection) currentUrl.openConnection();
                 connection.setInstanceFollowRedirects(false);
                 connection.setRequestProperty("User-Agent", userAgent);
-                connection.setRequestProperty("Accept", acceptHeader);
+                if (acceptHeader != null) {
+                    connection.setRequestProperty("Accept", acceptHeader);
+                }
                 connection.setConnectTimeout(10000);
                 connection.setReadTimeout(10000);
 
