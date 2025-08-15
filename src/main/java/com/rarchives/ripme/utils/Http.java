@@ -357,6 +357,10 @@ public class Http {
     }
 
     public static URL followRedirectsWithRetry(URL originalUrl, int maxRetries, int baseDelaySeconds, String userAgent) throws IOException {
+        return followRedirectsWithRetry(originalUrl, maxRetries, baseDelaySeconds, userAgent, "*/*");
+    }
+
+    public static URL followRedirectsWithRetry(URL originalUrl, int maxRetries, int baseDelaySeconds, String userAgent, String acceptHeader) throws IOException {
         int retries = 0;
         int maxDelaySeconds = 600;
         Random random = new Random();
@@ -368,7 +372,7 @@ public class Http {
                 connection = (HttpURLConnection) currentUrl.openConnection();
                 connection.setInstanceFollowRedirects(false);
                 connection.setRequestProperty("User-Agent", userAgent);
-                connection.setRequestProperty("Accept", "application/json");
+                connection.setRequestProperty("Accept", acceptHeader);
                 connection.setConnectTimeout(10000);
                 connection.setReadTimeout(10000);
 
