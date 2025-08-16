@@ -133,6 +133,7 @@ public class CoomerPartyRipper extends AbstractJSONRipper {
             setDomain(dom);
             for (String endpoint : endpointTemplates) {
                 String apiUrl = String.format(endpoint, dom, service, user, offset);
+                String jsonArrayString = null;
                 try {
                     Map<String,String> headers = new HashMap<>();
                     headers.put("Accept", "text/css");
@@ -140,10 +141,9 @@ public class CoomerPartyRipper extends AbstractJSONRipper {
                     if (coomerCookies != null) {
                         headers.put("Cookie", coomerCookies);
                     }
-                    String jsonArrayString = Http.getWith429Retry(new URL(apiUrl), 5, 5, COOMER_USER_AGENT, headers);
+                    jsonArrayString = Http.getWith429Retry(new URL(apiUrl), 5, 5, COOMER_USER_AGENT, headers);
 
                     logger.debug("Raw JSON from API for offset " + offset + ": " + jsonArrayString);
-
                     JSONArray jsonArray = new JSONArray(jsonArrayString);
 
                     if (jsonArray.isEmpty()) {
@@ -162,6 +162,10 @@ public class CoomerPartyRipper extends AbstractJSONRipper {
                     }
                     lastException = e;
                     logger.warn("Failed to fetch posts from {}: {}", apiUrl, e.getMessage());
+                } catch (JSONException e) {
+                    lastException = new IOException("Invalid JSON response", e);
+                    logger.warn("Invalid JSON from {}: {}", apiUrl, e.getMessage());
+                    logger.debug("Response body: {}", jsonArrayString);
                 } catch (IOException e) {
                     lastException = e;
                     logger.warn("Failed to fetch posts from {}: {}", apiUrl, e.getMessage());
