@@ -1,7 +1,7 @@
 {
-  "latestVersion": "2.1.87-1-568c97e",
-  "currentHash": "8a2783c8e15318c848eb3bce5f6741e98503a6a077ea72a6a13f469e22dd6521",
+  "latestVersion": "2.1.91-1-babbadb",
+  "currentHash": "a3f7992d39003f6b927a955328dd5f6c0e0e185de4b791f6059f0c66a0479450",
   "changeList": [
-    "2.1.87-1-568c97e: Merge pull request #5 from Laziassdev/codex/investigate-404-errors-for-coomer-ripper-iouzsc", "2.1.87-1-568c97e: Built at 2025-08-14T07:33:22Z"
+    "2.1.91-1-babbadb: Merge pull request #9 from Laziassdev/codex/investigate-403-errors-in-coomer-ripper", "2.1.91-1-babbadb: Built at 2025-08-16T08:18:11Z"
   ]
 }
