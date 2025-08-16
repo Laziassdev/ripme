@@ -30,6 +30,50 @@ class QueueMenuMouseListener extends MouseAdapter {
     public void updateUI() {
         popup.removeAll();
 
+        Action moveUp = new AbstractAction(Utils.getLocalizedString("queue.move.up")) {
+            @Override
+            public void actionPerformed(ActionEvent ae) {
+                int[] indices = queueList.getSelectedIndices();
+                if (indices.length == 0) {
+                    return;
+                }
+                for (int i = 0; i < indices.length; i++) {
+                    int index = indices[i];
+                    if (index > 0) {
+                        Object element = queueListModel.get(index);
+                        queueListModel.remove(index);
+                        queueListModel.add(index - 1, element);
+                        indices[i] = index - 1;
+                    }
+                }
+                queueList.setSelectedIndices(indices);
+                updateUI();
+            }
+        };
+        popup.add(moveUp);
+
+        Action moveDown = new AbstractAction(Utils.getLocalizedString("queue.move.down")) {
+            @Override
+            public void actionPerformed(ActionEvent ae) {
+                int[] indices = queueList.getSelectedIndices();
+                if (indices.length == 0) {
+                    return;
+                }
+                for (int i = indices.length - 1; i >= 0; i--) {
+                    int index = indices[i];
+                    if (index < queueListModel.getSize() - 1) {
+                        Object element = queueListModel.get(index);
+                        queueListModel.remove(index);
+                        queueListModel.add(index + 1, element);
+                        indices[i] = index + 1;
+                    }
+                }
+                queueList.setSelectedIndices(indices);
+                updateUI();
+            }
+        };
+        popup.add(moveDown);
+
         Action removeSelected = new AbstractAction(Utils.getLocalizedString("queue.remove.selected")) {
             @Override
             public void actionPerformed(ActionEvent ae) {
