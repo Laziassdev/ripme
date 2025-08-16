@@ -39,6 +39,7 @@ public class Http {
 
     private static final int TIMEOUT = Utils.getConfigInteger("page.timeout", 5 * 1000);
     private static final Logger logger = LogManager.getLogger(Http.class);
+    private static final String DEFAULT_ACCEPT_HEADER = "*/*";
 
     private int retries;
     private int retrySleep = 0;
@@ -203,6 +204,10 @@ public class Http {
     }
 
     public static String getWith429Retry(URL url, int maxRetries, int baseDelaySeconds, String userAgent) throws IOException {
+        return getWith429Retry(url, maxRetries, baseDelaySeconds, userAgent, null);
+    }
+
+    public static String getWith429Retry(URL url, int maxRetries, int baseDelaySeconds, String userAgent, Map<String,String> headers) throws IOException {
     int retries = 0;
     int maxDelaySeconds = 600; // Cap max wait to 10 minutes
     Random random = new Random();
@@ -213,7 +218,18 @@ public class Http {
         try {
             connection = (HttpURLConnection) url.openConnection();
             connection.setRequestProperty("User-Agent", userAgent);
-            connection.setRequestProperty("Accept", "application/json");
+            boolean acceptSet = false;
+            if (headers != null) {
+                for (Map.Entry<String,String> entry : headers.entrySet()) {
+                    connection.setRequestProperty(entry.getKey(), entry.getValue());
+                    if ("accept".equalsIgnoreCase(entry.getKey())) {
+                        acceptSet = true;
+                    }
+                }
+            }
+            if (!acceptSet) {
+                connection.setRequestProperty("Accept", "application/json");
+            }
             connection.setConnectTimeout(10000);
             connection.setReadTimeout(10000);
 
@@ -252,7 +268,7 @@ public class Http {
             }
 
             if (responseCode >= 400) {
-                throw new IOException("HTTP error: " + responseCode);
+                throw new HttpStatusException("HTTP error fetching URL", responseCode, url.toString());
             }
 
             try (InputStream inputStream = connection.getInputStream();
@@ -357,6 +373,10 @@ public class Http {
     }
 
     public static URL followRedirectsWithRetry(URL originalUrl, int maxRetries, int baseDelaySeconds, String userAgent) throws IOException {
+        return followRedirectsWithRetry(originalUrl, maxRetries, baseDelaySeconds, userAgent, DEFAULT_ACCEPT_HEADER);
+    }
+
+    public static URL followRedirectsWithRetry(URL originalUrl, int maxRetries, int baseDelaySeconds, String userAgent, String acceptHeader) throws IOException {
         int retries = 0;
         int maxDelaySeconds = 600;
         Random random = new Random();
@@ -368,7 +388,9 @@ public class Http {
                 connection = (HttpURLConnection) currentUrl.openConnection();
                 connection.setInstanceFollowRedirects(false);
                 connection.setRequestProperty("User-Agent", userAgent);
-                connection.setRequestProperty("Accept", "application/json");
+                if (acceptHeader != null) {
+                    connection.setRequestProperty("Accept", acceptHeader);
+                }
                 connection.setConnectTimeout(10000);
                 connection.setReadTimeout(10000);
 
