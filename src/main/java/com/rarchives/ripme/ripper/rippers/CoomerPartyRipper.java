@@ -35,6 +35,8 @@ public class CoomerPartyRipper extends AbstractJSONRipper {
 
     private static final Logger logger = LogManager.getLogger(CoomerPartyRipper.class);
     private static final String coomerCookies = getCoomerCookiesFromFirefox();
+    private static final String COOMER_USER_AGENT = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+            + "AppleWebKit/537.36 (KHTML, like Gecko) Chrome/127.0.0.0 Safari/537.36";
 
     private String IMG_URL_BASE = "https://img.coomer.st";
     private String VID_URL_BASE = "https://c1.coomer.st";
@@ -133,12 +135,12 @@ public class CoomerPartyRipper extends AbstractJSONRipper {
                 String apiUrl = String.format(endpoint, dom, service, user, offset);
                 try {
                     Map<String,String> headers = new HashMap<>();
-                    headers.put("Accept", "application/json");
+                    headers.put("Accept", "text/css");
                     headers.put("Referer", String.format("https://%s/%s/user/%s", dom, service, user));
                     if (coomerCookies != null) {
                         headers.put("Cookie", coomerCookies);
                     }
-                    String jsonArrayString = Http.getWith429Retry(new URL(apiUrl), 5, 5, AbstractRipper.USER_AGENT, headers);
+                    String jsonArrayString = Http.getWith429Retry(new URL(apiUrl), 5, 5, COOMER_USER_AGENT, headers);
 
                     logger.debug("Raw JSON from API for offset " + offset + ": " + jsonArrayString);
 
@@ -249,7 +251,7 @@ public class CoomerPartyRipper extends AbstractJSONRipper {
             if (coomerCookies != null) {
                 headers.put("Cookie", coomerCookies);
             }
-            URL resolvedUrl = Http.followRedirectsWithRetry(url, 5, 5, AbstractRipper.USER_AGENT, headers);
+            URL resolvedUrl = Http.followRedirectsWithRetry(url, 5, 5, COOMER_USER_AGENT, headers);
             addURLToDownload(resolvedUrl, getPrefix(index));
         } catch (IOException e) {
             logger.error("Failed to resolve or download redirect URL {}: {}", url, e.getMessage());

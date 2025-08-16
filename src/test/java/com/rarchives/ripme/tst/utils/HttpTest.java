@@ -115,13 +115,13 @@ public class HttpTest {
         try {
             URL url = new URL("http://localhost:" + server.getAddress().getPort() + "/");
             Map<String,String> headers = new HashMap<>();
-            headers.put("Accept", "*/*");
+            headers.put("Accept", "text/css");
             headers.put("Cookie", "foo=bar");
             Http.getWith429Retry(url, 0, 1, "test-agent", headers);
         } finally {
             server.stop(0);
         }
-        assertEquals("*/*", accepts.get(0));
+        assertEquals("text/css", accepts.get(0));
         assertEquals("foo=bar", cookies.get(0));
     }
 }
