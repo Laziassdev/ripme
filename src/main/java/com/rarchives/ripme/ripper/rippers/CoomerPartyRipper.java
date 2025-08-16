@@ -8,6 +8,9 @@ import java.util.Arrays;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Set;
+import java.util.HashMap;
+import java.util.Map;
+import java.sql.*;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import java.util.stream.Collectors;
@@ -31,6 +34,9 @@ import com.rarchives.ripme.ripper.AbstractRipper;
 public class CoomerPartyRipper extends AbstractJSONRipper {
 
     private static final Logger logger = LogManager.getLogger(CoomerPartyRipper.class);
+    private static final String coomerCookies = getCoomerCookiesFromFirefox();
+    private static final String COOMER_USER_AGENT = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+            + "AppleWebKit/537.36 (KHTML, like Gecko) Chrome/127.0.0.0 Safari/537.36";
 
     private String IMG_URL_BASE = "https://img.coomer.st";
     private String VID_URL_BASE = "https://c1.coomer.st";
@@ -128,10 +134,13 @@ public class CoomerPartyRipper extends AbstractJSONRipper {
             for (String endpoint : endpointTemplates) {
                 String apiUrl = String.format(endpoint, dom, service, user, offset);
                 try {
-                    String jsonArrayString = Http.url(apiUrl)
-                            .ignoreContentType()
-                            .response()
-                            .body();
+                    Map<String,String> headers = new HashMap<>();
+                    headers.put("Accept", "text/css");
+                    headers.put("Referer", String.format("https://%s/%s/user/%s", dom, service, user));
+                    if (coomerCookies != null) {
+                        headers.put("Cookie", coomerCookies);
+                    }
+                    String jsonArrayString = Http.getWith429Retry(new URL(apiUrl), 5, 5, COOMER_USER_AGENT, headers);
 
                     logger.debug("Raw JSON from API for offset " + offset + ": " + jsonArrayString);
 
@@ -237,7 +246,12 @@ public class CoomerPartyRipper extends AbstractJSONRipper {
     @Override
     protected void downloadURL(URL url, int index) {
         try {
-            URL resolvedUrl = Http.followRedirectsWithRetry(url, 5, 5, AbstractRipper.USER_AGENT);
+            Map<String,String> headers = new HashMap<>();
+            headers.put("Referer", String.format("https://%s/%s/user/%s", domain, service, user));
+            if (coomerCookies != null) {
+                headers.put("Cookie", coomerCookies);
+            }
+            URL resolvedUrl = Http.followRedirectsWithRetry(url, 5, 5, COOMER_USER_AGENT, headers);
             addURLToDownload(resolvedUrl, getPrefix(index));
         } catch (IOException e) {
             logger.error("Failed to resolve or download redirect URL {}: {}", url, e.getMessage());
@@ -339,6 +353,57 @@ public class CoomerPartyRipper extends AbstractJSONRipper {
         } catch (Exception e) {
             logger.error("Unexpected error in pullAttachmentUrls: " + e.getMessage(), e);
         }
+    }
+
+    private static String getCoomerCookiesFromFirefox() {
+        try {
+            String userHome = System.getProperty("user.home");
+            String profilesIniPath = userHome + "/AppData/Roaming/Mozilla/Firefox/profiles.ini";
+            java.nio.file.Path iniPath = java.nio.file.Paths.get(profilesIniPath);
+            if (!java.nio.file.Files.exists(iniPath)) return null;
+            java.util.List<String> lines = java.nio.file.Files.readAllLines(iniPath);
+            java.util.List<String> profilePaths = new java.util.ArrayList<>();
+            for (String line : lines) {
+                if (line.trim().startsWith("Path=")) {
+                    profilePaths.add(line.trim().substring(5));
+                }
+            }
+            logger.info("Found Firefox profiles: {}", profilePaths);
+            for (String profilePath : profilePaths) {
+                String sqlitePath = userHome + "/AppData/Roaming/Mozilla/Firefox/Profiles/" + profilePath + "/cookies.sqlite";
+                sqlitePath = sqlitePath.replace("Profiles/Profiles/", "Profiles/");
+                logger.info("Trying cookies.sqlite at: {}", sqlitePath);
+                try {
+                    Class.forName("org.sqlite.JDBC");
+                    java.nio.file.Path tempCopy = java.nio.file.Files.createTempFile("cookies", ".sqlite");
+                    java.nio.file.Files.copy(java.nio.file.Paths.get(sqlitePath), tempCopy, java.nio.file.StandardCopyOption.REPLACE_EXISTING);
+                    try (Connection conn = DriverManager.getConnection("jdbc:sqlite:" + tempCopy.toString())) {
+                        String sql = "SELECT name, value FROM moz_cookies WHERE host LIKE '%coomer%'";
+                        try (Statement stmt = conn.createStatement(); ResultSet rs = stmt.executeQuery(sql)) {
+                            StringBuilder cookieStr = new StringBuilder();
+                            boolean found = false;
+                            while (rs.next()) {
+                                String name = rs.getString("name");
+                                String value = rs.getString("value");
+                                if (cookieStr.length() > 0) cookieStr.append("; ");
+                                cookieStr.append(name).append("=").append(value);
+                                found = true;
+                            }
+                            if (found) {
+                                logger.info("Found Coomer cookies in profile {}: {}", profilePath, cookieStr.length() > 16 ? cookieStr.substring(0,8)+"..."+cookieStr.substring(cookieStr.length()-8) : cookieStr.toString());
+                                return cookieStr.toString();
+                            }
+                        }
+                    }
+                    java.nio.file.Files.deleteIfExists(tempCopy);
+                } catch (Exception e) {
+                    logger.warn("Failed to read cookies from profile {}: {}", profilePath, e.getMessage());
+                }
+            }
+        } catch (Exception e) {
+            logger.warn("Error reading Firefox profiles.ini: {}", e.getMessage());
+        }
+        return null;
     }
 
     private boolean isImage(String path) {
