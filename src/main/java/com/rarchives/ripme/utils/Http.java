@@ -204,6 +204,10 @@ public class Http {
     }
 
     public static String getWith429Retry(URL url, int maxRetries, int baseDelaySeconds, String userAgent) throws IOException {
+        return getWith429Retry(url, maxRetries, baseDelaySeconds, userAgent, null);
+    }
+
+    public static String getWith429Retry(URL url, int maxRetries, int baseDelaySeconds, String userAgent, Map<String,String> headers) throws IOException {
     int retries = 0;
     int maxDelaySeconds = 600; // Cap max wait to 10 minutes
     Random random = new Random();
@@ -214,7 +218,18 @@ public class Http {
         try {
             connection = (HttpURLConnection) url.openConnection();
             connection.setRequestProperty("User-Agent", userAgent);
-            connection.setRequestProperty("Accept", "application/json");
+            boolean acceptSet = false;
+            if (headers != null) {
+                for (Map.Entry<String,String> entry : headers.entrySet()) {
+                    connection.setRequestProperty(entry.getKey(), entry.getValue());
+                    if ("accept".equalsIgnoreCase(entry.getKey())) {
+                        acceptSet = true;
+                    }
+                }
+            }
+            if (!acceptSet) {
+                connection.setRequestProperty("Accept", "application/json");
+            }
             connection.setConnectTimeout(10000);
             connection.setReadTimeout(10000);
 
@@ -253,7 +268,7 @@ public class Http {
             }
 
             if (responseCode >= 400) {
-                throw new IOException("HTTP error: " + responseCode);
+                throw new HttpStatusException("HTTP error fetching URL", responseCode, url.toString());
             }
 
             try (InputStream inputStream = connection.getInputStream();
