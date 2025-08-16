@@ -1,7 +1,7 @@
 {
-  "latestVersion": "2.1.94-1-59e1a54",
-  "currentHash": "2894fac1c25c6fad921ff9575453df5f9230fba06181561017c8cfee7eeac20a",
+  "latestVersion": "2.1.95-1-bef498e",
+  "currentHash": "2d7a4921d9322da2c6e8974ae82693fc43d33744df033ecb3d55a8781db50b97",
   "changeList": [
-    "2.1.94-1-59e1a54: Merge pull request #12 from Laziassdev/codex/fix-json-parsing-error-in-coomerpartyripper", "2.1.94-1-59e1a54: Built at 2025-08-16T09:33:49Z"
+    "2.1.95-1-bef498e: only run on PR", "2.1.95-1-bef498e: Built at 2025-08-16T09:39:23Z"
   ]
 }
