@@ -58,6 +58,28 @@ public class HttpTest {
     }
 
     @Test
+    public void testFollowRedirectsWithRetryCustomHeaders() throws Exception {
+        List<String> referers = new ArrayList<>();
+        HttpServer server = HttpServer.create(new InetSocketAddress(0), 0);
+        server.createContext("/", exchange -> {
+            referers.add(exchange.getRequestHeaders().getFirst("Referer"));
+            exchange.sendResponseHeaders(200, -1);
+            exchange.close();
+        });
+        server.setExecutor(Executors.newSingleThreadExecutor());
+        server.start();
+        try {
+            URL url = new URL("http://localhost:" + server.getAddress().getPort() + "/");
+            Map<String,String> headers = new HashMap<>();
+            headers.put("Referer", "https://example.com/page");
+            Http.followRedirectsWithRetry(url, 0, 1, "test-agent", headers);
+        } finally {
+            server.stop(0);
+        }
+        assertEquals("https://example.com/page", referers.get(0));
+    }
+
+    @Test
     public void testGetWith429RetryDefaultHeaders() throws Exception {
         List<String> accepts = new ArrayList<>();
         HttpServer server = HttpServer.create(new InetSocketAddress(0), 0);

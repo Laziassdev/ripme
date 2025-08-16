@@ -373,14 +373,25 @@ public class Http {
     }
 
     public static URL followRedirectsWithRetry(URL originalUrl, int maxRetries, int baseDelaySeconds, String userAgent) throws IOException {
-        return followRedirectsWithRetry(originalUrl, maxRetries, baseDelaySeconds, userAgent, DEFAULT_ACCEPT_HEADER);
+        return followRedirectsWithRetry(originalUrl, maxRetries, baseDelaySeconds, userAgent, (Map<String,String>) null);
     }
 
     public static URL followRedirectsWithRetry(URL originalUrl, int maxRetries, int baseDelaySeconds, String userAgent, String acceptHeader) throws IOException {
+        Map<String,String> headers = new HashMap<>();
+        headers.put("Accept", acceptHeader);
+        return followRedirectsWithRetry(originalUrl, maxRetries, baseDelaySeconds, userAgent, headers);
+    }
+
+    public static URL followRedirectsWithRetry(URL originalUrl, int maxRetries, int baseDelaySeconds, String userAgent, Map<String,String> headers) throws IOException {
         int retries = 0;
         int maxDelaySeconds = 600;
         Random random = new Random();
         URL currentUrl = originalUrl;
+
+        String acceptHeader = DEFAULT_ACCEPT_HEADER;
+        if (headers != null && headers.containsKey("Accept")) {
+            acceptHeader = headers.get("Accept");
+        }
 
         while (retries <= maxRetries) {
             HttpURLConnection connection = null;
@@ -390,6 +401,13 @@ public class Http {
                 connection.setRequestProperty("User-Agent", userAgent);
                 if (acceptHeader != null) {
                     connection.setRequestProperty("Accept", acceptHeader);
+                }
+                if (headers != null) {
+                    for (Map.Entry<String,String> entry : headers.entrySet()) {
+                        if (!"accept".equalsIgnoreCase(entry.getKey())) {
+                            connection.setRequestProperty(entry.getKey(), entry.getValue());
+                        }
+                    }
                 }
                 connection.setConnectTimeout(10000);
                 connection.setReadTimeout(10000);

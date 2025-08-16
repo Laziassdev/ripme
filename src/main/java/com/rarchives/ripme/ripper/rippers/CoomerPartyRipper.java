@@ -134,6 +134,7 @@ public class CoomerPartyRipper extends AbstractJSONRipper {
                 try {
                     Map<String,String> headers = new HashMap<>();
                     headers.put("Accept", "application/json");
+                    headers.put("Referer", String.format("https://%s/%s/user/%s", dom, service, user));
                     if (coomerCookies != null) {
                         headers.put("Cookie", coomerCookies);
                     }
@@ -243,7 +244,12 @@ public class CoomerPartyRipper extends AbstractJSONRipper {
     @Override
     protected void downloadURL(URL url, int index) {
         try {
-            URL resolvedUrl = Http.followRedirectsWithRetry(url, 5, 5, AbstractRipper.USER_AGENT);
+            Map<String,String> headers = new HashMap<>();
+            headers.put("Referer", String.format("https://%s/%s/user/%s", domain, service, user));
+            if (coomerCookies != null) {
+                headers.put("Cookie", coomerCookies);
+            }
+            URL resolvedUrl = Http.followRedirectsWithRetry(url, 5, 5, AbstractRipper.USER_AGENT, headers);
             addURLToDownload(resolvedUrl, getPrefix(index));
         } catch (IOException e) {
             logger.error("Failed to resolve or download redirect URL {}: {}", url, e.getMessage());
