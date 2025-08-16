@@ -1,7 +1,7 @@
 {
-  "latestVersion": "2.1.89-1-07f7263",
-  "currentHash": "5c3a8978286a70f8b4db4250f0d8c05d2dee8baa79e888428fae1ae17865e4fa",
+  "latestVersion": "2.1.90-1-84887d2",
+  "currentHash": "91a0c51df0ff8b546c1924094bbcc47c59639914f0463a3f70c318406f08c1be",
   "changeList": [
-    "2.1.89-1-07f7263: Merge pull request #7 from Laziassdev/codex/investigate-403-errors-in-coomer-ripper-xvib3l", "2.1.89-1-07f7263: Built at 2025-08-15T23:45:24Z"
+    "2.1.90-1-84887d2: Merge pull request #8 from Laziassdev/codex/investigate-403-errors-in-coomer-ripper-90zs9e", "2.1.90-1-84887d2: Built at 2025-08-16T08:00:53Z"
   ]
 }
