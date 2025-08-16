@@ -4,6 +4,8 @@ import java.awt.event.ActionEvent;
 import java.awt.event.InputEvent;
 import java.awt.event.MouseAdapter;
 import java.awt.event.MouseEvent;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.function.Consumer;
 
 import javax.swing.AbstractAction;
@@ -29,6 +31,33 @@ class QueueMenuMouseListener extends MouseAdapter {
 	@SuppressWarnings("serial")
     public void updateUI() {
         popup.removeAll();
+
+        Action moveTop = new AbstractAction(Utils.getLocalizedString("queue.move.top")) {
+            @Override
+            public void actionPerformed(ActionEvent ae) {
+                int[] indices = queueList.getSelectedIndices();
+                if (indices.length == 0) {
+                    return;
+                }
+                List<Object> selected = new ArrayList<>();
+                for (int index : indices) {
+                    selected.add(queueListModel.get(index));
+                }
+                for (int i = indices.length - 1; i >= 0; i--) {
+                    queueListModel.remove(indices[i]);
+                }
+                for (int i = 0; i < selected.size(); i++) {
+                    queueListModel.add(i, selected.get(i));
+                }
+                int[] newIndices = new int[selected.size()];
+                for (int i = 0; i < selected.size(); i++) {
+                    newIndices[i] = i;
+                }
+                queueList.setSelectedIndices(newIndices);
+                updateUI();
+            }
+        };
+        popup.add(moveTop);
 
         Action moveUp = new AbstractAction(Utils.getLocalizedString("queue.move.up")) {
             @Override
