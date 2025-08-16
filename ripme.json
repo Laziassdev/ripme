@@ -1,7 +1,7 @@
 {
-  "latestVersion": "2.1.92-1-43af3ce",
-  "currentHash": "77770787fc2ac4f03c69e8d1d6847fa6e9a80e11ed53d6cf4de7236d6a6f758a",
+  "latestVersion": "2.1.93-1-9e53e9e",
+  "currentHash": "bcc0220293cf474c1ed83df4ae4a5bff099c560b7f3438c94de99bccc190ed95",
   "changeList": [
-    "2.1.92-1-43af3ce: Merge pull request #10 from Laziassdev/codex/investigate-403-errors-in-coomer-ripper", "2.1.92-1-43af3ce: Built at 2025-08-16T09:06:57Z"
+    "2.1.93-1-9e53e9e: Merge pull request #11 from Laziassdev/codex/fix-json-parsing-error-in-coomerpartyripper", "2.1.93-1-9e53e9e: Built at 2025-08-16T09:25:10Z"
   ]
 }
