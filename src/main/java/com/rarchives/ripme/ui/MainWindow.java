@@ -18,6 +18,9 @@ import java.nio.file.Paths;
 import java.util.Collections;
 import java.util.Date;
 import java.util.List;
+import java.util.Arrays;
+import java.util.HashSet;
+import java.util.Set;
 import java.util.stream.Stream;
 
 import javax.imageio.ImageIO;
@@ -48,6 +51,13 @@ import com.rarchives.ripme.utils.Utils;
 public final class MainWindow implements Runnable, RipStatusHandler {
 
     private static final Logger LOGGER = LogManager.getLogger(MainWindow.class);
+
+    private static final Set<String> MAIN_CONFIG_KEYS = new HashSet<>(Arrays.asList(
+            "threads.size", "download.timeout", "download.retries", "download.retry.sleep", "file.overwrite",
+            "auto.update", "play.sound", "download.show_popup", "download.save_order", "log.save",
+            "urls_only.save", "album_titles.save", "clipboard.autorip", "descriptions.save", "prefer.mp4",
+            "window.position", "remember.url_history", "ssl.verify.off", "lang", "log.level",
+            "rips.directory"));
 
     /* not static! */
     private boolean isRipping = false; // Flag to indicate if we're ripping something
@@ -119,6 +129,10 @@ public final class MainWindow implements Runnable, RipStatusHandler {
     private static JLabel configRetrySleepLabel;
     // This doesn't really belong here but I have no idea where else to put it
     private static JButton configUrlFileChooserButton;
+
+    // Other Settings
+    private static JButton optionOtherSettings;
+    private static JPanel otherSettingsPanel;
 
     private static TrayIcon trayIcon;
     private static MenuItem trayMenuMain;
@@ -374,10 +388,12 @@ public final class MainWindow implements Runnable, RipStatusHandler {
         optionHistory = new JButton(Utils.getLocalizedString("History"));
         optionQueue = new JButton(Utils.getLocalizedString("queue"));
         optionConfiguration = new JButton(Utils.getLocalizedString("Configuration"));
+        optionOtherSettings = new JButton("Other Settings");
         optionLog.setFont(optionLog.getFont().deriveFont(Font.PLAIN));
         optionHistory.setFont(optionLog.getFont().deriveFont(Font.PLAIN));
         optionQueue.setFont(optionLog.getFont().deriveFont(Font.PLAIN));
         optionConfiguration.setFont(optionLog.getFont().deriveFont(Font.PLAIN));
+        optionOtherSettings.setFont(optionLog.getFont().deriveFont(Font.PLAIN));
         try {
             Image icon;
             icon = ImageIO.read(getClass().getClassLoader().getResource("comment.png"));
@@ -399,6 +415,8 @@ public final class MainWindow implements Runnable, RipStatusHandler {
         optionsPanel.add(optionQueue, gbc);
         gbc.gridx = 3;
         optionsPanel.add(optionConfiguration, gbc);
+        gbc.gridx = 4;
+        optionsPanel.add(optionOtherSettings, gbc);
 
         logPanel = new JPanel(new GridBagLayout());
         logPanel.setBorder(emptyBorder);
@@ -616,6 +634,32 @@ public final class MainWindow implements Runnable, RipStatusHandler {
         addItemToConfigGridBagConstraints(gbc, idx++, configSelectLangComboBox, configUrlFileChooserButton);
         addItemToConfigGridBagConstraints(gbc, idx++, configSaveDirLabel, configSaveDirButton);
 
+        otherSettingsPanel = new JPanel(new GridBagLayout());
+        otherSettingsPanel.setBorder(emptyBorder);
+        otherSettingsPanel.setVisible(false);
+
+        GridBagConstraints otherGbc = new GridBagConstraints();
+        otherGbc.fill = GridBagConstraints.HORIZONTAL;
+        otherGbc.weightx = 1;
+        otherGbc.gridy = 0;
+        for (String key : Utils.getConfigKeys()) {
+            if (MAIN_CONFIG_KEYS.contains(key)) {
+                continue;
+            }
+            JLabel lbl = new JLabel(key, JLabel.RIGHT);
+            JTextField field = new JTextField(Utils.getConfigString(key, ""));
+            field.getDocument().addDocumentListener(new DocumentListener() {
+                @Override public void insertUpdate(DocumentEvent e) { Utils.setConfigString(key, field.getText()); }
+                @Override public void removeUpdate(DocumentEvent e) { Utils.setConfigString(key, field.getText()); }
+                @Override public void changedUpdate(DocumentEvent e) { Utils.setConfigString(key, field.getText()); }
+            });
+            otherGbc.gridx = 0;
+            otherSettingsPanel.add(lbl, otherGbc);
+            otherGbc.gridx = 1;
+            otherSettingsPanel.add(field, otherGbc);
+            otherGbc.gridy++;
+        }
+
         emptyPanel = new JPanel();
         emptyPanel.setPreferredSize(new Dimension(0, 0));
         emptyPanel.setSize(0, 0);
@@ -637,6 +681,8 @@ public final class MainWindow implements Runnable, RipStatusHandler {
         pane.add(historyPanel, gbc);
         gbc.gridy = 5;
         pane.add(queuePanel, gbc);
+        gbc.gridy = 5;
+        pane.add(otherSettingsPanel, gbc);
         gbc.gridy = 5;
         pane.add(configurationPanel, gbc);
         gbc.gridy = 5;
@@ -759,6 +805,7 @@ public final class MainWindow implements Runnable, RipStatusHandler {
         optionHistory.setText(Utils.getLocalizedString("History"));
         optionQueue.setText(Utils.getLocalizedString("queue"));
         optionConfiguration.setText(Utils.getLocalizedString("Configuration"));
+        optionOtherSettings.setText("Other Settings");
     }
 
     private void setupHandlers() {
@@ -818,6 +865,7 @@ public final class MainWindow implements Runnable, RipStatusHandler {
             historyPanel.setVisible(false);
             queuePanel.setVisible(false);
             configurationPanel.setVisible(false);
+            otherSettingsPanel.setVisible(false);
             if (logPanel.isVisible()) {
                 optionLog.setFont(optionLog.getFont().deriveFont(Font.BOLD));
             } else {
@@ -826,6 +874,7 @@ public final class MainWindow implements Runnable, RipStatusHandler {
             optionHistory.setFont(optionLog.getFont().deriveFont(Font.PLAIN));
             optionQueue.setFont(optionLog.getFont().deriveFont(Font.PLAIN));
             optionConfiguration.setFont(optionLog.getFont().deriveFont(Font.PLAIN));
+            optionOtherSettings.setFont(optionLog.getFont().deriveFont(Font.PLAIN));
             pack();
         });
 
@@ -835,6 +884,7 @@ public final class MainWindow implements Runnable, RipStatusHandler {
             emptyPanel.setVisible(!historyPanel.isVisible());
             queuePanel.setVisible(false);
             configurationPanel.setVisible(false);
+            otherSettingsPanel.setVisible(false);
             optionLog.setFont(optionLog.getFont().deriveFont(Font.PLAIN));
             if (historyPanel.isVisible()) {
                 optionHistory.setFont(optionLog.getFont().deriveFont(Font.BOLD));
@@ -843,6 +893,7 @@ public final class MainWindow implements Runnable, RipStatusHandler {
             }
             optionQueue.setFont(optionLog.getFont().deriveFont(Font.PLAIN));
             optionConfiguration.setFont(optionLog.getFont().deriveFont(Font.PLAIN));
+            optionOtherSettings.setFont(optionLog.getFont().deriveFont(Font.PLAIN));
             pack();
         });
 
@@ -852,6 +903,7 @@ public final class MainWindow implements Runnable, RipStatusHandler {
             queuePanel.setVisible(!queuePanel.isVisible());
             emptyPanel.setVisible(!queuePanel.isVisible());
             configurationPanel.setVisible(false);
+            otherSettingsPanel.setVisible(false);
             optionLog.setFont(optionLog.getFont().deriveFont(Font.PLAIN));
             optionHistory.setFont(optionLog.getFont().deriveFont(Font.PLAIN));
             if (queuePanel.isVisible()) {
@@ -860,6 +912,7 @@ public final class MainWindow implements Runnable, RipStatusHandler {
                 optionQueue.setFont(optionLog.getFont().deriveFont(Font.PLAIN));
             }
             optionConfiguration.setFont(optionLog.getFont().deriveFont(Font.PLAIN));
+            optionOtherSettings.setFont(optionLog.getFont().deriveFont(Font.PLAIN));
             pack();
         });
 
@@ -869,6 +922,7 @@ public final class MainWindow implements Runnable, RipStatusHandler {
             queuePanel.setVisible(false);
             configurationPanel.setVisible(!configurationPanel.isVisible());
             emptyPanel.setVisible(!configurationPanel.isVisible());
+            otherSettingsPanel.setVisible(false);
             optionLog.setFont(optionLog.getFont().deriveFont(Font.PLAIN));
             optionHistory.setFont(optionLog.getFont().deriveFont(Font.PLAIN));
             optionQueue.setFont(optionLog.getFont().deriveFont(Font.PLAIN));
@@ -876,6 +930,26 @@ public final class MainWindow implements Runnable, RipStatusHandler {
                 optionConfiguration.setFont(optionLog.getFont().deriveFont(Font.BOLD));
             } else {
                 optionConfiguration.setFont(optionLog.getFont().deriveFont(Font.PLAIN));
+            }
+            optionOtherSettings.setFont(optionLog.getFont().deriveFont(Font.PLAIN));
+            pack();
+        });
+
+        optionOtherSettings.addActionListener(event -> {
+            logPanel.setVisible(false);
+            historyPanel.setVisible(false);
+            queuePanel.setVisible(false);
+            configurationPanel.setVisible(false);
+            otherSettingsPanel.setVisible(!otherSettingsPanel.isVisible());
+            emptyPanel.setVisible(!otherSettingsPanel.isVisible());
+            optionLog.setFont(optionLog.getFont().deriveFont(Font.PLAIN));
+            optionHistory.setFont(optionLog.getFont().deriveFont(Font.PLAIN));
+            optionQueue.setFont(optionLog.getFont().deriveFont(Font.PLAIN));
+            optionConfiguration.setFont(optionLog.getFont().deriveFont(Font.PLAIN));
+            if (otherSettingsPanel.isVisible()) {
+                optionOtherSettings.setFont(optionLog.getFont().deriveFont(Font.BOLD));
+            } else {
+                optionOtherSettings.setFont(optionLog.getFont().deriveFont(Font.PLAIN));
             }
             pack();
         });

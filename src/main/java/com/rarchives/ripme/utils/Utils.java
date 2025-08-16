@@ -19,6 +19,7 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.Enumeration;
+import java.util.Iterator;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Locale;
@@ -161,6 +162,14 @@ public class Utils {
             }
         }
         return result;
+    }
+
+    public static List<String> getConfigKeys() {
+        List<String> keys = new ArrayList<>();
+        for (Iterator<String> it = config.getKeys(); it.hasNext();) {
+            keys.add(it.next());
+        }
+        return keys;
     }
 
     public static void setConfigBoolean(String key, boolean value) {
