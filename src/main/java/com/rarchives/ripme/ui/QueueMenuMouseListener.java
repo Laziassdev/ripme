@@ -4,6 +4,8 @@ import java.awt.event.ActionEvent;
 import java.awt.event.InputEvent;
 import java.awt.event.MouseAdapter;
 import java.awt.event.MouseEvent;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.function.Consumer;
 
 import javax.swing.AbstractAction;
@@ -29,6 +31,77 @@ class QueueMenuMouseListener extends MouseAdapter {
 	@SuppressWarnings("serial")
     public void updateUI() {
         popup.removeAll();
+
+        Action moveTop = new AbstractAction(Utils.getLocalizedString("queue.move.top")) {
+            @Override
+            public void actionPerformed(ActionEvent ae) {
+                int[] indices = queueList.getSelectedIndices();
+                if (indices.length == 0) {
+                    return;
+                }
+                List<Object> selected = new ArrayList<>();
+                for (int index : indices) {
+                    selected.add(queueListModel.get(index));
+                }
+                for (int i = indices.length - 1; i >= 0; i--) {
+                    queueListModel.remove(indices[i]);
+                }
+                for (int i = 0; i < selected.size(); i++) {
+                    queueListModel.add(i, selected.get(i));
+                }
+                int[] newIndices = new int[selected.size()];
+                for (int i = 0; i < selected.size(); i++) {
+                    newIndices[i] = i;
+                }
+                queueList.setSelectedIndices(newIndices);
+                updateUI();
+            }
+        };
+        popup.add(moveTop);
+
+        Action moveUp = new AbstractAction(Utils.getLocalizedString("queue.move.up")) {
+            @Override
+            public void actionPerformed(ActionEvent ae) {
+                int[] indices = queueList.getSelectedIndices();
+                if (indices.length == 0) {
+                    return;
+                }
+                for (int i = 0; i < indices.length; i++) {
+                    int index = indices[i];
+                    if (index > 0) {
+                        Object element = queueListModel.get(index);
+                        queueListModel.remove(index);
+                        queueListModel.add(index - 1, element);
+                        indices[i] = index - 1;
+                    }
+                }
+                queueList.setSelectedIndices(indices);
+                updateUI();
+            }
+        };
+        popup.add(moveUp);
+
+        Action moveDown = new AbstractAction(Utils.getLocalizedString("queue.move.down")) {
+            @Override
+            public void actionPerformed(ActionEvent ae) {
+                int[] indices = queueList.getSelectedIndices();
+                if (indices.length == 0) {
+                    return;
+                }
+                for (int i = indices.length - 1; i >= 0; i--) {
+                    int index = indices[i];
+                    if (index < queueListModel.getSize() - 1) {
+                        Object element = queueListModel.get(index);
+                        queueListModel.remove(index);
+                        queueListModel.add(index + 1, element);
+                        indices[i] = index + 1;
+                    }
+                }
+                queueList.setSelectedIndices(indices);
+                updateUI();
+            }
+        };
+        popup.add(moveDown);
 
         Action removeSelected = new AbstractAction(Utils.getLocalizedString("queue.remove.selected")) {
             @Override
