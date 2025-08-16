@@ -112,6 +112,7 @@ jobs:
           mkdir -p dist
           new_name="ripme-${{ steps.get_version.outputs.next_version }}.jar"
           cp build/libs/*.jar dist/$new_name
+        if: github.event_name != 'pull_request'
 
       - name: Generate ripme.json
         run: |
@@ -143,6 +144,7 @@ jobs:
           }" > ripme.json
           echo "Generated ripme.json content:"
           cat ripme.json
+        if: github.event_name != 'pull_request'
 
 
       - name: Commit and tag version
@@ -160,6 +162,7 @@ jobs:
           # Tag current commit
           # git tag v${{ steps.get_version.outputs.next_version }} -m "$(git log -n 10 --pretty=format:'%h %s')"
           git push origin ${{ steps.get_version.outputs.next_version }}
+        if: github.event_name != 'pull_request'
           
       - name: Publish release
         uses: marvinpinto/action-automatic-releases@latest
@@ -171,6 +174,7 @@ jobs:
           files: |
             dist/*.jar
             ripme.json
+        if: github.event_name != 'pull_request'
 
       - name: Delete previous releases except latest
         run: |
@@ -179,3 +183,4 @@ jobs:
           xargs -I {} gh release delete {} -y
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        if: github.event_name != 'pull_request'
