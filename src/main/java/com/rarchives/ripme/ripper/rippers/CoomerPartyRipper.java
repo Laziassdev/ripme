@@ -50,9 +50,9 @@ public class CoomerPartyRipper extends AbstractJSONRipper {
     private static final String KEY_PATH = "path";
     private static final String KEY_ATTACHMENTS = "attachments";
 
-    // Posts Request Endpoint templates
+    // Posts Request Endpoint template
+    // Coomer's API serves posts at /api/v1/{service}/user/{username}/posts
     private static final String POSTS_ENDPOINT = "https://%s/api/v1/%s/user/%s/posts?o=%d";
-    private static final String LEGACY_POSTS_ENDPOINT = "https://%s/api/v1/%s/user/%s?o=%d";
 
     // Pagination is strictly 50 posts per page, per API schema.
     private Integer pageCount = 0;
@@ -126,55 +126,51 @@ public class CoomerPartyRipper extends AbstractJSONRipper {
         domainsToTry.add("coomer.su");
         domainsToTry.add("coomer.st");
 
-        List<String> endpointTemplates = Arrays.asList(POSTS_ENDPOINT, LEGACY_POSTS_ENDPOINT);
-
         IOException lastException = null;
         for (String dom : domainsToTry) {
             setDomain(dom);
-            for (String endpoint : endpointTemplates) {
-                String apiUrl = String.format(endpoint, dom, service, user, offset);
-                String jsonArrayString = null;
-                try {
-                    Map<String,String> headers = new HashMap<>();
-                    headers.put("Accept", "text/css");
-                    headers.put("Referer", String.format("https://%s/%s/user/%s", dom, service, user));
-                    if (coomerCookies != null) {
-                        headers.put("Cookie", coomerCookies);
-                    }
-                    jsonArrayString = Http.getWith429Retry(new URL(apiUrl), 5, 5, COOMER_USER_AGENT, headers);
-
-                    logger.debug("Raw JSON from API for offset " + offset + ": " + jsonArrayString);
-                    JSONArray jsonArray = new JSONArray(jsonArrayString);
-
-                    if (jsonArray.isEmpty()) {
-                        logger.warn("No posts found at offset " + offset + " for user: " + user);
-                    }
-
-                    JSONObject wrapperObject = new JSONObject();
-                    wrapperObject.put(KEY_WRAPPER_JSON_ARRAY, jsonArray);
-                    return wrapperObject;
-                } catch (HttpStatusException e) {
-                    if (e.getStatusCode() == 400) {
-                        logger.info("Offset {} out of range for user {}, treating as no more posts", offset, user);
-                        JSONObject wrapperObject = new JSONObject();
-                        wrapperObject.put(KEY_WRAPPER_JSON_ARRAY, new JSONArray());
-                        return wrapperObject;
-                    }
-                    lastException = e;
-                    logger.warn("Failed to fetch posts from {}: {}", apiUrl, e.getMessage());
-                } catch (JSONException e) {
-                    lastException = new IOException("Invalid JSON response", e);
-                    logger.warn("Invalid JSON from {}: {}", apiUrl, e.getMessage());
-                    if (jsonArrayString != null) {
-                        String snippet = jsonArrayString.length() > 200
-                                ? jsonArrayString.substring(0, 200) + "..."
-                                : jsonArrayString;
-                        logger.debug("Response body (truncated to 200 chars): {}", snippet);
-                    }
-                } catch (IOException e) {
-                    lastException = e;
-                    logger.warn("Failed to fetch posts from {}: {}", apiUrl, e.getMessage());
+            String apiUrl = String.format(POSTS_ENDPOINT, dom, service, user, offset);
+            String jsonArrayString = null;
+            try {
+                Map<String, String> headers = new HashMap<>();
+                headers.put("Accept", "application/json");
+                headers.put("Referer", String.format("https://%s/%s/user/%s", dom, service, user));
+                if (coomerCookies != null) {
+                    headers.put("Cookie", coomerCookies);
                 }
+                jsonArrayString = Http.getWith429Retry(new URL(apiUrl), 5, 5, COOMER_USER_AGENT, headers);
+
+                logger.debug("Raw JSON from API for offset " + offset + ": " + jsonArrayString);
+                JSONArray jsonArray = new JSONArray(jsonArrayString);
+
+                if (jsonArray.isEmpty()) {
+                    logger.warn("No posts found at offset " + offset + " for user: " + user);
+                }
+
+                JSONObject wrapperObject = new JSONObject();
+                wrapperObject.put(KEY_WRAPPER_JSON_ARRAY, jsonArray);
+                return wrapperObject;
+            } catch (HttpStatusException e) {
+                if (e.getStatusCode() == 400) {
+                    logger.info("Offset {} out of range for user {}, treating as no more posts", offset, user);
+                    JSONObject wrapperObject = new JSONObject();
+                    wrapperObject.put(KEY_WRAPPER_JSON_ARRAY, new JSONArray());
+                    return wrapperObject;
+                }
+                lastException = e;
+                logger.warn("Failed to fetch posts from {}: {}", apiUrl, e.getMessage());
+            } catch (JSONException e) {
+                lastException = new IOException("Invalid JSON response", e);
+                logger.warn("Invalid JSON from {}: {}", apiUrl, e.getMessage());
+                if (jsonArrayString != null) {
+                    String snippet = jsonArrayString.length() > 200
+                            ? jsonArrayString.substring(0, 200) + "..."
+                            : jsonArrayString;
+                    logger.debug("Response body (truncated to 200 chars): {}", snippet);
+                }
+            } catch (IOException e) {
+                lastException = e;
+                logger.warn("Failed to fetch posts from {}: {}", apiUrl, e.getMessage());
             }
         }
         throw lastException;
