@@ -136,7 +136,7 @@ public class CoomerPartyRipper extends AbstractJSONRipper {
                 String jsonArrayString = null;
                 try {
                     Map<String,String> headers = new HashMap<>();
-                    headers.put("Accept", "application/json");
+                    headers.put("Accept", "text/css");
                     headers.put("Referer", String.format("https://%s/%s/user/%s", dom, service, user));
                     if (coomerCookies != null) {
                         headers.put("Cookie", coomerCookies);
