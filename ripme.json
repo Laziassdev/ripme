@@ -1,7 +1,7 @@
 {
-  "latestVersion": "2.1.99-1-2598981",
-  "currentHash": "a47304ecdc0166e2e372d74c8582c3b2472c165f71a8cd2679b5d601948bac6d",
+  "latestVersion": "2.1.100-1-c2c53e1",
+  "currentHash": "6ffb00db9fbc2b94c690f66e07029ea15a7349f4ec574e5ace4829c27b363d10",
   "changeList": [
-    "2.1.99-1-2598981: Merge pull request #16 from Laziassdev/codex/update-ui-to-add-settings-tab-06a1dd", "2.1.99-1-2598981: Built at 2025-08-16T11:08:36Z"
+    "2.1.100-1-c2c53e1: correct accept", "2.1.100-1-c2c53e1: Built at 2025-08-17T11:30:24Z"
   ]
 }
