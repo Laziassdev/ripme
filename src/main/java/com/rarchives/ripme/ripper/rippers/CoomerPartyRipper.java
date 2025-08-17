@@ -144,6 +144,9 @@ public class CoomerPartyRipper extends AbstractJSONRipper {
 
                 JSONArray jsonArray;
                 String trimmed = jsonArrayString.trim();
+                if (!trimmed.isEmpty() && trimmed.charAt(0) == '\uFEFF') {
+                    trimmed = trimmed.substring(1);
+                }
                 if (trimmed.startsWith("[")) {
                     jsonArray = new JSONArray(trimmed);
                 } else {
