@@ -164,7 +164,7 @@ public class CoomerPartyRipper extends AbstractJSONRipper {
                             }
                         }
 
-                        if (jsonArray.isEmpty()) {
+                        if (jsonArray.length() == 0) {
                             logger.warn("No posts found at offset " + offset + " for user: " + user);
                         }
 
@@ -238,7 +238,7 @@ public class CoomerPartyRipper extends AbstractJSONRipper {
         JSONObject nextPage = getJsonPostsForOffset(offset);
         JSONArray posts = nextPage.getJSONArray(KEY_WRAPPER_JSON_ARRAY);
 
-        if (posts.isEmpty()) {
+        if (posts.length() == 0) {
             logger.info("No more posts found at offset " + offset + ", ending rip.");
             return null;
         }
