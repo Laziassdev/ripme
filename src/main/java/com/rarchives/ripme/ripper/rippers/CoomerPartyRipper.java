@@ -194,6 +194,20 @@ public class CoomerPartyRipper extends AbstractJSONRipper {
                         logger.warn("Failed to fetch posts from {}: {}", apiUrl, e.getMessage());
                     }
                 }
+                lastException = e;
+                logger.warn("Failed to fetch posts from {}: {}", apiUrl, e.getMessage());
+            } catch (JSONException e) {
+                lastException = new IOException("Invalid JSON response", e);
+                logger.warn("Invalid JSON from {}: {}", apiUrl, e.getMessage());
+                if (jsonArrayString != null) {
+                    String snippet = jsonArrayString.length() > 200
+                            ? jsonArrayString.substring(0, 200) + "..."
+                            : jsonArrayString;
+                    logger.debug("Response body (truncated to 200 chars): {}", snippet);
+                }
+            } catch (IOException e) {
+                lastException = e;
+                logger.warn("Failed to fetch posts from {}: {}", apiUrl, e.getMessage());
             }
         }
         throw lastException;
