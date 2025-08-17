@@ -1,7 +1,7 @@
 {
-  "latestVersion": "2.1.101-1-c5f3b77",
-  "currentHash": "d0aada32deee0f7b2669e618362327bf1372c58a2635f62d0dfde35ba8026035",
+  "latestVersion": "2.1.102-1-fccfbf5",
+  "currentHash": "1a603245f59fb908dd281219dd4e9651f71963d38ba91e169fac7e9ccfe5918a",
   "changeList": [
-    "2.1.101-1-c5f3b77: Merge pull request #17 from Laziassdev/codex/verify-post-url-structure-in-coomerpartyripper", "2.1.101-1-c5f3b77: Built at 2025-08-17T11:42:37Z"
+    "2.1.102-1-fccfbf5: Merge pull request #21 from Laziassdev/codex/verify-post-url-structure-in-coomerpartyripper", "2.1.102-1-fccfbf5: Built at 2025-08-17T12:20:02Z"
   ]
 }
