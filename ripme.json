@@ -1,7 +1,7 @@
 {
-  "latestVersion": "2.1.103-1-80103d4",
-  "currentHash": "04d2cc53d1154a8b49461adb7c192a630e02f2129b8a76dd7529148e87a59e82",
+  "latestVersion": "2.1.104-1-ae19c9a",
+  "currentHash": "e72ba138f3dbf1aa10a69050105f097419b8ccedf2e19a231f372d0120ea65cd",
   "changeList": [
-    "2.1.103-1-80103d4: correct accept", "2.1.103-1-80103d4: Built at 2025-08-17T12:27:42Z"
+    "2.1.104-1-ae19c9a: Merge pull request #22 from Laziassdev/codex/fix-invalid-json-response-handling", "2.1.104-1-ae19c9a: Built at 2025-08-17T12:36:36Z"
   ]
 }
