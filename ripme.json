@@ -1,7 +1,7 @@
 {
-  "latestVersion": "2.1.111-1-a079891",
-  "currentHash": "5777f2480a36e22b0bb2b85e14562fa243d52125603e106396d23cfff96294e9",
+  "latestVersion": "2.1.112-1-c68e4ac",
+  "currentHash": "ba6eb7e04d44d90ee20e0a71165384c99c622a0db871b2410f4229791e53f7f1",
   "changeList": [
-    "2.1.111-1-a079891: Merge pull request #29 from Laziassdev/codex/adjust-retry-backoff-timing", "2.1.111-1-a079891: Built at 2025-08-19T15:49:11Z"
+    "2.1.112-1-c68e4ac: Merge pull request #30 from Laziassdev/codex/fix-stop-button-enabling-logic", "2.1.112-1-c68e4ac: Built at 2025-08-19T15:59:30Z"
   ]
 }
