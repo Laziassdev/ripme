@@ -1633,7 +1633,6 @@ public final class MainWindow implements Runnable, RipStatusHandler {
             if (LOGGER.isEnabled(Level.ERROR)) {
                 appendLog((String) msg.getObject(), Color.RED);
             }
-            stopButton.setEnabled(false);
             statusProgress.setValue(0);
             statusProgress.setVisible(false);
             openButton.setVisible(false);
@@ -1741,7 +1740,6 @@ public final class MainWindow implements Runnable, RipStatusHandler {
             if (LOGGER.isEnabled(Level.ERROR)) {
                 appendLog((String) msg.getObject(), Color.RED);
             }
-            stopButton.setEnabled(false);
             statusProgress.setValue(0);
             statusProgress.setVisible(false);
             openButton.setVisible(false);
