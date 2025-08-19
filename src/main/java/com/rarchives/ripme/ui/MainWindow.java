@@ -1460,12 +1460,25 @@ public final class MainWindow implements Runnable, RipStatusHandler {
                 mainFrame.setTitle("Ripping - RipMe v" + UpdateUtils.getThisJarVersion());
                 status("Starting rip...");
                 ripper.setObserver(this);
+
+                String ripUrl = ripper.getURL().toExternalForm();
+                if (!HISTORY.containsURL(ripUrl)) {
+                    HistoryEntry entry = new HistoryEntry();
+                    entry.url = ripUrl;
+                    entry.dir = ripper.getWorkingDir().getAbsolutePath();
+                    entry.startDate = new Date();
+                    entry.modifiedDate = new Date();
+                    HISTORY.add(entry);
+                    historyTableModel.fireTableDataChanged();
+                    saveHistory();
+                }
+
                 Thread t = new Thread(ripper);
                 if (configShowPopup.isSelected() && (!mainFrame.isVisible() || !mainFrame.isActive())) {
                     try {
                         mainFrame.toFront();
                         mainFrame.setAlwaysOnTop(true);
-                        trayIcon.displayMessage(mainFrame.getTitle(), "Started ripping " + ripper.getURL().toExternalForm(),
+                        trayIcon.displayMessage(mainFrame.getTitle(), "Started ripping " + ripUrl,
                                 MessageType.INFO);
                         mainFrame.setAlwaysOnTop(false);
                     } catch (NullPointerException e) {
@@ -1572,11 +1585,10 @@ public final class MainWindow implements Runnable, RipStatusHandler {
     }
 
     private synchronized void handleEvent(StatusEvent evt) {
-        if (ripper.isStopped()) {
+        RipStatusMessage msg = evt.msg;
+        if (ripper.isStopped() && msg.getStatus() != RipStatusMessage.STATUS.RIP_COMPLETE) {
             return;
         }
-
-        RipStatusMessage msg = evt.msg;
 
         int completedPercent = evt.ripper.getCompletionPercentage();
         statusProgress.setValue(completedPercent);
@@ -1632,13 +1644,16 @@ public final class MainWindow implements Runnable, RipStatusHandler {
         case RIP_COMPLETE:
             RipStatusComplete rsc = (RipStatusComplete) msg.getObject();
             String url = ripper.getURL().toExternalForm();
+            HistoryEntry entry;
             if (HISTORY.containsURL(url)) {
-                // TODO update "modifiedDate" of entry in HISTORY
-                HistoryEntry entry = HISTORY.getEntryByURL(url);
-                entry.count = rsc.count;
+                entry = HISTORY.getEntryByURL(url);
+                entry.count += rsc.count;
                 entry.modifiedDate = new Date();
+                if (entry.dir == null || entry.dir.isEmpty()) {
+                    entry.dir = rsc.getDir();
+                }
             } else {
-                HistoryEntry entry = new HistoryEntry();
+                entry = new HistoryEntry();
                 entry.url = url;
                 entry.dir = rsc.getDir();
                 entry.count = rsc.count;
@@ -1648,8 +1663,8 @@ public final class MainWindow implements Runnable, RipStatusHandler {
                     LOGGER.warn(e.getMessage());
                 }
                 HISTORY.add(entry);
-                historyTableModel.fireTableDataChanged();
             }
+            historyTableModel.fireTableDataChanged();
             if (configPlaySound.isSelected()) {
                 Utils.playSound("camera.wav");
             }
