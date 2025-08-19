@@ -124,6 +124,7 @@ public class RedditRipper extends AlbumRipper {
 
     private long lastRequestTime = 0;
     private int downloadCounter = 0;
+    private int queuedDownloadCounter = 0;
     private int maxDownloads = -1;
 
     private Boolean shouldAddURL() {
@@ -170,8 +171,8 @@ public class RedditRipper extends AlbumRipper {
 
                 jsonURL = getAndParseAndReturnNext(jsonURL);
 
-                if (maxDownloads > 0 && downloadCounter >= maxDownloads) {
-                    logger.info("Completed {} of max {} downloads.", downloadCounter, maxDownloads);
+                if (maxDownloads > 0 && queuedDownloadCounter >= maxDownloads) {
+                    logger.info("Queued {} of max {} downloads. Stopping rip.", queuedDownloadCounter, maxDownloads);
                     sendUpdate(RipStatusMessage.STATUS.DOWNLOAD_COMPLETE_HISTORY, "Reached maxdownloads limit of " + maxDownloads + ". Stopping.");
                     break;
                 }
@@ -196,12 +197,14 @@ public class RedditRipper extends AlbumRipper {
     public void downloadCompleted(URL url, Path saveAs) {
         super.downloadCompleted(url, saveAs);
         downloadCounter++;
-
+        if (maxDownloads > 0 && downloadCounter >= maxDownloads) {
+            logger.info("Completed {} of max {} downloads.", downloadCounter, maxDownloads);
+        }
     }
 
 
     private URL getAndParseAndReturnNext(URL url) throws IOException, URISyntaxException {
-        if (maxDownloads > 0 && downloadCounter >= maxDownloads) {
+        if (maxDownloads > 0 && queuedDownloadCounter >= maxDownloads) {
             logger.info("Download limit reached before parsing next page.");
             return null;
         }
@@ -209,7 +212,7 @@ public class RedditRipper extends AlbumRipper {
         JSONObject json, data;
         URL nextURL = null;
         for (int i = 0; i < jsonArray.length(); i++) {
-            if (maxDownloads > 0 && downloadCounter >= maxDownloads) break;
+            if (maxDownloads > 0 && queuedDownloadCounter >= maxDownloads) break;
             json = jsonArray.getJSONObject(i);
             if (!json.has("data")) {
                 continue;
@@ -220,12 +223,12 @@ public class RedditRipper extends AlbumRipper {
             }
             children = data.getJSONArray("children");
             for (int j = 0; j < children.length(); j++) {
-                if (maxDownloads > 0 && downloadCounter >= maxDownloads) break;
+                if (maxDownloads > 0 && queuedDownloadCounter >= maxDownloads) break;
                 try {
-                    if (maxDownloads > 0 && downloadCounter >= maxDownloads) break;
+                    if (maxDownloads > 0 && queuedDownloadCounter >= maxDownloads) break;
                     parseJsonChild(children.getJSONObject(j));
 
-                    if (maxDownloads > 0 && downloadCounter >= maxDownloads) break;
+                    if (maxDownloads > 0 && queuedDownloadCounter >= maxDownloads) break;
                     if (children.getJSONObject(j).getString("kind").equals("t3") &&
                             children.getJSONObject(j).getJSONObject("data").getBoolean("is_self")
                     ) {
@@ -237,7 +240,7 @@ public class RedditRipper extends AlbumRipper {
                     logger.debug("at index " + i + ", for this data: "  + data.toString() + e);
                 }
             }
-            if (maxDownloads > 0 && downloadCounter >= maxDownloads) break;
+            if (maxDownloads > 0 && queuedDownloadCounter >= maxDownloads) break;
             if (data.has("after") && !data.isNull("after")) {
                 String nextURLString = Utils.stripURLParameter(url.toExternalForm(), "after");
                 if (nextURLString.contains("?")) {
@@ -313,7 +316,7 @@ public class RedditRipper extends AlbumRipper {
      * @param child The child to process
      */
     private void parseJsonChild(JSONObject child) {
-        if (maxDownloads > 0 && downloadCounter >= maxDownloads) return;
+        if (maxDownloads > 0 && queuedDownloadCounter >= maxDownloads) return;
         String kind = child.getString("kind");
         JSONObject data = child.getJSONObject("data");
 
@@ -330,7 +333,7 @@ public class RedditRipper extends AlbumRipper {
             }
         }
 
-        if (maxDownloads > 0 && downloadCounter >= maxDownloads) return;
+        if (maxDownloads > 0 && queuedDownloadCounter >= maxDownloads) return;
         if (kind.equals("t1")) {
             // Comment
             handleBody(data.getString("body"), data.getString("id"), "");
@@ -346,13 +349,13 @@ public class RedditRipper extends AlbumRipper {
                 // Get link
                 handleURL(data.getString("url"), data.getString("id"), data.getString("title"));
             }
-            if (maxDownloads > 0 && downloadCounter >= maxDownloads) return;
+            if (maxDownloads > 0 && queuedDownloadCounter >= maxDownloads) return;
             if (data.has("replies") && data.get("replies") instanceof JSONObject) {
                 JSONArray replies = data.getJSONObject("replies")
                                         .getJSONObject("data")
                                         .getJSONArray("children");
                 for (int i = 0; i < replies.length(); i++) {
-                    if (maxDownloads > 0 && downloadCounter >= maxDownloads) break;
+                    if (maxDownloads > 0 && queuedDownloadCounter >= maxDownloads) break;
                     parseJsonChild(replies.getJSONObject(i));
                 }
             }
@@ -368,6 +371,7 @@ public class RedditRipper extends AlbumRipper {
                 url = url.substring(0, url.length() - 1);
             }
             handleURL(url, id, title);
+            if (maxDownloads > 0 && queuedDownloadCounter >= maxDownloads) break;
         }
     }
 
@@ -534,31 +538,39 @@ public class RedditRipper extends AlbumRipper {
             Matcher m = Pattern.compile("https?://i.reddituploads.com/([a-zA-Z0-9]+)\\?.*").matcher(url);
             if (m.matches()) {
                 String savePath = this.workingDir + "/" + id + "-" + m.group(1) + Utils.filesystemSafe(title) + ".jpg";
-                if (maxDownloads == -1 || downloadCounter < maxDownloads) {
-                    addURLToDownload(urls.get(0), Utils.getPath(savePath));
+                if (maxDownloads == -1 || queuedDownloadCounter < maxDownloads) {
+                    if (addURLToDownload(urls.get(0), Utils.getPath(savePath))) {
+                        queuedDownloadCounter++;
+                    }
                 }
             } else if (url.contains("v.redd.it")) {
                 String savePath = this.workingDir + "/" + id + "-" + url.split("/")[3] + Utils.filesystemSafe(title) + ".mp4";
                 URL urlToDownload = parseRedditVideoMPD(urls.get(0).toExternalForm());
-                if (urlToDownload != null && (maxDownloads == -1 || downloadCounter < maxDownloads)) {
-                    addURLToDownload(urlToDownload, Utils.getPath(savePath));
+                if (urlToDownload != null && (maxDownloads == -1 || queuedDownloadCounter < maxDownloads)) {
+                    if (addURLToDownload(urlToDownload, Utils.getPath(savePath))) {
+                        queuedDownloadCounter++;
+                    }
                 }
             } else {
                 if (url.contains("redgifs.com")) {
                     sleep(3000);
                 }
-                if (maxDownloads == -1 || downloadCounter < maxDownloads) {
-                    addURLToDownload(urls.get(0), Utils.filesystemSafe(id + title), "", theUrl, null);
+                if (maxDownloads == -1 || queuedDownloadCounter < maxDownloads) {
+                    if (addURLToDownload(urls.get(0), Utils.filesystemSafe(id + title), "", theUrl, null)) {
+                        queuedDownloadCounter++;
+                    }
                 }
             }
         } else if (urls.size() > 1) {
             for (int i = 0; i < urls.size(); i++) {
-                if (maxDownloads != -1 && downloadCounter >= maxDownloads) break;
+                if (maxDownloads != -1 && queuedDownloadCounter >= maxDownloads) break;
                 String prefix = id + "";
                 if (Utils.getConfigBoolean("download.save_order", true)) {
                     prefix += String.format("%03d-", i + 1);
                 }
-                addURLToDownload(urls.get(i), prefix, subdirectory, theUrl, null);
+                if (addURLToDownload(urls.get(i), prefix, subdirectory, theUrl, null)) {
+                    queuedDownloadCounter++;
+                }
             }
         }
     }
@@ -571,7 +583,7 @@ public class RedditRipper extends AlbumRipper {
             }
         }
         for (int i = 0; i < data.length(); i++) {
-            if (maxDownloads != -1 && downloadCounter >= maxDownloads) break;
+            if (maxDownloads != -1 && queuedDownloadCounter >= maxDownloads) break;
             JSONObject media = metadata.getJSONObject(data.getJSONObject(i).getString("media_id"));
             String prefix = id + "-";
             if (Utils.getConfigBoolean("download.save_order", true)) {
@@ -584,7 +596,9 @@ public class RedditRipper extends AlbumRipper {
                 } else {
                     mediaURL = new URI(media.getJSONObject("s").getString("u").replaceAll("&amp;", "&")).toURL();
                 }
-                addURLToDownload(mediaURL, prefix, subdirectory);
+                if (addURLToDownload(mediaURL, prefix, subdirectory)) {
+                    queuedDownloadCounter++;
+                }
             } catch (MalformedURLException | JSONException | URISyntaxException e) {
                 logger.error("[!] Unable to parse gallery JSON:\ngallery_data:\n" + data +"\nmedia_metadata:\n" + metadata);
             }
