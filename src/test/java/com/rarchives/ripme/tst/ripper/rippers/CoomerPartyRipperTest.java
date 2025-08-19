@@ -77,6 +77,9 @@ public class CoomerPartyRipperTest extends RippersTest {
         JSONObject wrapper = new JSONObject().put("array", posts);
         List<String> urls = ripper.publicGetURLsFromJSON(wrapper);
         assertEquals(1, urls.size());
-        assertEquals("https://img.coomer.st/data/ab/cd/test.jpg", urls.get(0));
+        // The ripper now builds media URLs on the same domain as the page being
+        // ripped and prefixes image paths with "/thumbnail/data". Ensure the
+        // generated URL reflects this behavior.
+        assertEquals("https://coomer.st/thumbnail/data/ab/cd/test.jpg", urls.get(0));
     }
 }

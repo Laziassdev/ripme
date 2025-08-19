@@ -6,6 +6,7 @@ import java.net.URISyntaxException;
 import java.net.URL;
 
 import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.Disabled;
 import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 
@@ -18,6 +19,7 @@ public class VscoRipperTest extends RippersTest {
      * @throws IOException
      */
     @Test
+    @Disabled("Site content unavailable")
     public void testSingleImageRip() throws IOException, URISyntaxException {
         VscoRipper ripper = new VscoRipper(
                 new URI("https://vsco.co/jolly-roger/media/597ce449846079297b3f7cf3").toURL());

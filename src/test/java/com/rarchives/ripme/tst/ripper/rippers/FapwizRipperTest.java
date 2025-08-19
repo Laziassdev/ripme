@@ -7,6 +7,7 @@ import java.net.URL;
 
 import org.jsoup.nodes.Document;
 import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.Disabled;
 import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 
@@ -50,6 +51,7 @@ public class FapwizRipperTest extends RippersTest {
     }
 
     @Test
+    @Disabled("Site content unavailable")
     public void testRipPost() throws IOException, URISyntaxException {
         URL url = new URI("https://fapwiz.com/petiteasiantravels/riding-at-9-months-pregnant/").toURL();
         FapwizRipper ripper = new FapwizRipper(url);
@@ -64,6 +66,7 @@ public class FapwizRipperTest extends RippersTest {
     }
 
     @Test
+    @Disabled("Site content unavailable")
     public void testRipPostWithEmojiInShortUrl() throws IOException, URISyntaxException {
         URL url = new URI("https://fapwiz.com/miaipanema/my-grip-needs-a-name-%f0%9f%a4%ad%f0%9f%91%87%f0%9f%8f%bc/")
                 .toURL();
@@ -82,6 +85,7 @@ public class FapwizRipperTest extends RippersTest {
     }
 
     @Test
+    @Disabled("Site content unavailable")
     public void testRipPostWithEmojiInLongUrlInTheMiddle() throws IOException, URISyntaxException {
         URL url = new URI(
                 "https://fapwiz.com/miaipanema/new-pov-couch-sex-with-perfect-cumshot-on-my-ass-%f0%9f%92%a6-you-know-where-to-get-it-%f0%9f%94%97%f0%9f%92%96/")
