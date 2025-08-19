@@ -1,7 +1,7 @@
 {
-  "latestVersion": "2.1.110-1-f62e90e",
-  "currentHash": "5323a933e30d3bf2c24c568584fd2d2093aa48e7c7b03952b1875e3d9af0933b",
+  "latestVersion": "2.1.111-1-a079891",
+  "currentHash": "5777f2480a36e22b0bb2b85e14562fa243d52125603e106396d23cfff96294e9",
   "changeList": [
-    "2.1.110-1-f62e90e: Merge pull request #28 from Laziassdev/codex/fix-reddit-ripper-to-respect-maxdownloads", "2.1.110-1-f62e90e: Built at 2025-08-19T15:41:08Z"
+    "2.1.111-1-a079891: Merge pull request #29 from Laziassdev/codex/adjust-retry-backoff-timing", "2.1.111-1-a079891: Built at 2025-08-19T15:49:11Z"
   ]
 }
