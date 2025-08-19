@@ -1,7 +1,7 @@
 {
-  "latestVersion": "2.1.109-1-f3836f0",
-  "currentHash": "f125cb9a1e3f07ce9cdb4badb47662471d8a031137e82af219ceaaa5fc495dc5",
+  "latestVersion": "2.1.110-1-f62e90e",
+  "currentHash": "5323a933e30d3bf2c24c568584fd2d2093aa48e7c7b03952b1875e3d9af0933b",
   "changeList": [
-    "2.1.109-1-f3836f0: Merge pull request #27 from Laziassdev/codex/enhance-ripper-to-track-url-history", "2.1.109-1-f3836f0: Built at 2025-08-19T15:27:35Z"
+    "2.1.110-1-f62e90e: Merge pull request #28 from Laziassdev/codex/fix-reddit-ripper-to-respect-maxdownloads", "2.1.110-1-f62e90e: Built at 2025-08-19T15:41:08Z"
   ]
 }
