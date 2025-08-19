@@ -1,7 +1,7 @@
 {
-  "latestVersion": "2.1.112-1-c68e4ac",
-  "currentHash": "ba6eb7e04d44d90ee20e0a71165384c99c622a0db871b2410f4229791e53f7f1",
+  "latestVersion": "2.1.113-1-8b92625",
+  "currentHash": "7d2dc999c287b9071b7094094d81271b3b4d0989c84fdaa8b37eb5e630529950",
   "changeList": [
-    "2.1.112-1-c68e4ac: Merge pull request #30 from Laziassdev/codex/fix-stop-button-enabling-logic", "2.1.112-1-c68e4ac: Built at 2025-08-19T15:59:30Z"
+    "2.1.113-1-8b92625: Merge pull request #31 from Laziassdev/codex/fix-or-skip-failing-tests", "2.1.113-1-8b92625: Built at 2025-08-19T17:27:28Z"
   ]
 }
