@@ -25,6 +25,7 @@ import org.jsoup.Jsoup;
 import org.jsoup.nodes.Document;
 
 import com.rarchives.ripme.ripper.AlbumRipper;
+import com.rarchives.ripme.ripper.AbstractRipper;
 import com.rarchives.ripme.ui.RipStatusMessage.STATUS;
 import com.rarchives.ripme.utils.Http;
 import com.rarchives.ripme.utils.Utils;
@@ -239,7 +240,7 @@ public class TumblrRipper extends AlbumRipper {
                         headers = new HashMap<>();
                         headers.put("Cookie", tumblrCookies);
                     }
-                    String response = Http.getWith429Retry(new URL(apiURL), MAX_RETRIES, RETRY_DELAY_SECONDS, null, headers);
+                    String response = Http.getWith429Retry(new URL(apiURL), MAX_RETRIES, RETRY_DELAY_SECONDS, AbstractRipper.USER_AGENT, headers);
                     json = new JSONObject(response);
                 } catch (IOException e) {
                     try {

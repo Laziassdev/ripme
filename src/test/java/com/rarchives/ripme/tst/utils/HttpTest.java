@@ -1,6 +1,7 @@
 package com.rarchives.ripme.tst.utils;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.net.InetSocketAddress;
 import java.net.URL;
@@ -9,6 +10,9 @@ import java.util.List;
 import java.util.concurrent.Executors;
 import java.util.HashMap;
 import java.util.Map;
+import java.io.OutputStream;
+import java.nio.charset.StandardCharsets;
+import java.util.concurrent.atomic.AtomicInteger;
 
 import org.junit.jupiter.api.Test;
 
@@ -123,5 +127,38 @@ public class HttpTest {
         }
         assertEquals("text/css", accepts.get(0));
         assertEquals("foo=bar", cookies.get(0));
+    }
+
+    @Test
+    public void testGetWith429RetryBackoff() throws Exception {
+        AtomicInteger counter = new AtomicInteger();
+        HttpServer server = HttpServer.create(new InetSocketAddress(0), 0);
+        server.createContext("/", exchange -> {
+            int attempt = counter.incrementAndGet();
+            if (attempt == 1) {
+                exchange.getResponseHeaders().add("Retry-After", "1");
+                exchange.sendResponseHeaders(429, -1);
+            } else {
+                byte[] body = "ok".getBytes(StandardCharsets.UTF_8);
+                exchange.sendResponseHeaders(200, body.length);
+                try (OutputStream os = exchange.getResponseBody()) {
+                    os.write(body);
+                }
+            }
+            exchange.close();
+        });
+        server.setExecutor(Executors.newSingleThreadExecutor());
+        server.start();
+        try {
+            URL url = new URL("http://localhost:" + server.getAddress().getPort() + "/");
+            long start = System.currentTimeMillis();
+            String body = Http.getWith429Retry(url, 1, 1, "test-agent");
+            long elapsed = System.currentTimeMillis() - start;
+            assertEquals("ok", body);
+            assertTrue(elapsed >= 1000);
+            assertEquals(2, counter.get());
+        } finally {
+            server.stop(0);
+        }
     }
 }
