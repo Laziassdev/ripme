@@ -23,6 +23,8 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.Date;
 import java.util.List;
+import java.util.Map;
+import java.util.HashMap;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import java.util.Set;
@@ -268,7 +270,7 @@ public class RedditRipper extends AlbumRipper {
         long timeDiff = System.currentTimeMillis() - lastRequestTime;
         if (timeDiff < SLEEP_TIME) {
             try {
-                Thread.sleep(timeDiff);
+                Thread.sleep(SLEEP_TIME - timeDiff);
             } catch (InterruptedException e) {
                 logger.warn("[!] Interrupted while waiting to load next page", e);
                 return new JSONArray();
@@ -277,52 +279,20 @@ public class RedditRipper extends AlbumRipper {
         lastRequestTime = System.currentTimeMillis();
 
         String redditCookies = getRedditCookiesFromFirefox();
-        String jsonString = null;
-        int maxAttempts = 6;
-        int baseSleep = 2000;
-        int attempt = 0;
-        boolean success = false;
-        Exception lastEx = null;
-        while (attempt < maxAttempts && !success) {
-            try {
-                // Always use the same request logic, with or without cookies
-                org.jsoup.Connection connection = org.jsoup.Jsoup.connect(url.toString())
-                        .userAgent(REDDIT_USER_AGENT)
-                        .header("Accept", "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8")
-                        .header("Accept-Language", "en-US,en;q=0.9")
-                        .header("Accept-Encoding", "gzip, deflate, br")
-                        .header("Referer", "https://www.reddit.com/")
-                        .header("DNT", "1")
-                        .header("Connection", "keep-alive")
-                        .header("Upgrade-Insecure-Requests", "1");
-                if (redditCookies != null && !redditCookies.isEmpty()) {
-                    String masked = redditCookies.length() > 16 ? redditCookies.substring(0, 8) + "..." + redditCookies.substring(redditCookies.length() - 8) : redditCookies;
-                    logger.info("Using Reddit cookies: {}", masked);
-                    connection.header("Cookie", redditCookies);
-                } else {
-                    logger.warn("No Reddit cookies found; requests will not be authenticated.");
-                }
-                jsonString = connection.ignoreContentType(true).execute().body();
-                success = true;
-            } catch (org.jsoup.HttpStatusException e) {
-                if (e.getStatusCode() == 429) {
-                    int sleep = baseSleep * (int)Math.pow(2, attempt); // exponential backoff
-                    logger.warn("HTTP 429 Too Many Requests, sleeping {} ms before retrying (attempt {}/{})", sleep, attempt+1, maxAttempts);
-                    try { Thread.sleep(sleep); } catch (InterruptedException ie) {}
-                    attempt++;
-                    lastEx = e;
-                } else {
-                    throw e;
-                }
-            } catch (Exception e) {
-                lastEx = e;
-                break;
-            }
+        Map<String,String> headers = new HashMap<>();
+        headers.put("Accept", "application/json");
+        headers.put("Accept-Language", "en-US,en;q=0.9");
+        headers.put("Referer", "https://www.reddit.com/");
+        headers.put("Connection", "keep-alive");
+        if (redditCookies != null && !redditCookies.isEmpty()) {
+            String masked = redditCookies.length() > 16 ? redditCookies.substring(0, 8) + "..." + redditCookies.substring(redditCookies.length() - 8) : redditCookies;
+            logger.info("Using Reddit cookies: {}", masked);
+            headers.put("Cookie", redditCookies);
+        } else {
+            logger.warn("No Reddit cookies found; requests will not be authenticated.");
         }
-        if (!success) {
-            logger.error("Failed to fetch Reddit JSON after {} attempts: {}", maxAttempts, lastEx != null ? lastEx.getMessage() : "unknown error");
-            throw new IOException("Failed to fetch Reddit JSON: " + (lastEx != null ? lastEx.getMessage() : "unknown error"), lastEx);
-        }
+
+        String jsonString = Http.getWith429Retry(url, 5, 2, REDDIT_USER_AGENT, headers);
 
         Object jsonObj = new JSONTokener(jsonString).nextValue();
         JSONArray jsonArray = new JSONArray();
