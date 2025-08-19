@@ -6,8 +6,11 @@ import java.net.MalformedURLException;
 import java.net.URI;
 import java.net.URISyntaxException;
 import java.net.URL;
+import java.sql.*;
 import java.util.Arrays;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Random;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
@@ -52,6 +55,58 @@ public class TumblrRipper extends AlbumRipper {
 
     private static boolean useDefaultApiKey = false; // fall-back for bad user-specified key
     private static String API_KEY = null;
+
+    // Loads all Tumblr cookies from Firefox (Windows), tries all profiles, returns cookie string for HTTP header
+    private static String getTumblrCookiesFromFirefox() {
+        try {
+            String userHome = System.getProperty("user.home");
+            String profilesIniPath = userHome + "/AppData/Roaming/Mozilla/Firefox/profiles.ini";
+            java.nio.file.Path iniPath = java.nio.file.Paths.get(profilesIniPath);
+            if (!java.nio.file.Files.exists(iniPath)) return null;
+            java.util.List<String> lines = java.nio.file.Files.readAllLines(iniPath);
+            java.util.List<String> profilePaths = new java.util.ArrayList<>();
+            for (String line : lines) {
+                if (line.trim().startsWith("Path=")) {
+                    profilePaths.add(line.trim().substring(5));
+                }
+            }
+            logger.info("Found Firefox profiles: {}", profilePaths);
+            for (String profilePath : profilePaths) {
+                String sqlitePath = userHome + "/AppData/Roaming/Mozilla/Firefox/Profiles/" + profilePath + "/cookies.sqlite";
+                sqlitePath = sqlitePath.replace("Profiles/Profiles/", "Profiles/");
+                logger.info("Trying cookies.sqlite at: {}", sqlitePath);
+                try {
+                    Class.forName("org.sqlite.JDBC");
+                    java.nio.file.Path tempCopy = java.nio.file.Files.createTempFile("cookies", ".sqlite");
+                    java.nio.file.Files.copy(java.nio.file.Paths.get(sqlitePath), tempCopy, java.nio.file.StandardCopyOption.REPLACE_EXISTING);
+                    try (Connection conn = DriverManager.getConnection("jdbc:sqlite:" + tempCopy.toString())) {
+                        String sql = "SELECT name, value FROM moz_cookies WHERE host LIKE '%tumblr.com'";
+                        try (Statement stmt = conn.createStatement(); ResultSet rs = stmt.executeQuery(sql)) {
+                            StringBuilder cookieStr = new StringBuilder();
+                            boolean found = false;
+                            while (rs.next()) {
+                                String name = rs.getString("name");
+                                String value = rs.getString("value");
+                                if (cookieStr.length() > 0) cookieStr.append("; ");
+                                cookieStr.append(name).append("=").append(value);
+                                found = true;
+                            }
+                            if (found) {
+                                logger.info("Found Tumblr cookies in profile {}: {}", profilePath, cookieStr.length() > 16 ? cookieStr.substring(0,8)+"..."+cookieStr.substring(cookieStr.length()-8) : cookieStr.toString());
+                                return cookieStr.toString();
+                            }
+                        }
+                    }
+                    java.nio.file.Files.deleteIfExists(tempCopy);
+                } catch (Exception e) {
+                    logger.warn("Failed to read cookies from profile {}: {}", profilePath, e.getMessage());
+                }
+            }
+        } catch (Exception e) {
+            logger.warn("Error reading Firefox profiles.ini: {}", e.getMessage());
+        }
+        return null;
+    }
 
     /**
      * Gets the API key.
@@ -142,6 +197,8 @@ public class TumblrRipper extends AlbumRipper {
         // If true the rip loop won't be run
         boolean shouldStopRipping = false;
 
+        String tumblrCookies = getTumblrCookiesFromFirefox();
+
         if (albumType == ALBUM_TYPE.POST) {
             mediaTypes = new String[] { "post" };
         } else {
@@ -177,11 +234,20 @@ public class TumblrRipper extends AlbumRipper {
                 boolean retry = false;
 
                 try {
-                    String response = Http.getWith429Retry(new URL(apiURL), MAX_RETRIES, RETRY_DELAY_SECONDS, null);
+                    Map<String,String> headers = null;
+                    if (tumblrCookies != null && !tumblrCookies.isEmpty()) {
+                        headers = new HashMap<>();
+                        headers.put("Cookie", tumblrCookies);
+                    }
+                    String response = Http.getWith429Retry(new URL(apiURL), MAX_RETRIES, RETRY_DELAY_SECONDS, null, headers);
                     json = new JSONObject(response);
                 } catch (IOException e) {
                     try {
-                        String responseBody = Http.url(apiURL).ignoreContentType().get().body().text();
+                        Http http = Http.url(apiURL);
+                        if (tumblrCookies != null && !tumblrCookies.isEmpty()) {
+                            http = http.header("Cookie", tumblrCookies);
+                        }
+                        String responseBody = http.ignoreContentType().get().body().text();
                         if (responseBody.contains("\"code\":4012")) {
                             logger.error("This Tumblr is only viewable within the Tumblr dashboard. Cannot proceed.");
                             sendUpdate(STATUS.DOWNLOAD_ERRORED, "Tumblr blog is not accessible via API. Dashboard-only access.");
@@ -220,7 +286,11 @@ public class TumblrRipper extends AlbumRipper {
                     logger.info("Retrieving " + apiURL);
                     sendUpdate(STATUS.LOADING_RESOURCE, apiURL);
 
-                    json = Http.url(apiURL).getJSON();
+                    Http http = Http.url(apiURL);
+                    if (tumblrCookies != null && !tumblrCookies.isEmpty()) {
+                        http = http.header("Cookie", tumblrCookies);
+                    }
+                    json = http.getJSON();
                 }
 
                 try {
