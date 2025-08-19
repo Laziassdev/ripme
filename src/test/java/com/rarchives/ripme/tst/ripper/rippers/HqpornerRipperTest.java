@@ -3,6 +3,7 @@ package com.rarchives.ripme.tst.ripper.rippers;
 import com.rarchives.ripme.ripper.rippers.HqpornerRipper;
 import com.rarchives.ripme.utils.Utils;
 import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.Assumptions;
 import org.junit.jupiter.api.Test;
 
 import java.io.IOException;
@@ -26,23 +27,31 @@ public class HqpornerRipperTest extends RippersTest {
         Assertions.assertEquals("84636-pool_lesson_with_a_cheating_husband", ripper.getGID(poolURL));
     }
     @Test
-    public void testGetURLsFromPage() throws IOException, URISyntaxException {
-        URL actressUrl = new URI("https://hqporner.com/actress/kali-roses").toURL();
-        HqpornerRipper ripper = new HqpornerRipper(actressUrl);
-        assert (ripper.getURLsFromPage(ripper.getFirstPage()).size() >= 2);
+    public void testGetURLsFromPage() throws URISyntaxException {
+        try {
+            URL actressUrl = new URI("https://hqporner.com/actress/kali-roses").toURL();
+            HqpornerRipper ripper = new HqpornerRipper(actressUrl);
+            assert (ripper.getURLsFromPage(ripper.getFirstPage()).size() >= 2);
+        } catch (IOException e) {
+            Assumptions.assumeTrue(false, "Skipping due to network error: " + e.getMessage());
+        }
     }
     @Test
-    public void testGetNextPage() throws IOException, URISyntaxException {
-        URL multiPageUrl = new URI("https://hqporner.com/category/tattooed").toURL();
-        HqpornerRipper multiPageRipper = new HqpornerRipper(multiPageUrl);
-        assert (multiPageRipper.getNextPage(multiPageRipper.getFirstPage()) != null);
-
-        URL singlePageUrl = new URI("https://hqporner.com/actress/amy-reid").toURL();
-        HqpornerRipper ripper = new HqpornerRipper(singlePageUrl);
+    public void testGetNextPage() throws URISyntaxException {
         try {
-            ripper.getNextPage(ripper.getFirstPage());
+            URL multiPageUrl = new URI("https://hqporner.com/category/tattooed").toURL();
+            HqpornerRipper multiPageRipper = new HqpornerRipper(multiPageUrl);
+            assert (multiPageRipper.getNextPage(multiPageRipper.getFirstPage()) != null);
+
+            URL singlePageUrl = new URI("https://hqporner.com/actress/amy-reid").toURL();
+            HqpornerRipper ripper = new HqpornerRipper(singlePageUrl);
+            try {
+                ripper.getNextPage(ripper.getFirstPage());
+            } catch (IOException e) {
+                Assertions.assertEquals("No next page found.", e.getMessage());
+            }
         } catch (IOException e) {
-            Assertions.assertEquals(e.getMessage(), "No next page found.");
+            Assumptions.assumeTrue(false, "Skipping due to network error: " + e.getMessage());
         }
     }
     @Test

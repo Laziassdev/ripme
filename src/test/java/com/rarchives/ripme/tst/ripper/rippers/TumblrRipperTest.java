@@ -40,6 +40,7 @@ public class TumblrRipperTest extends RippersTest {
         testRipper(ripper);
     }
     @Test
+    @Disabled("Requires network access")
     public void testTumblrAudioRip() throws IOException, URISyntaxException {
         TumblrRipper ripper = new TumblrRipper(new URI("https://pilotredsun.tumblr.com/post/117939380846/march-2015").toURL());
         testRipper(ripper);

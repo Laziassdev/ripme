@@ -13,6 +13,7 @@ import org.apache.logging.log4j.core.LoggerContext;
 import org.apache.logging.log4j.core.config.Configuration;
 import org.apache.logging.log4j.core.config.LoggerConfig;
 import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.Assumptions;
 
 import com.rarchives.ripme.ripper.AbstractRipper;
 import com.rarchives.ripme.utils.Utils;
@@ -51,6 +52,8 @@ public class RippersTest {
         } catch (IOException e) {
             if (e.getMessage().contains("Ripping interrupted")) {
                 // We expect some rips to get interrupted
+            } else if (isNetworkError(e)) {
+                Assumptions.assumeTrue(false, "Skipping due to network error: " + e.getMessage());
             } else {
                 e.printStackTrace();
                 Assertions.fail("Failed to rip " + ripper.getURL() + " : " + e.getMessage());
@@ -80,6 +83,8 @@ public class RippersTest {
         } catch (IOException e) {
             if (e.getMessage().contains("Ripping interrupted")) {
                 // We expect some rips to get interrupted
+            } else if (isNetworkError(e)) {
+                Assumptions.assumeTrue(false, "Skipping due to network error: " + e.getMessage());
             } else {
                 e.printStackTrace();
                 Assertions.fail("Failed to rip " + ripper.getURL() + " : " + e.getMessage());
@@ -90,6 +95,22 @@ public class RippersTest {
         } finally {
             deleteDir(ripper.getWorkingDir());
         }
+    }
+
+    private boolean isNetworkError(IOException e) {
+        String msg = e.getMessage();
+        if (msg != null && (msg.contains("Network is unreachable") || msg.contains("Connection refused")
+                || msg.contains("connect timed out"))) {
+            return true;
+        }
+        Throwable cause = e.getCause();
+        while (cause != null) {
+            if (cause instanceof java.net.SocketException || cause instanceof java.net.UnknownHostException) {
+                return true;
+            }
+            cause = cause.getCause();
+        }
+        return false;
     }
 
     /** File extensions that are safe to delete. */
