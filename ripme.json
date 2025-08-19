@@ -1,7 +1,7 @@
 {
-  "latestVersion": "2.1.106-1-6b35bbb",
-  "currentHash": "ccd2f95355f421d8a9aa0f39d9d885147ca9f5bcd3558b42a52e43a7294cf624",
+  "latestVersion": "2.1.107-1-cb415a1",
+  "currentHash": "6209b7debbca93a5ce623899529218a9e40a2b645061ff39c71c0389aff9b6ee",
   "changeList": [
-    "2.1.106-1-6b35bbb: Merge pull request #24 from Laziassdev/codex/implement-cookie-usage-in-tumblr-ripper", "2.1.106-1-6b35bbb: Built at 2025-08-19T14:34:20Z"
+    "2.1.107-1-cb415a1: Merge pull request #25 from Laziassdev/codex/implement-cookie-usage-in-tumblr-ripper", "2.1.107-1-cb415a1: Built at 2025-08-19T14:51:44Z"
   ]
 }
