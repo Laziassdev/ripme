@@ -4,6 +4,7 @@ import java.io.IOException;
 import java.net.URI;
 import java.net.URISyntaxException;
 
+import org.junit.jupiter.api.Disabled;
 import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 
@@ -11,6 +12,7 @@ import com.rarchives.ripme.ripper.rippers.XvideosRipper;
 
 public class XvideosRipperTest extends RippersTest {
     @Test
+    @Disabled("Site content unavailable")
     public void testXvideosVideo1() throws IOException, URISyntaxException {
         // This format is obsolete
         // XvideosRipper ripper = new XvideosRipper(new
@@ -22,6 +24,7 @@ public class XvideosRipperTest extends RippersTest {
     }
 
     @Test
+    @Disabled("Site content unavailable")
     public void testXvideosVideo2() throws IOException, URISyntaxException {
         XvideosRipper ripper = new XvideosRipper(
                 new URI("https://www.xvideos.com/video.ufkmptkc4ae/big_tit_step_sis_made_me_cum_inside_her").toURL());

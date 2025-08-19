@@ -6,10 +6,12 @@ import java.net.URISyntaxException;
 
 import com.rarchives.ripme.ripper.rippers.OglafRipper;
 
+import org.junit.jupiter.api.Disabled;
 import org.junit.jupiter.api.Test;
 
 public class OglafRipperTest extends RippersTest {
     @Test
+    @Disabled("Site content unavailable")
     public void testRip() throws IOException, URISyntaxException {
         OglafRipper ripper = new OglafRipper(new URI("http://oglaf.com/plumes/").toURL());
         testRipper(ripper);

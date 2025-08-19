@@ -8,6 +8,7 @@ import java.net.URL;
 import com.rarchives.ripme.ripper.rippers.WordpressComicRipper;
 
 import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.Disabled;
 import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 
@@ -47,6 +48,7 @@ public class WordpressComicRipperTest extends RippersTest {
         testRipper(ripper);
     }
     @Test
+    @Disabled("Site content unavailable")
     public void test_prismblush() throws IOException, URISyntaxException {
         WordpressComicRipper ripper = new WordpressComicRipper(
                 new URI("http://prismblush.com/comic/hella-trap-pg-01/").toURL());

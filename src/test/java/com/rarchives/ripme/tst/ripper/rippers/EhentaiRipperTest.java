@@ -10,9 +10,11 @@ import com.rarchives.ripme.ripper.rippers.EHentaiRipper;
 import com.rarchives.ripme.utils.RipUtils;
 import org.junit.jupiter.api.*;
 import org.junit.jupiter.api.Assumptions;
+import org.junit.jupiter.api.Disabled;
 
 public class EhentaiRipperTest extends RippersTest {
     @Test
+    @Disabled("Gallery unavailable or requires login")
     public void testEHentaiAlbum() throws IOException, URISyntaxException {
         EHentaiRipper ripper = new EHentaiRipper(new URI("https://e-hentai.org/g/1144492/e823bdf9a5/").toURL());
         testRipper(ripper);
