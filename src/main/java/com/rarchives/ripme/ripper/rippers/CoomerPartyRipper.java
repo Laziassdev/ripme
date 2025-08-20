@@ -52,7 +52,7 @@ public class CoomerPartyRipper extends AbstractJSONRipper {
 
     // Posts Request Endpoint templates
     // Primary endpoint: /api/v1/{service}/user/{username}/posts
-    private static final String POSTS_ENDPOINT = "https://%s/api/v1/%s/user/%s/posts?o=%d";
+    private static final String POSTS_ENDPOINT = "https://%s/api/v1/%s/user/%s/posts?o=%d&q=0";
 
     // Pagination is strictly 50 posts per page, per API schema.
     private Integer pageCount = 0;
