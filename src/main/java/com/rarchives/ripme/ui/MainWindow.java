@@ -427,7 +427,6 @@ public final class MainWindow implements Runnable, RipStatusHandler {
         JScrollPane logTextScroll = new JScrollPane(logText);
         logTextScroll.setVerticalScrollBarPolicy(JScrollPane.VERTICAL_SCROLLBAR_ALWAYS);
         logPanel.setVisible(false);
-        logPanel.setPreferredSize(new Dimension(300, 250));
         gbc.fill = GridBagConstraints.BOTH;
         gbc.weighty = 1;
         logPanel.add(logTextScroll, gbc);
@@ -437,7 +436,6 @@ public final class MainWindow implements Runnable, RipStatusHandler {
         historyPanel = new JPanel(new GridBagLayout());
         historyPanel.setBorder(emptyBorder);
         historyPanel.setVisible(false);
-        historyPanel.setPreferredSize(new Dimension(300, 250));
 
         historyTableModel = new AbstractTableModel() {
             private static final long serialVersionUID = 1L;
@@ -511,12 +509,9 @@ public final class MainWindow implements Runnable, RipStatusHandler {
         gbc.fill = GridBagConstraints.BOTH;
         gbc.weighty = 1;
         historyTablePanel.add(historyTableScrollPane, gbc);
-        gbc.ipady = 180;
         gbc.gridy = 0;
         historyPanel.add(historyTablePanel, gbc);
-        gbc.ipady = 0;
         JPanel historyButtonPanel = new JPanel(new GridBagLayout());
-        historyButtonPanel.setSize(new Dimension(300, 10));
         historyButtonPanel.setBorder(emptyBorder);
         gbc.gridx = 0;
         historyButtonPanel.add(historyButtonRemove, gbc);
@@ -533,7 +528,6 @@ public final class MainWindow implements Runnable, RipStatusHandler {
         queuePanel = new JPanel(new GridBagLayout());
         queuePanel.setBorder(emptyBorder);
         queuePanel.setVisible(false);
-        queuePanel.setPreferredSize(new Dimension(300, 250));
         queueListModel = new DefaultListModel<>();
         queueList = new JList<>(queueListModel);
         queueList.setSelectionMode(ListSelectionModel.MULTIPLE_INTERVAL_SELECTION);
@@ -551,7 +545,6 @@ public final class MainWindow implements Runnable, RipStatusHandler {
         gbc.fill = GridBagConstraints.BOTH;
         gbc.weightx = 1;
         gbc.weighty = 1;
-        gbc.ipady = 180;
         JPanel queueListPanel = new JPanel(new GridBagLayout());
         GridBagConstraints queueGbc = new GridBagConstraints();
         queueGbc.fill = GridBagConstraints.BOTH;
@@ -643,7 +636,6 @@ public final class MainWindow implements Runnable, RipStatusHandler {
         gbc.fill = GridBagConstraints.HORIZONTAL;
         gbc.weighty = 0;
         gbc.weightx = 0;
-        gbc.ipady = 0;
 
         configMainPanel = new JPanel(new GridBagLayout());
         configMainPanel.setBorder(emptyBorder);
@@ -794,13 +786,9 @@ public final class MainWindow implements Runnable, RipStatusHandler {
         gbc.fill = GridBagConstraints.BOTH;
         gbc.gridy = 4;
         pane.add(logPanel, gbc);
-        gbc.gridy = 5;
         pane.add(historyPanel, gbc);
-        gbc.gridy = 5;
         pane.add(queuePanel, gbc);
-        gbc.gridy = 5;
         pane.add(configurationPanel, gbc);
-        gbc.gridy = 5;
         pane.add(emptyPanel, gbc);
         gbc.weighty = 0;
         gbc.fill = GridBagConstraints.HORIZONTAL;
