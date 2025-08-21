@@ -15,6 +15,7 @@ import java.net.URL;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
+import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Date;
 import java.util.List;
@@ -92,10 +93,19 @@ public final class MainWindow implements Runnable, RipStatusHandler {
     public static JButton optionQueue;
     private static JPanel queuePanel;
     private static DefaultListModel<Object> queueListModel;
+    private static JList<Object> queueList;
+    private static QueueMenuMouseListener queueMenuMouseListener;
+    private static JButton queueButtonTop, queueButtonUp, queueButtonDown;
 
     // Configuration
     private static JButton optionConfiguration;
     private static JPanel configurationPanel;
+    private static JPanel configMainPanel;
+    private static JPanel configOtherPanel;
+    private static JPanel configCards;
+    private static JButton configBackButton;
+    private static JButton configNextButton;
+    private static CardLayout configCardLayout;
     private static JButton configUpdateButton;
     private static JLabel configUpdateLabel;
     private static JTextField configTimeoutText;
@@ -129,10 +139,6 @@ public final class MainWindow implements Runnable, RipStatusHandler {
     private static JLabel configRetrySleepLabel;
     // This doesn't really belong here but I have no idea where else to put it
     private static JButton configUrlFileChooserButton;
-
-    // Other Settings
-    private static JButton optionOtherSettings;
-    private static JPanel otherSettingsPanel;
 
     private static TrayIcon trayIcon;
     private static MenuItem trayMenuMain;
@@ -388,12 +394,10 @@ public final class MainWindow implements Runnable, RipStatusHandler {
         optionHistory = new JButton(Utils.getLocalizedString("History"));
         optionQueue = new JButton(Utils.getLocalizedString("queue"));
         optionConfiguration = new JButton(Utils.getLocalizedString("Configuration"));
-        optionOtherSettings = new JButton("Other Settings");
         optionLog.setFont(optionLog.getFont().deriveFont(Font.PLAIN));
         optionHistory.setFont(optionLog.getFont().deriveFont(Font.PLAIN));
         optionQueue.setFont(optionLog.getFont().deriveFont(Font.PLAIN));
         optionConfiguration.setFont(optionLog.getFont().deriveFont(Font.PLAIN));
-        optionOtherSettings.setFont(optionLog.getFont().deriveFont(Font.PLAIN));
         try {
             Image icon;
             icon = ImageIO.read(getClass().getClassLoader().getResource("comment.png"));
@@ -415,8 +419,6 @@ public final class MainWindow implements Runnable, RipStatusHandler {
         optionsPanel.add(optionQueue, gbc);
         gbc.gridx = 3;
         optionsPanel.add(optionConfiguration, gbc);
-        gbc.gridx = 4;
-        optionsPanel.add(optionOtherSettings, gbc);
 
         logPanel = new JPanel(new GridBagLayout());
         logPanel.setBorder(emptyBorder);
@@ -425,7 +427,6 @@ public final class MainWindow implements Runnable, RipStatusHandler {
         JScrollPane logTextScroll = new JScrollPane(logText);
         logTextScroll.setVerticalScrollBarPolicy(JScrollPane.VERTICAL_SCROLLBAR_ALWAYS);
         logPanel.setVisible(false);
-        logPanel.setPreferredSize(new Dimension(300, 250));
         gbc.fill = GridBagConstraints.BOTH;
         gbc.weighty = 1;
         logPanel.add(logTextScroll, gbc);
@@ -435,7 +436,6 @@ public final class MainWindow implements Runnable, RipStatusHandler {
         historyPanel = new JPanel(new GridBagLayout());
         historyPanel.setBorder(emptyBorder);
         historyPanel.setVisible(false);
-        historyPanel.setPreferredSize(new Dimension(300, 250));
 
         historyTableModel = new AbstractTableModel() {
             private static final long serialVersionUID = 1L;
@@ -509,12 +509,9 @@ public final class MainWindow implements Runnable, RipStatusHandler {
         gbc.fill = GridBagConstraints.BOTH;
         gbc.weighty = 1;
         historyTablePanel.add(historyTableScrollPane, gbc);
-        gbc.ipady = 180;
         gbc.gridy = 0;
         historyPanel.add(historyTablePanel, gbc);
-        gbc.ipady = 0;
         JPanel historyButtonPanel = new JPanel(new GridBagLayout());
-        historyButtonPanel.setSize(new Dimension(300, 10));
         historyButtonPanel.setBorder(emptyBorder);
         gbc.gridx = 0;
         historyButtonPanel.add(historyButtonRemove, gbc);
@@ -531,11 +528,10 @@ public final class MainWindow implements Runnable, RipStatusHandler {
         queuePanel = new JPanel(new GridBagLayout());
         queuePanel.setBorder(emptyBorder);
         queuePanel.setVisible(false);
-        queuePanel.setPreferredSize(new Dimension(300, 250));
         queueListModel = new DefaultListModel<>();
-        JList<Object> queueList = new JList<>(queueListModel);
+        queueList = new JList<>(queueListModel);
         queueList.setSelectionMode(ListSelectionModel.MULTIPLE_INTERVAL_SELECTION);
-        QueueMenuMouseListener queueMenuMouseListener = new QueueMenuMouseListener(d -> updateQueue(queueListModel));
+        queueMenuMouseListener = new QueueMenuMouseListener(d -> updateQueue(queueListModel));
         queueList.addMouseListener(queueMenuMouseListener);
         JScrollPane queueListScroll = new JScrollPane(queueList, JScrollPane.VERTICAL_SCROLLBAR_AS_NEEDED,
                 JScrollPane.HORIZONTAL_SCROLLBAR_NEVER);
@@ -546,18 +542,103 @@ public final class MainWindow implements Runnable, RipStatusHandler {
         updateQueue();
 
         gbc.gridx = 0;
-        JPanel queueListPanel = new JPanel(new GridBagLayout());
         gbc.fill = GridBagConstraints.BOTH;
+        gbc.weightx = 1;
         gbc.weighty = 1;
-        queueListPanel.add(queueListScroll, gbc);
+        JPanel queueListPanel = new JPanel(new GridBagLayout());
+        GridBagConstraints queueGbc = new GridBagConstraints();
+        queueGbc.fill = GridBagConstraints.BOTH;
+        queueGbc.weighty = 1;
+        queueGbc.weightx = 1;
+        queueListPanel.add(queueListScroll, queueGbc);
+
+        queueButtonUp = new JButton("\u2191");
+        queueButtonUp.setToolTipText(Utils.getLocalizedString("queue.move.up"));
+        queueButtonUp.addActionListener(e -> {
+            int[] indices = queueList.getSelectedIndices();
+            if (indices.length == 0) {
+                return;
+            }
+            for (int i = 0; i < indices.length; i++) {
+                int index = indices[i];
+                if (index > 0) {
+                    Object element = queueListModel.get(index);
+                    queueListModel.remove(index);
+                    queueListModel.add(index - 1, element);
+                    indices[i] = index - 1;
+                }
+            }
+            queueList.setSelectedIndices(indices);
+            queueMenuMouseListener.updateUI();
+        });
+
+        queueButtonDown = new JButton("\u2193");
+        queueButtonDown.setToolTipText(Utils.getLocalizedString("queue.move.down"));
+        queueButtonDown.addActionListener(e -> {
+            int[] indices = queueList.getSelectedIndices();
+            if (indices.length == 0) {
+                return;
+            }
+            for (int i = indices.length - 1; i >= 0; i--) {
+                int index = indices[i];
+                if (index < queueListModel.getSize() - 1) {
+                    Object element = queueListModel.get(index);
+                    queueListModel.remove(index);
+                    queueListModel.add(index + 1, element);
+                    indices[i] = index + 1;
+                }
+            }
+            queueList.setSelectedIndices(indices);
+            queueMenuMouseListener.updateUI();
+        });
+
+        queueButtonTop = new JButton("\u21A5");
+        queueButtonTop.setToolTipText(Utils.getLocalizedString("queue.move.top"));
+        queueButtonTop.addActionListener(e -> {
+            int[] indices = queueList.getSelectedIndices();
+            if (indices.length == 0) {
+                return;
+            }
+            List<Object> selected = new ArrayList<>();
+            for (int index : indices) {
+                selected.add(queueListModel.get(index));
+            }
+            for (int i = indices.length - 1; i >= 0; i--) {
+                queueListModel.remove(indices[i]);
+            }
+            for (int i = 0; i < selected.size(); i++) {
+                queueListModel.add(i, selected.get(i));
+            }
+            int[] newIndices = new int[selected.size()];
+            for (int i = 0; i < selected.size(); i++) {
+                newIndices[i] = i;
+            }
+            queueList.setSelectedIndices(newIndices);
+            queueMenuMouseListener.updateUI();
+        });
+
+        JPanel queueButtonPanel = new JPanel(new GridBagLayout());
+        GridBagConstraints buttonGbc = new GridBagConstraints();
+        buttonGbc.gridx = 0;
+        buttonGbc.fill = GridBagConstraints.HORIZONTAL;
+        queueButtonPanel.add(queueButtonUp, buttonGbc);
+        buttonGbc.gridy = 1;
+        queueButtonPanel.add(queueButtonDown, buttonGbc);
+        buttonGbc.gridy = 2;
+        queueButtonPanel.add(queueButtonTop, buttonGbc);
+
+        queueGbc.gridx = 1;
+        queueGbc.weightx = 0;
+        queueGbc.fill = GridBagConstraints.VERTICAL;
+        queueListPanel.add(queueButtonPanel, queueGbc);
+
         queuePanel.add(queueListPanel, gbc);
         gbc.fill = GridBagConstraints.HORIZONTAL;
         gbc.weighty = 0;
-        gbc.ipady = 0;
+        gbc.weightx = 0;
 
-        configurationPanel = new JPanel(new GridBagLayout());
-        configurationPanel.setBorder(emptyBorder);
-        configurationPanel.setVisible(false);
+        configMainPanel = new JPanel(new GridBagLayout());
+        configMainPanel.setBorder(emptyBorder);
 
         // TODO Configuration components
         configUpdateButton = new JButton(Utils.getLocalizedString("check.for.updates"));
@@ -634,9 +715,8 @@ public final class MainWindow implements Runnable, RipStatusHandler {
         addItemToConfigGridBagConstraints(gbc, idx++, configSelectLangComboBox, configUrlFileChooserButton);
         addItemToConfigGridBagConstraints(gbc, idx++, configSaveDirLabel, configSaveDirButton);
 
-        otherSettingsPanel = new JPanel(new GridBagLayout());
-        otherSettingsPanel.setBorder(emptyBorder);
-        otherSettingsPanel.setVisible(false);
+        configOtherPanel = new JPanel(new GridBagLayout());
+        configOtherPanel.setBorder(emptyBorder);
 
         GridBagConstraints otherGbc = new GridBagConstraints();
         otherGbc.fill = GridBagConstraints.HORIZONTAL;
@@ -654,11 +734,40 @@ public final class MainWindow implements Runnable, RipStatusHandler {
                 @Override public void changedUpdate(DocumentEvent e) { Utils.setConfigString(key, field.getText()); }
             });
             otherGbc.gridx = 0;
-            otherSettingsPanel.add(lbl, otherGbc);
+            configOtherPanel.add(lbl, otherGbc);
             otherGbc.gridx = 1;
-            otherSettingsPanel.add(field, otherGbc);
+            configOtherPanel.add(field, otherGbc);
             otherGbc.gridy++;
         }
+
+        configCardLayout = new CardLayout();
+        configCards = new JPanel(configCardLayout);
+        configCards.add(configMainPanel, "main");
+        configCards.add(configOtherPanel, "other");
+
+        configBackButton = new JButton("Back");
+        configNextButton = new JButton("Next");
+        configBackButton.setEnabled(false);
+        configBackButton.addActionListener(e -> {
+            configCardLayout.show(configCards, "main");
+            configBackButton.setEnabled(false);
+            configNextButton.setEnabled(true);
+        });
+        configNextButton.addActionListener(e -> {
+            configCardLayout.show(configCards, "other");
+            configBackButton.setEnabled(true);
+            configNextButton.setEnabled(false);
+        });
+
+        JPanel configNavPanel = new JPanel();
+        configNavPanel.add(configBackButton);
+        configNavPanel.add(configNextButton);
+
+        configurationPanel = new JPanel(new BorderLayout());
+        configurationPanel.setBorder(emptyBorder);
+        configurationPanel.setVisible(false);
+        configurationPanel.add(configCards, BorderLayout.CENTER);
+        configurationPanel.add(configNavPanel, BorderLayout.SOUTH);
 
         emptyPanel = new JPanel();
         emptyPanel.setPreferredSize(new Dimension(0, 0));
@@ -677,15 +786,9 @@ public final class MainWindow implements Runnable, RipStatusHandler {
         gbc.fill = GridBagConstraints.BOTH;
         gbc.gridy = 4;
         pane.add(logPanel, gbc);
-        gbc.gridy = 5;
         pane.add(historyPanel, gbc);
-        gbc.gridy = 5;
         pane.add(queuePanel, gbc);
-        gbc.gridy = 5;
-        pane.add(otherSettingsPanel, gbc);
-        gbc.gridy = 5;
         pane.add(configurationPanel, gbc);
-        gbc.gridy = 5;
         pane.add(emptyPanel, gbc);
         gbc.weighty = 0;
         gbc.fill = GridBagConstraints.HORIZONTAL;
@@ -728,27 +831,27 @@ public final class MainWindow implements Runnable, RipStatusHandler {
             JButton thing2ToAdd) {
         gbc.gridy = gbcYValue;
         gbc.gridx = 0;
-        configurationPanel.add(thing1ToAdd, gbc);
+        configMainPanel.add(thing1ToAdd, gbc);
         gbc.gridx = 1;
-        configurationPanel.add(thing2ToAdd, gbc);
+        configMainPanel.add(thing2ToAdd, gbc);
     }
 
     private void addItemToConfigGridBagConstraints(GridBagConstraints gbc, int gbcYValue, JLabel thing1ToAdd,
             JTextField thing2ToAdd) {
         gbc.gridy = gbcYValue;
         gbc.gridx = 0;
-        configurationPanel.add(thing1ToAdd, gbc);
+        configMainPanel.add(thing1ToAdd, gbc);
         gbc.gridx = 1;
-        configurationPanel.add(thing2ToAdd, gbc);
+        configMainPanel.add(thing2ToAdd, gbc);
     }
 
     private void addItemToConfigGridBagConstraints(GridBagConstraints gbc, int gbcYValue, JCheckBox thing1ToAdd,
             JCheckBox thing2ToAdd) {
         gbc.gridy = gbcYValue;
         gbc.gridx = 0;
-        configurationPanel.add(thing1ToAdd, gbc);
+        configMainPanel.add(thing1ToAdd, gbc);
         gbc.gridx = 1;
-        configurationPanel.add(thing2ToAdd, gbc);
+        configMainPanel.add(thing2ToAdd, gbc);
     }
 
     @SuppressWarnings("rawtypes")
@@ -756,9 +859,9 @@ public final class MainWindow implements Runnable, RipStatusHandler {
             JComboBox thing2ToAdd) {
         gbc.gridy = gbcYValue;
         gbc.gridx = 0;
-        configurationPanel.add(thing1ToAdd, gbc);
+        configMainPanel.add(thing1ToAdd, gbc);
         gbc.gridx = 1;
-        configurationPanel.add(thing2ToAdd, gbc);
+        configMainPanel.add(thing2ToAdd, gbc);
     }
 
     @SuppressWarnings("rawtypes")
@@ -766,16 +869,16 @@ public final class MainWindow implements Runnable, RipStatusHandler {
             JButton thing2ToAdd) {
         gbc.gridy = gbcYValue;
         gbc.gridx = 0;
-        configurationPanel.add(thing1ToAdd, gbc);
+        configMainPanel.add(thing1ToAdd, gbc);
         gbc.gridx = 1;
-        configurationPanel.add(thing2ToAdd, gbc);
+        configMainPanel.add(thing2ToAdd, gbc);
     }
 
     @SuppressWarnings({ "unused", "rawtypes" })
     private void addItemToConfigGridBagConstraints(GridBagConstraints gbc, int gbcYValue, JComboBox thing1ToAdd) {
         gbc.gridy = gbcYValue;
         gbc.gridx = 0;
-        configurationPanel.add(thing1ToAdd, gbc);
+        configMainPanel.add(thing1ToAdd, gbc);
     }
 
     private void changeLocale() {
@@ -805,7 +908,6 @@ public final class MainWindow implements Runnable, RipStatusHandler {
         optionHistory.setText(Utils.getLocalizedString("History"));
         optionQueue.setText(Utils.getLocalizedString("queue"));
         optionConfiguration.setText(Utils.getLocalizedString("Configuration"));
-        optionOtherSettings.setText("Other Settings");
     }
 
     private void setupHandlers() {
@@ -865,7 +967,6 @@ public final class MainWindow implements Runnable, RipStatusHandler {
             historyPanel.setVisible(false);
             queuePanel.setVisible(false);
             configurationPanel.setVisible(false);
-            otherSettingsPanel.setVisible(false);
             if (logPanel.isVisible()) {
                 optionLog.setFont(optionLog.getFont().deriveFont(Font.BOLD));
             } else {
@@ -874,7 +975,6 @@ public final class MainWindow implements Runnable, RipStatusHandler {
             optionHistory.setFont(optionLog.getFont().deriveFont(Font.PLAIN));
             optionQueue.setFont(optionLog.getFont().deriveFont(Font.PLAIN));
             optionConfiguration.setFont(optionLog.getFont().deriveFont(Font.PLAIN));
-            optionOtherSettings.setFont(optionLog.getFont().deriveFont(Font.PLAIN));
             pack();
         });
 
@@ -884,7 +984,6 @@ public final class MainWindow implements Runnable, RipStatusHandler {
             emptyPanel.setVisible(!historyPanel.isVisible());
             queuePanel.setVisible(false);
             configurationPanel.setVisible(false);
-            otherSettingsPanel.setVisible(false);
             optionLog.setFont(optionLog.getFont().deriveFont(Font.PLAIN));
             if (historyPanel.isVisible()) {
                 optionHistory.setFont(optionLog.getFont().deriveFont(Font.BOLD));
@@ -893,7 +992,6 @@ public final class MainWindow implements Runnable, RipStatusHandler {
             }
             optionQueue.setFont(optionLog.getFont().deriveFont(Font.PLAIN));
             optionConfiguration.setFont(optionLog.getFont().deriveFont(Font.PLAIN));
-            optionOtherSettings.setFont(optionLog.getFont().deriveFont(Font.PLAIN));
             pack();
         });
 
@@ -903,7 +1001,6 @@ public final class MainWindow implements Runnable, RipStatusHandler {
             queuePanel.setVisible(!queuePanel.isVisible());
             emptyPanel.setVisible(!queuePanel.isVisible());
             configurationPanel.setVisible(false);
-            otherSettingsPanel.setVisible(false);
             optionLog.setFont(optionLog.getFont().deriveFont(Font.PLAIN));
             optionHistory.setFont(optionLog.getFont().deriveFont(Font.PLAIN));
             if (queuePanel.isVisible()) {
@@ -912,7 +1009,6 @@ public final class MainWindow implements Runnable, RipStatusHandler {
                 optionQueue.setFont(optionLog.getFont().deriveFont(Font.PLAIN));
             }
             optionConfiguration.setFont(optionLog.getFont().deriveFont(Font.PLAIN));
-            optionOtherSettings.setFont(optionLog.getFont().deriveFont(Font.PLAIN));
             pack();
         });
 
@@ -922,34 +1018,16 @@ public final class MainWindow implements Runnable, RipStatusHandler {
             queuePanel.setVisible(false);
             configurationPanel.setVisible(!configurationPanel.isVisible());
             emptyPanel.setVisible(!configurationPanel.isVisible());
-            otherSettingsPanel.setVisible(false);
             optionLog.setFont(optionLog.getFont().deriveFont(Font.PLAIN));
             optionHistory.setFont(optionLog.getFont().deriveFont(Font.PLAIN));
             optionQueue.setFont(optionLog.getFont().deriveFont(Font.PLAIN));
             if (configurationPanel.isVisible()) {
+                configCardLayout.show(configCards, "main");
+                configBackButton.setEnabled(false);
+                configNextButton.setEnabled(true);
                 optionConfiguration.setFont(optionLog.getFont().deriveFont(Font.BOLD));
             } else {
                 optionConfiguration.setFont(optionLog.getFont().deriveFont(Font.PLAIN));
-            }
-            optionOtherSettings.setFont(optionLog.getFont().deriveFont(Font.PLAIN));
-            pack();
-        });
-
-        optionOtherSettings.addActionListener(event -> {
-            logPanel.setVisible(false);
-            historyPanel.setVisible(false);
-            queuePanel.setVisible(false);
-            configurationPanel.setVisible(false);
-            otherSettingsPanel.setVisible(!otherSettingsPanel.isVisible());
-            emptyPanel.setVisible(!otherSettingsPanel.isVisible());
-            optionLog.setFont(optionLog.getFont().deriveFont(Font.PLAIN));
-            optionHistory.setFont(optionLog.getFont().deriveFont(Font.PLAIN));
-            optionQueue.setFont(optionLog.getFont().deriveFont(Font.PLAIN));
-            optionConfiguration.setFont(optionLog.getFont().deriveFont(Font.PLAIN));
-            if (otherSettingsPanel.isVisible()) {
-                optionOtherSettings.setFont(optionLog.getFont().deriveFont(Font.BOLD));
-            } else {
-                optionOtherSettings.setFont(optionLog.getFont().deriveFont(Font.PLAIN));
             }
             pack();
         });
