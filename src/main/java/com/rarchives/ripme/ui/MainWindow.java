@@ -548,6 +548,10 @@ public final class MainWindow implements Runnable, RipStatusHandler {
         updateQueue();
 
         gbc.gridx = 0;
+        gbc.fill = GridBagConstraints.BOTH;
+        gbc.weightx = 1;
+        gbc.weighty = 1;
+        gbc.ipady = 180;
         JPanel queueListPanel = new JPanel(new GridBagLayout());
         GridBagConstraints queueGbc = new GridBagConstraints();
         queueGbc.fill = GridBagConstraints.BOTH;
@@ -638,6 +642,7 @@ public final class MainWindow implements Runnable, RipStatusHandler {
         queuePanel.add(queueListPanel, gbc);
         gbc.fill = GridBagConstraints.HORIZONTAL;
         gbc.weighty = 0;
+        gbc.weightx = 0;
         gbc.ipady = 0;
 
         configMainPanel = new JPanel(new GridBagLayout());
