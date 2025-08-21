@@ -426,6 +426,7 @@ public final class MainWindow implements Runnable, RipStatusHandler {
         logText.setEditable(false);
         JScrollPane logTextScroll = new JScrollPane(logText);
         logTextScroll.setVerticalScrollBarPolicy(JScrollPane.VERTICAL_SCROLLBAR_ALWAYS);
+        logTextScroll.setPreferredSize(new Dimension(300, 250));
         logPanel.setVisible(false);
         gbc.fill = GridBagConstraints.BOTH;
         gbc.weighty = 1;
