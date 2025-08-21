@@ -1,7 +1,7 @@
 {
-  "latestVersion": "2.1.118-1-0b76553",
-  "currentHash": "a1cc8050d873c9e687bc984779b930bbebf1cd3479753148732dc3f47b5b9cff",
+  "latestVersion": "2.1.119-1-6f943d0",
+  "currentHash": "028b7108518524a0d5a9c39b25ac53b5f5b136a743f7cf555e327a8d86821c93",
   "changeList": [
-    "2.1.118-1-0b76553: Merge pull request #35 from Laziassdev/codex/move-settings-into-configuration-tab-r573xl", "2.1.118-1-0b76553: Built at 2025-08-21T12:46:38Z"
+    "2.1.119-1-6f943d0: Merge pull request #36 from Laziassdev/codex/move-settings-into-configuration-tab", "2.1.119-1-6f943d0: Built at 2025-08-21T13:01:40Z"
   ]
 }
