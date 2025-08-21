@@ -15,6 +15,7 @@ import java.net.URL;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
+import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Date;
 import java.util.List;
@@ -92,6 +93,9 @@ public final class MainWindow implements Runnable, RipStatusHandler {
     public static JButton optionQueue;
     private static JPanel queuePanel;
     private static DefaultListModel<Object> queueListModel;
+    private static JList<Object> queueList;
+    private static QueueMenuMouseListener queueMenuMouseListener;
+    private static JButton queueButtonTop, queueButtonUp, queueButtonDown;
 
     // Configuration
     private static JButton optionConfiguration;
@@ -531,9 +535,9 @@ public final class MainWindow implements Runnable, RipStatusHandler {
         queuePanel.setVisible(false);
         queuePanel.setPreferredSize(new Dimension(300, 250));
         queueListModel = new DefaultListModel<>();
-        JList<Object> queueList = new JList<>(queueListModel);
+        queueList = new JList<>(queueListModel);
         queueList.setSelectionMode(ListSelectionModel.MULTIPLE_INTERVAL_SELECTION);
-        QueueMenuMouseListener queueMenuMouseListener = new QueueMenuMouseListener(d -> updateQueue(queueListModel));
+        queueMenuMouseListener = new QueueMenuMouseListener(d -> updateQueue(queueListModel));
         queueList.addMouseListener(queueMenuMouseListener);
         JScrollPane queueListScroll = new JScrollPane(queueList, JScrollPane.VERTICAL_SCROLLBAR_AS_NEEDED,
                 JScrollPane.HORIZONTAL_SCROLLBAR_NEVER);
@@ -545,9 +549,92 @@ public final class MainWindow implements Runnable, RipStatusHandler {
 
         gbc.gridx = 0;
         JPanel queueListPanel = new JPanel(new GridBagLayout());
-        gbc.fill = GridBagConstraints.BOTH;
-        gbc.weighty = 1;
-        queueListPanel.add(queueListScroll, gbc);
+        GridBagConstraints queueGbc = new GridBagConstraints();
+        queueGbc.fill = GridBagConstraints.BOTH;
+        queueGbc.weighty = 1;
+        queueGbc.weightx = 1;
+        queueListPanel.add(queueListScroll, queueGbc);
+
+        queueButtonUp = new JButton("\u2191");
+        queueButtonUp.setToolTipText(Utils.getLocalizedString("queue.move.up"));
+        queueButtonUp.addActionListener(e -> {
+            int[] indices = queueList.getSelectedIndices();
+            if (indices.length == 0) {
+                return;
+            }
+            for (int i = 0; i < indices.length; i++) {
+                int index = indices[i];
+                if (index > 0) {
+                    Object element = queueListModel.get(index);
+                    queueListModel.remove(index);
+                    queueListModel.add(index - 1, element);
+                    indices[i] = index - 1;
+                }
+            }
+            queueList.setSelectedIndices(indices);
+            queueMenuMouseListener.updateUI();
+        });
+
+        queueButtonDown = new JButton("\u2193");
+        queueButtonDown.setToolTipText(Utils.getLocalizedString("queue.move.down"));
+        queueButtonDown.addActionListener(e -> {
+            int[] indices = queueList.getSelectedIndices();
+            if (indices.length == 0) {
+                return;
+            }
+            for (int i = indices.length - 1; i >= 0; i--) {
+                int index = indices[i];
+                if (index < queueListModel.getSize() - 1) {
+                    Object element = queueListModel.get(index);
+                    queueListModel.remove(index);
+                    queueListModel.add(index + 1, element);
+                    indices[i] = index + 1;
+                }
+            }
+            queueList.setSelectedIndices(indices);
+            queueMenuMouseListener.updateUI();
+        });
+
+        queueButtonTop = new JButton("\u21A5");
+        queueButtonTop.setToolTipText(Utils.getLocalizedString("queue.move.top"));
+        queueButtonTop.addActionListener(e -> {
+            int[] indices = queueList.getSelectedIndices();
+            if (indices.length == 0) {
+                return;
+            }
+            List<Object> selected = new ArrayList<>();
+            for (int index : indices) {
+                selected.add(queueListModel.get(index));
+            }
+            for (int i = indices.length - 1; i >= 0; i--) {
+                queueListModel.remove(indices[i]);
+            }
+            for (int i = 0; i < selected.size(); i++) {
+                queueListModel.add(i, selected.get(i));
+            }
+            int[] newIndices = new int[selected.size()];
+            for (int i = 0; i < selected.size(); i++) {
+                newIndices[i] = i;
+            }
+            queueList.setSelectedIndices(newIndices);
+            queueMenuMouseListener.updateUI();
+        });
+
+        JPanel queueButtonPanel = new JPanel(new GridBagLayout());
+        GridBagConstraints buttonGbc = new GridBagConstraints();
+        buttonGbc.gridx = 0;
+        buttonGbc.fill = GridBagConstraints.HORIZONTAL;
+        queueButtonPanel.add(queueButtonUp, buttonGbc);
+        buttonGbc.gridy = 1;
+        queueButtonPanel.add(queueButtonDown, buttonGbc);
+        buttonGbc.gridy = 2;
+        queueButtonPanel.add(queueButtonTop, buttonGbc);
+
+        queueGbc.gridx = 1;
+        queueGbc.weightx = 0;
+        queueGbc.fill = GridBagConstraints.VERTICAL;
+        queueListPanel.add(queueButtonPanel, queueGbc);
+
         queuePanel.add(queueListPanel, gbc);
         gbc.fill = GridBagConstraints.HORIZONTAL;
         gbc.weighty = 0;
