@@ -622,11 +622,12 @@ public final class MainWindow implements Runnable, RipStatusHandler {
         GridBagConstraints buttonGbc = new GridBagConstraints();
         buttonGbc.gridx = 0;
         buttonGbc.fill = GridBagConstraints.HORIZONTAL;
-        queueButtonPanel.add(queueButtonUp, buttonGbc);
-        buttonGbc.gridy = 1;
-        queueButtonPanel.add(queueButtonDown, buttonGbc);
-        buttonGbc.gridy = 2;
+        buttonGbc.gridy = 0;
         queueButtonPanel.add(queueButtonTop, buttonGbc);
+        buttonGbc.gridy = 1;
+        queueButtonPanel.add(queueButtonUp, buttonGbc);
+        buttonGbc.gridy = 2;
+        queueButtonPanel.add(queueButtonDown, buttonGbc);
 
         queueGbc.gridx = 1;
         queueGbc.weightx = 0;
