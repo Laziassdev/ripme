@@ -774,6 +774,7 @@ public final class MainWindow implements Runnable, RipStatusHandler {
         emptyPanel.setSize(0, 0);
 
         gbc.anchor = GridBagConstraints.PAGE_START;
+        gbc.weightx = 1;
         gbc.gridy = 0;
         pane.add(ripPanel, gbc);
         gbc.gridy = 1;
@@ -783,6 +784,7 @@ public final class MainWindow implements Runnable, RipStatusHandler {
         gbc.gridy = 3;
         pane.add(optionsPanel, gbc);
         gbc.weighty = 1;
+        gbc.weightx = 1;
         gbc.fill = GridBagConstraints.BOTH;
         gbc.gridy = 4;
         pane.add(logPanel, gbc);
