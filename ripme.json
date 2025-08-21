@@ -1,7 +1,7 @@
 {
-  "latestVersion": "2.1.116-1-94179a2",
-  "currentHash": "2d5e74facc04f71d9f56f1fd6527b5d963e04bbf405579303da7eefb20d7cb46",
+  "latestVersion": "2.1.117-1-1a20d25",
+  "currentHash": "8c701344d709e1247dd0173b25d52268ca4b41f8a1d99e1b4563bb5a6ecaa4ed",
   "changeList": [
-    "2.1.116-1-94179a2: Merge pull request #33 from Laziassdev/codex/move-settings-into-configuration-tab-6v07z2", "2.1.116-1-94179a2: Built at 2025-08-21T12:07:05Z"
+    "2.1.117-1-1a20d25: Merge pull request #34 from Laziassdev/codex/move-settings-into-configuration-tab", "2.1.117-1-1a20d25: Built at 2025-08-21T12:23:16Z"
   ]
 }
