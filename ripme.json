@@ -1,7 +1,7 @@
 {
-  "latestVersion": "2.1.114-1-a5fe9d8",
-  "currentHash": "c03bfb72d11db46a2df5afc6ecf5f74aa0e10d43dd3098e12ce87b5f48c49be4",
+  "latestVersion": "2.1.121-1-989b14c",
+  "currentHash": "d3699200f8339d66ddcdd9605abbce0928df57cb563d48094621861a3a87b5a5",
   "changeList": [
-    "2.1.114-1-a5fe9d8: correct url", "2.1.114-1-a5fe9d8: Built at 2025-08-20T16:26:05Z"
+    "2.1.121-1-989b14c: Merge pull request #38 from Laziassdev/codex/move-settings-into-configuration-tab", "2.1.121-1-989b14c: Built at 2025-08-21T14:11:05Z"
   ]
 }
