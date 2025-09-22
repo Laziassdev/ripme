@@ -7,16 +7,26 @@ import java.net.URISyntaxException;
 import java.net.URL;
 import java.net.URLDecoder;
 import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.Paths;
+import java.nio.file.StandardCopyOption;
+import java.sql.Connection;
+import java.sql.DriverManager;
+import java.sql.ResultSet;
+import java.sql.Statement;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 import org.apache.http.client.utils.URIBuilder;
+import org.json.JSONException;
 import org.json.JSONObject;
 
 import com.rarchives.ripme.ripper.AbstractJSONRipper;
@@ -45,6 +55,8 @@ public class RedgifsRipper extends AbstractJSONRipper {
             .compile("^https?:\\/\\/[a-zA-Z0-9.]*redgifs\\.com\\/gifs\\/([a-zA-Z0-9_.,-]+).*$");
     private static final Pattern SINGLETON_PATTERN = Pattern
             .compile("^https?://[a-zA-Z0-9.]*redgifs\\.com/watch/([a-zA-Z0-9_-]+).*$");
+    private static final Pattern ACCESS_TOKEN_PATTERN = Pattern
+            .compile("\"accessToken\"\\s*:\\s*\"([^\"]+)\"");
 
     /**
      * Keep a single auth token for the complete lifecycle of the app.
@@ -300,10 +312,175 @@ public class RedgifsRipper extends AbstractJSONRipper {
      * @throws IOException
      */
     private static void fetchAuthToken() throws IOException {
+        String redditToken = fetchAuthTokenFromRedditCookies();
+        if (redditToken != null && !redditToken.isBlank()) {
+            authToken = redditToken;
+            logger.info("Loaded Redgifs auth token from Reddit Firefox cookies");
+            return;
+        }
+
         var json = Http.url(TEMPORARY_AUTH_ENDPOINT).getJSON();
         var token = json.getString("token");
         authToken = token;
         logger.info("Incase of redgif 401 errors, please restart the app to refresh the auth token");
+    }
+
+    private static String fetchAuthTokenFromRedditCookies() {
+        try {
+            try {
+                Class.forName("org.sqlite.JDBC");
+            } catch (ClassNotFoundException e) {
+                logger.debug("SQLite JDBC driver not available; cannot load Reddit cookies", e);
+                return null;
+            }
+
+            String userHome = System.getProperty("user.home");
+            Path profilesIniPath = Paths.get(userHome, "AppData", "Roaming", "Mozilla", "Firefox", "profiles.ini");
+            if (!Files.exists(profilesIniPath)) {
+                logger.debug("Firefox profiles.ini not found at {}", profilesIniPath);
+                return null;
+            }
+
+            List<String> lines = Files.readAllLines(profilesIniPath, StandardCharsets.UTF_8);
+            List<String> profilePaths = new ArrayList<>();
+            for (String line : lines) {
+                if (line != null) {
+                    String trimmed = line.trim();
+                    if (trimmed.startsWith("Path=")) {
+                        profilePaths.add(trimmed.substring(5));
+                    }
+                }
+            }
+
+            if (profilePaths.isEmpty()) {
+                logger.debug("No Firefox profiles discovered in {}", profilesIniPath);
+                return null;
+            }
+
+            logger.info("Searching Firefox profiles for Reddit auth token: {}", profilePaths);
+
+            for (String profilePath : profilePaths) {
+                String sqlitePathString = userHome + "/AppData/Roaming/Mozilla/Firefox/Profiles/" + profilePath + "/cookies.sqlite";
+                sqlitePathString = sqlitePathString.replace("Profiles/Profiles/", "Profiles/");
+                Path sqlitePath = Paths.get(sqlitePathString);
+                if (!Files.exists(sqlitePath)) {
+                    logger.debug("cookies.sqlite not found for profile {}", profilePath);
+                    continue;
+                }
+
+                Path tempCopy = null;
+                try {
+                    tempCopy = Files.createTempFile("ripme-reddit-cookies", ".sqlite");
+                    Files.copy(sqlitePath, tempCopy, StandardCopyOption.REPLACE_EXISTING);
+                    try (Connection conn = DriverManager.getConnection("jdbc:sqlite:" + tempCopy.toString());
+                         Statement stmt = conn.createStatement();
+                         ResultSet rs = stmt.executeQuery("SELECT name, value FROM moz_cookies WHERE host LIKE '%reddit.com'")) {
+                        Map<String, String> cookies = new HashMap<>();
+                        while (rs.next()) {
+                            cookies.put(rs.getString("name"), rs.getString("value"));
+                        }
+
+                        String token = extractAccessTokenFromCookies(cookies);
+                        if (token != null && !token.isBlank()) {
+                            logger.info("Found Reddit access token in Firefox profile {}", profilePath);
+                            return token;
+                        }
+                    }
+                } catch (Exception e) {
+                    logger.debug("Unable to read Reddit cookies from profile {}", profilePath, e);
+                } finally {
+                    if (tempCopy != null) {
+                        try {
+                            Files.deleteIfExists(tempCopy);
+                        } catch (IOException e) {
+                            logger.debug("Failed to delete temporary Firefox cookie copy", e);
+                        }
+                    }
+                }
+            }
+        } catch (Exception e) {
+            logger.debug("Unexpected error while loading Reddit token from Firefox cookies", e);
+        }
+
+        return null;
+    }
+
+    private static String extractAccessTokenFromCookies(Map<String, String> cookies) {
+        if (cookies == null || cookies.isEmpty()) {
+            return null;
+        }
+
+        List<String> candidates = Arrays.asList("token_v2", "token");
+        for (String candidate : candidates) {
+            if (cookies.containsKey(candidate)) {
+                String token = decodeAccessTokenFromCookieValue(cookies.get(candidate));
+                if (token != null && !token.isBlank()) {
+                    return token;
+                }
+            }
+        }
+
+        for (String value : cookies.values()) {
+            String token = decodeAccessTokenFromCookieValue(value);
+            if (token != null && !token.isBlank()) {
+                return token;
+            }
+        }
+
+        return null;
+    }
+
+    private static String decodeAccessTokenFromCookieValue(String rawValue) {
+        if (rawValue == null || rawValue.isBlank()) {
+            return null;
+        }
+
+        String decoded = URLDecoder.decode(rawValue, StandardCharsets.UTF_8);
+        String jsonPortion = extractJsonFromString(decoded);
+        if (jsonPortion != null) {
+            try {
+                JSONObject json = new JSONObject(jsonPortion);
+                if (json.has("accessToken")) {
+                    return normalizeBearer(json.getString("accessToken"));
+                }
+            } catch (JSONException e) {
+                logger.debug("Failed to parse JSON from Reddit token cookie", e);
+            }
+        }
+
+        Matcher matcher = ACCESS_TOKEN_PATTERN.matcher(decoded);
+        if (matcher.find()) {
+            return normalizeBearer(matcher.group(1));
+        }
+
+        if (decoded.startsWith("Bearer ")) {
+            return normalizeBearer(decoded);
+        }
+
+        return null;
+    }
+
+    private static String extractJsonFromString(String text) {
+        if (text == null) {
+            return null;
+        }
+        int start = text.indexOf('{');
+        int end = text.lastIndexOf('}');
+        if (start >= 0 && end > start) {
+            return text.substring(start, end + 1);
+        }
+        return null;
+    }
+
+    private static String normalizeBearer(String token) {
+        if (token == null) {
+            return null;
+        }
+        String normalized = token.trim();
+        if (normalized.toLowerCase(Locale.ROOT).startsWith("bearer ")) {
+            normalized = normalized.substring(7).trim();
+        }
+        return normalized;
     }
 
     /**
