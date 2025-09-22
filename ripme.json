@@ -1,7 +1,7 @@
 {
-  "latestVersion": "2.1.122-1-17455e3",
-  "currentHash": "6ff2628dab8cdea4dd21738304ac60528747bf0a6127c381716197b1d82bcaf3",
+  "latestVersion": "2.1.123-1-88cd509",
+  "currentHash": "8ee9427e8e06e7ce5e80d75681ca6769a364d9303eb50489f0c5d754c2414d7c",
   "changeList": [
-    "2.1.122-1-17455e3: Merge pull request #39 from Laziassdev/codex/move-settings-into-configuration-tab-yqzfkd", "2.1.122-1-17455e3: Built at 2025-08-21T14:17:14Z"
+    "2.1.123-1-88cd509: Merge pull request #40 from Laziassdev/codex/update-redgifs-ripper-to-use-reddit-token", "2.1.123-1-88cd509: Built at 2025-09-22T15:19:38Z"
   ]
 }
