@@ -126,8 +126,8 @@ public class RedditRipper extends AlbumRipper {
     private static final int RETRY_DELAY_SECONDS = 20;
 
     private long lastRequestTime = 0;
-    private int maxDownloads = -1;
-    private DownloadLimitTracker downloadLimitTracker;
+    private final int maxDownloads = Utils.getConfigInteger("maxdownloads", -1);
+    private final DownloadLimitTracker downloadLimitTracker = new DownloadLimitTracker(maxDownloads);
     private boolean maxDownloadLimitReached = false;
 
     private Boolean shouldAddURL() {
@@ -162,8 +162,6 @@ public class RedditRipper extends AlbumRipper {
 
     @Override
     public void rip() throws IOException {
-        maxDownloads = Utils.getConfigInteger("maxdownloads", -1);
-        downloadLimitTracker = new DownloadLimitTracker(maxDownloads);
         maxDownloadLimitReached = false;
 
         try {
