@@ -1,7 +1,7 @@
 {
-  "latestVersion": "2.1.125-1-e3c51db",
-  "currentHash": "86762ea3783c26c787f8b7f7d67ce3a6aab045759c92ac5a3741202fb2bbdc70",
+  "latestVersion": "2.1.126-1-32efdc8",
+  "currentHash": "fbf2b47ef84c2524edc6715d5c0d419864ef3d0733e043f7cf25a25b59e86f23",
   "changeList": [
-    "2.1.125-1-e3c51db: Merge pull request #42 from Laziassdev/codex/implement-maxdownloads-limit-in-tumblr-ripper-m6evly", "2.1.125-1-e3c51db: Built at 2025-10-10T16:00:15Z"
+    "2.1.126-1-32efdc8: Merge pull request #43 from Laziassdev/codex/fix-tumblr-ripper-limit-issue", "2.1.126-1-32efdc8: Built at 2025-10-10T16:57:28Z"
   ]
 }
