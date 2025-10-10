@@ -23,6 +23,7 @@ import org.json.JSONObject;
 import org.jsoup.HttpStatusException;
 
 import com.rarchives.ripme.ripper.AbstractJSONRipper;
+import com.rarchives.ripme.utils.DownloadLimitTracker;
 import com.rarchives.ripme.utils.Http;
 import com.rarchives.ripme.utils.Utils;
 import com.rarchives.ripme.ui.RipStatusMessage;
@@ -68,8 +69,8 @@ public class CoomerPartyRipper extends AbstractJSONRipper {
     private String domain;
 
     private final int maxDownloads = Utils.getConfigInteger("maxdownloads", -1);
-    private int downloadCounter = 0;
-    private int queuedDownloadCounter = 0;
+    private final DownloadLimitTracker downloadLimitTracker = new DownloadLimitTracker(maxDownloads);
+    private volatile boolean maxDownloadLimitReached = false;
 
 
 
@@ -206,9 +207,8 @@ public class CoomerPartyRipper extends AbstractJSONRipper {
 
     @Override
     protected JSONObject getNextPage(JSONObject doc) throws IOException, URISyntaxException {
-        if (maxDownloads > 0 && queuedDownloadCounter >= maxDownloads) {
-            logger.info("Reached maxdownloads limit of " + maxDownloads + ". Stopping.");
-            sendUpdate(RipStatusMessage.STATUS.DOWNLOAD_COMPLETE_HISTORY, "Reached maxdownloads limit of " + maxDownloads + ". Stopping.");
+        if (downloadLimitTracker.isLimitReached()) {
+            maxDownloadLimitReached = true;
             return null;
         }
 
@@ -231,9 +231,19 @@ public class CoomerPartyRipper extends AbstractJSONRipper {
         JSONArray posts = json.getJSONArray(KEY_WRAPPER_JSON_ARRAY);
         ArrayList<String> urls = new ArrayList<>();
 
+        if (downloadLimitTracker.isLimitReached()) {
+            maxDownloadLimitReached = true;
+            return urls;
+        }
+
         for (int i = 0; i < posts.length(); i++) {
             JSONObject post = posts.getJSONObject(i);
             logger.debug("Processing post: {}", post.toString());
+
+            if (downloadLimitTracker.isLimitReached()) {
+                maxDownloadLimitReached = true;
+                break;
+            }
 
             int before = urls.size();
 
@@ -253,8 +263,6 @@ public class CoomerPartyRipper extends AbstractJSONRipper {
             if (added == 0) {
                 logger.debug("Post {} yielded no URLs", i);
             }
-
-            queuedDownloadCounter += added;
         }
 
         if (urls.isEmpty()) {
@@ -275,7 +283,29 @@ public class CoomerPartyRipper extends AbstractJSONRipper {
                 headers.put("Cookie", coomerCookies);
             }
             URL resolvedUrl = Http.followRedirectsWithRetry(url, 5, 5, COOMER_USER_AGENT, headers);
-            addURLToDownload(resolvedUrl, getPrefix(index));
+
+            if (!downloadLimitTracker.tryAcquire(resolvedUrl)) {
+                if (downloadLimitTracker.isLimitReached()) {
+                    maxDownloadLimitReached = true;
+                    if (downloadLimitTracker.shouldNotifyLimitReached()) {
+                        String message = "Reached maxdownloads limit of " + maxDownloads + ". Stopping.";
+                        logger.info(message);
+                        sendUpdate(RipStatusMessage.STATUS.DOWNLOAD_COMPLETE_HISTORY, message);
+                    }
+                } else {
+                    logger.debug("Max download limit of {} currently allocated, deferring {}", maxDownloads, resolvedUrl);
+                }
+                return;
+            }
+
+            boolean added = addURLToDownload(resolvedUrl, getPrefix(index));
+            if (added) {
+                if (Utils.getConfigBoolean("urls_only.save", false)) {
+                    handleSuccessfulDownload(resolvedUrl);
+                }
+            } else {
+                downloadLimitTracker.onFailure(resolvedUrl);
+            }
         } catch (IOException e) {
             logger.error("Failed to resolve or download redirect URL {}: {}", url, e.getMessage());
         }
@@ -284,12 +314,34 @@ public class CoomerPartyRipper extends AbstractJSONRipper {
     @Override
     public void downloadCompleted(URL url, java.nio.file.Path saveAs) {
         super.downloadCompleted(url, saveAs);
-        downloadCounter++;
+        handleSuccessfulDownload(url);
+    }
 
-        if (maxDownloads > 0 && downloadCounter >= maxDownloads) {
-            logger.info("Completed {} of max {} downloads. Stopping rip.", downloadCounter, maxDownloads);
-            sendUpdate(RipStatusMessage.STATUS.DOWNLOAD_COMPLETE_HISTORY, "Reached maxdownloads limit of " + maxDownloads + ". Stopping.");
+    @Override
+    public void downloadExists(URL url, java.nio.file.Path file) {
+        super.downloadExists(url, file);
+        handleSuccessfulDownload(url);
+    }
 
+    @Override
+    public void downloadErrored(URL url, String reason) {
+        downloadLimitTracker.onFailure(url);
+        super.downloadErrored(url, reason);
+    }
+
+    @Override
+    public boolean hasASAPRipping() {
+        return maxDownloadLimitReached;
+    }
+
+    private void handleSuccessfulDownload(URL url) {
+        if (downloadLimitTracker.onSuccess(url)) {
+            maxDownloadLimitReached = true;
+            if (downloadLimitTracker.shouldNotifyLimitReached()) {
+                String message = "Reached maxdownloads limit of " + maxDownloads + ". Stopping.";
+                logger.info(message);
+                sendUpdate(RipStatusMessage.STATUS.DOWNLOAD_COMPLETE_HISTORY, message);
+            }
         }
     }
 
