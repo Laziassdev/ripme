@@ -9,6 +9,7 @@ import org.apache.logging.log4j.Logger;
 import org.json.JSONArray;
 import org.json.JSONException;
 import org.json.JSONObject;
+import org.jsoup.Jsoup;
 import org.jsoup.nodes.Document;
 import org.jsoup.nodes.Element;
 import org.jsoup.select.Elements;
@@ -18,6 +19,8 @@ import java.io.UnsupportedEncodingException;
 import java.net.MalformedURLException;
 import java.net.URISyntaxException;
 import java.net.URL;
+import java.net.URLEncoder;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
@@ -28,7 +31,9 @@ import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.HashMap;
+import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Locale;
@@ -46,6 +51,13 @@ public class OnlywamRipper extends AbstractHTMLRipper {
             Pattern.CASE_INSENSITIVE);
 
     private Map<String, String> cookies = new HashMap<>();
+    private String nextDataBuildId;
+    private String nextDataPath;
+    private final Map<String, String> nextDataQueryParams = new LinkedHashMap<>();
+    private final Set<String> cursorParamNames = new LinkedHashSet<>(Arrays.asList(
+            "after", "cursor", "nextCursor", "next_cursor", "endCursor", "end_cursor"));
+    private String paginationCursor;
+    private boolean paginationHasNext;
 
     public OnlywamRipper(URL url) throws IOException {
         super(url);
@@ -81,6 +93,13 @@ public class OnlywamRipper extends AbstractHTMLRipper {
 
     @Override
     public Document getNextPage(Document doc) throws IOException, URISyntaxException {
+        updateNextDataState(doc);
+
+        Document scrollPage = fetchNextDataDocument();
+        if (scrollPage != null) {
+            return scrollPage;
+        }
+
         Element nextLink = doc.selectFirst("a[rel=next], link[rel=next]");
         if (nextLink == null) {
             return null;
@@ -135,6 +154,7 @@ public class OnlywamRipper extends AbstractHTMLRipper {
             if (jsonText != null && !jsonText.isBlank()) {
                 try {
                     JSONObject json = new JSONObject(jsonText);
+                    updateNextDataState(json);
                     collectImageUrlsFromJson(json, results);
                 } catch (JSONException e) {
                     logger.debug("Failed to parse __NEXT_DATA__ JSON: {}", e.getMessage());
@@ -269,6 +289,281 @@ public class OnlywamRipper extends AbstractHTMLRipper {
                 || lower.contains("format=jpg") || lower.contains("format=jpeg")
                 || lower.contains("format=png") || lower.contains("mime=image")))) {
             results.add(resolved);
+        }
+    }
+
+    private void updateNextDataState(Document page) {
+        if (page == null) {
+            return;
+        }
+        Element nextData = page.selectFirst("script#__NEXT_DATA__");
+        if (nextData == null) {
+            return;
+        }
+        String jsonText = nextData.data();
+        if (jsonText == null || jsonText.isBlank()) {
+            return;
+        }
+        try {
+            JSONObject json = new JSONObject(jsonText);
+            updateNextDataState(json);
+        } catch (JSONException e) {
+            logger.debug("Unable to parse __NEXT_DATA__ for pagination metadata: {}", e.getMessage());
+        }
+    }
+
+    private void updateNextDataState(JSONObject json) {
+        if (json == null) {
+            return;
+        }
+        if (nextDataPath == null || nextDataPath.isBlank()) {
+            nextDataPath = normalizeDataPath(this.url.getPath());
+        }
+
+        String buildId = json.optString("buildId", null);
+        if (buildId != null && !buildId.isBlank()) {
+            nextDataBuildId = buildId;
+        }
+
+        mergeQueryParams(json.optJSONObject("query"));
+        JSONObject props = json.optJSONObject("props");
+        if (props != null) {
+            mergeQueryParams(props.optJSONObject("query"));
+            JSONObject propsPage = props.optJSONObject("pageProps");
+            if (propsPage != null) {
+                mergeQueryParams(propsPage.optJSONObject("query"));
+            }
+        }
+        JSONObject pageProps = json.optJSONObject("pageProps");
+        if (pageProps != null) {
+            mergeQueryParams(pageProps.optJSONObject("query"));
+        }
+
+        collectCursorKeys(json);
+        PaginationInfo info = findPaginationInfo(json);
+        if (info != null) {
+            paginationHasNext = info.hasNext;
+            paginationCursor = info.cursor;
+            if (!paginationHasNext) {
+                paginationCursor = null;
+            }
+        }
+    }
+
+    private void mergeQueryParams(JSONObject source) {
+        if (source == null || source.length() == 0) {
+            return;
+        }
+        // Extract plain key/value pairs only once per response to avoid
+        // accidentally clearing required parameters when not present.
+        Map<String, String> updated = new LinkedHashMap<>();
+        for (String key : source.keySet()) {
+            Object value = source.opt(key);
+            if (value == null || value == JSONObject.NULL) {
+                continue;
+            }
+            if (value instanceof JSONObject || value instanceof JSONArray) {
+                continue;
+            }
+            String text = String.valueOf(value).trim();
+            if (!text.isEmpty()) {
+                updated.put(key, text);
+            }
+        }
+        if (!updated.isEmpty()) {
+            nextDataQueryParams.putAll(updated);
+        }
+    }
+
+    private void collectCursorKeys(Object value) {
+        if (value instanceof JSONObject) {
+            JSONObject obj = (JSONObject) value;
+            for (String key : obj.keySet()) {
+                Object nested = obj.opt(key);
+                if (key != null) {
+                    String lower = key.toLowerCase(Locale.ROOT);
+                    if (lower.contains("cursor")
+                            || "after".equals(lower)
+                            || "page".equals(lower)
+                            || "pageparam".equals(lower)
+                            || lower.endsWith("page")) {
+                        cursorParamNames.add(key);
+                    }
+                }
+                collectCursorKeys(nested);
+            }
+            return;
+        }
+        if (value instanceof JSONArray) {
+            JSONArray array = (JSONArray) value;
+            for (int i = 0; i < array.length(); i++) {
+                collectCursorKeys(array.opt(i));
+            }
+        }
+    }
+
+    private PaginationInfo findPaginationInfo(Object value) {
+        if (value instanceof JSONObject) {
+            JSONObject obj = (JSONObject) value;
+            PaginationInfo direct = extractPaginationInfo(obj);
+            if (direct != null) {
+                return direct;
+            }
+            for (String key : obj.keySet()) {
+                PaginationInfo nested = findPaginationInfo(obj.opt(key));
+                if (nested != null) {
+                    return nested;
+                }
+            }
+        } else if (value instanceof JSONArray) {
+            JSONArray array = (JSONArray) value;
+            for (int i = 0; i < array.length(); i++) {
+                PaginationInfo nested = findPaginationInfo(array.opt(i));
+                if (nested != null) {
+                    return nested;
+                }
+            }
+        }
+        return null;
+    }
+
+    private PaginationInfo extractPaginationInfo(JSONObject obj) {
+        if (obj == null || obj.isEmpty()) {
+            return null;
+        }
+
+        String[] hasNextKeys = {"hasNextPage", "has_next_page", "hasMore", "has_more", "moreAvailable", "more_available"};
+        String[] cursorKeys = {"endCursor", "end_cursor", "nextCursor", "next_cursor", "cursor", "next", "pageCursor", "page_cursor"};
+
+        Boolean hasNext = null;
+        for (String key : hasNextKeys) {
+            if (obj.has(key)) {
+                hasNext = obj.optBoolean(key);
+                break;
+            }
+        }
+
+        String cursor = null;
+        for (String key : cursorKeys) {
+            if (obj.has(key)) {
+                Object value = obj.opt(key);
+                if (value != null && value != JSONObject.NULL) {
+                    cursor = String.valueOf(value).trim();
+                    if (!cursor.isEmpty()) {
+                        break;
+                    }
+                }
+            }
+        }
+
+        if (hasNext != null) {
+            if (!hasNext) {
+                return new PaginationInfo(false, null);
+            }
+            if (cursor != null && !cursor.isEmpty()) {
+                return new PaginationInfo(true, cursor);
+            }
+        }
+        return null;
+    }
+
+    private String normalizeDataPath(String rawPath) {
+        if (rawPath == null || rawPath.isBlank() || "/".equals(rawPath)) {
+            return "index";
+        }
+        String cleaned = rawPath;
+        if (cleaned.startsWith("/")) {
+            cleaned = cleaned.substring(1);
+        }
+        if (cleaned.endsWith("/")) {
+            cleaned = cleaned.substring(0, cleaned.length() - 1);
+        }
+        return cleaned.isBlank() ? "index" : cleaned;
+    }
+
+    private String buildNextDataUrl() {
+        if (nextDataBuildId == null || nextDataBuildId.isBlank()) {
+            return null;
+        }
+        if (nextDataPath == null || nextDataPath.isBlank()) {
+            nextDataPath = normalizeDataPath(this.url.getPath());
+        }
+        return String.format("https://www.onlywam.com/_next/data/%s/%s.json", nextDataBuildId, nextDataPath);
+    }
+
+    private String buildNextDataQuery(String cursor) {
+        Map<String, String> params = new LinkedHashMap<>(nextDataQueryParams);
+        if (cursor != null && !cursor.isBlank()) {
+            for (String key : cursorParamNames) {
+                params.put(key, cursor);
+            }
+        }
+        if (params.isEmpty()) {
+            return "";
+        }
+        StringBuilder builder = new StringBuilder();
+        boolean first = true;
+        for (Map.Entry<String, String> entry : params.entrySet()) {
+            String value = entry.getValue();
+            if (value == null) {
+                continue;
+            }
+            String trimmed = value.trim();
+            if (trimmed.isEmpty()) {
+                continue;
+            }
+            if (first) {
+                builder.append('?');
+                first = false;
+            } else {
+                builder.append('&');
+            }
+            builder.append(URLEncoder.encode(entry.getKey(), StandardCharsets.UTF_8));
+            builder.append('=');
+            builder.append(URLEncoder.encode(trimmed, StandardCharsets.UTF_8));
+        }
+        return builder.toString();
+    }
+
+    private Document fetchNextDataDocument() throws IOException {
+        if (!paginationHasNext || paginationCursor == null || paginationCursor.isBlank()) {
+            return null;
+        }
+        String baseUrl = buildNextDataUrl();
+        if (baseUrl == null) {
+            logger.debug("Missing Next.js build information; falling back to link-based pagination.");
+            return null;
+        }
+        String query = buildNextDataQuery(paginationCursor);
+        String target = baseUrl + query;
+        logger.debug("Requesting OnlyWam scroll data from {}", target);
+        Http request = Http.url(target);
+        applyAuthentication(request);
+        JSONObject json = request.getJSON();
+        updateNextDataState(json);
+        if (!paginationHasNext) {
+            paginationCursor = null;
+        }
+        return buildDocumentFromNextData(json);
+    }
+
+    private Document buildDocumentFromNextData(JSONObject json) {
+        Document synthetic = Jsoup.parse("<html><head></head><body></body></html>", this.url.toExternalForm());
+        synthetic.body()
+                .appendElement("script")
+                .attr("id", "__NEXT_DATA__")
+                .attr("type", "application/json")
+                .text(json.toString());
+        return synthetic;
+    }
+
+    private static final class PaginationInfo {
+        final boolean hasNext;
+        final String cursor;
+
+        PaginationInfo(boolean hasNext, String cursor) {
+            this.hasNext = hasNext;
+            this.cursor = cursor;
         }
     }
 
