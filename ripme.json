@@ -1,7 +1,7 @@
 {
-  "latestVersion": "2.1.123-1-88cd509",
-  "currentHash": "8ee9427e8e06e7ce5e80d75681ca6769a364d9303eb50489f0c5d754c2414d7c",
+  "latestVersion": "2.1.124-1-c499d85",
+  "currentHash": "4007e3def60e8ff6fb695272a1a6c15c9ed7048104071661528f44812a0b8d5d",
   "changeList": [
-    "2.1.123-1-88cd509: Merge pull request #40 from Laziassdev/codex/update-redgifs-ripper-to-use-reddit-token", "2.1.123-1-88cd509: Built at 2025-09-22T15:19:38Z"
+    "2.1.124-1-c499d85: Merge pull request #41 from Laziassdev/codex/implement-maxdownloads-limit-in-tumblr-ripper", "2.1.124-1-c499d85: Built at 2025-10-10T15:45:29Z"
   ]
 }
