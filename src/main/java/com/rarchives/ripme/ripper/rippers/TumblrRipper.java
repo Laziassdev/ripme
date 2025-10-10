@@ -6,12 +6,14 @@ import java.net.MalformedURLException;
 import java.net.URI;
 import java.net.URISyntaxException;
 import java.net.URL;
+import java.nio.file.Path;
 import java.sql.*;
 import java.util.Arrays;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Random;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
@@ -27,6 +29,7 @@ import org.jsoup.nodes.Document;
 import com.rarchives.ripme.ripper.AlbumRipper;
 import com.rarchives.ripme.ripper.AbstractRipper;
 import com.rarchives.ripme.ui.RipStatusMessage.STATUS;
+import com.rarchives.ripme.utils.DownloadLimitTracker;
 import com.rarchives.ripme.utils.Http;
 import com.rarchives.ripme.utils.Utils;
 
@@ -36,7 +39,9 @@ public class TumblrRipper extends AlbumRipper {
     private static final int MAX_RETRIES = 5;
     private static final int RETRY_DELAY_SECONDS = 5;
     private final int maxDownloads = Utils.getConfigInteger("max.downloads", 0); // 0 = no limit
-    int index = 1;
+    private final DownloadLimitTracker downloadLimitTracker = new DownloadLimitTracker(maxDownloads);
+    private final AtomicInteger nextIndex = new AtomicInteger(1);
+    private volatile boolean maxDownloadLimitReached = false;
 
     private static final String DOMAIN = "tumblr.com",
             HOST = "tumblr",
@@ -208,22 +213,22 @@ public class TumblrRipper extends AlbumRipper {
 
         int offset;
         for (String mediaType : mediaTypes) {
-            if (isStopped()) {
+            if (isStopped() || maxDownloadLimitReached) {
                 break;
             }
 
-            if (shouldStopRipping) {
+            if (shouldStopRipping || maxDownloadLimitReached) {
                 break;
             }
 
             offset = 0;
 
             while (true) {
-                if (isStopped()) {
+                if (isStopped() || maxDownloadLimitReached) {
                     break;
                 }
 
-                if (shouldStopRipping) {
+                if (shouldStopRipping || maxDownloadLimitReached) {
                     break;
                 }
 
@@ -310,6 +315,10 @@ public class TumblrRipper extends AlbumRipper {
                 if (!handleJSON(json)) {
                     // Returns false if an error occurs and we should stop.
                     break;
+                }
+
+                if (downloadLimitTracker.isLimitReached()) {
+                    maxDownloadLimitReached = true;
                 }
 
                 offset += 20;
@@ -589,23 +598,71 @@ public class TumblrRipper extends AlbumRipper {
     }
 
     public void downloadURL(URL url, String date) {
-        if (maxDownloads > 0 && index > maxDownloads) {
-            logger.info("Max download limit reached (" + maxDownloads + "), skipping: " + url);
+        if (!downloadLimitTracker.tryAcquire(url)) {
+            if (downloadLimitTracker.isLimitReached()) {
+                maxDownloadLimitReached = true;
+                if (downloadLimitTracker.shouldNotifyLimitReached()) {
+                    String message = "Reached max download limit of " + maxDownloads + ". Stopping.";
+                    logger.info(message);
+                    sendUpdate(STATUS.DOWNLOAD_COMPLETE_HISTORY, message);
+                }
+            } else {
+                logger.debug("Max download limit of {} currently allocated, deferring {}", maxDownloads, url);
+            }
             return;
         }
 
-        // Handle direct Tumblr video CDN links
+        int currentIndex = nextIndex.get();
+        boolean added = false;
+
         if (url.getHost().equals("va.media.tumblr.com")) {
-            addURLToDownload(url, getPrefix(index) + "tumblr_video_" + index);
-            index++;
-            return;
+            added = addURLToDownload(url, getPrefix(currentIndex) + "tumblr_video_" + currentIndex);
+        } else {
+            if (albumType == ALBUM_TYPE.TAG) {
+                added = addURLToDownload(url, date + " ");
+            }
+            if (!added) {
+                added = addURLToDownload(url, getPrefix(currentIndex));
+            }
         }
 
-        if (albumType == ALBUM_TYPE.TAG) {
-            addURLToDownload(url, date + " ");
+        if (added) {
+            nextIndex.incrementAndGet();
+            if (Utils.getConfigBoolean("urls_only.save", false)) {
+                handleSuccessfulDownload(url);
+            }
+        } else {
+            downloadLimitTracker.onFailure(url);
         }
-        addURLToDownload(url, getPrefix(index));
-        index++;
+    }
+
+    @Override
+    public void downloadCompleted(URL url, Path saveAs) {
+        super.downloadCompleted(url, saveAs);
+        handleSuccessfulDownload(url);
+    }
+
+    @Override
+    public void downloadExists(URL url, Path file) {
+        super.downloadExists(url, file);
+        handleSuccessfulDownload(url);
+    }
+
+    @Override
+    public void downloadErrored(URL url, String reason) {
+        downloadLimitTracker.onFailure(url);
+        super.downloadErrored(url, reason);
+    }
+
+    private void handleSuccessfulDownload(URL url) {
+        if (downloadLimitTracker.onSuccess(url)) {
+            maxDownloadLimitReached = true;
+            if (downloadLimitTracker.shouldNotifyLimitReached()) {
+                String message = "Reached max download limit of " + maxDownloads + ". Stopping.";
+                logger.info(message);
+                sendUpdate(STATUS.DOWNLOAD_COMPLETE_HISTORY, message);
+            }
+        }
     }
 
 }
