@@ -1,6 +1,8 @@
 package com.rarchives.ripme.ripper.rippers;
 
 import com.rarchives.ripme.ripper.AbstractJSONRipper;
+import com.rarchives.ripme.ui.RipStatusMessage.STATUS;
+import com.rarchives.ripme.utils.DownloadLimitTracker;
 import com.rarchives.ripme.utils.Http;
 import com.rarchives.ripme.utils.Utils;
 import org.jsoup.Connection;
@@ -10,6 +12,7 @@ import org.json.JSONObject;
 import java.io.IOException;
 import java.net.MalformedURLException;
 import java.net.URL;
+import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.regex.*;
@@ -23,11 +26,17 @@ public class BlueskyRipper extends AbstractJSONRipper {
     private String appPassword = null;
     private String username = null;
 
+    private final int maxDownloads;
+    private final DownloadLimitTracker downloadLimitTracker;
+    private volatile boolean maxDownloadLimitReached = false;
+
     private static final org.apache.logging.log4j.Logger logger = org.apache.logging.log4j.LogManager.getLogger(BlueskyRipper.class);
 
     public BlueskyRipper(URL url) throws IOException {
         super(url);
         logger.info("BlueskyRipper constructor called for URL: {}", url);
+        this.maxDownloads = Utils.getConfigInteger("maxdownloads", -1);
+        this.downloadLimitTracker = new DownloadLimitTracker(maxDownloads);
         this.handle = getGID(url);
         // Try to get credentials from config
         this.username = Utils.getConfigString("bluesky.username", null);
@@ -337,15 +346,19 @@ public class BlueskyRipper extends AbstractJSONRipper {
         return new JSONObject(body);
     }
 
-    private int totalDownloaded = 0; // Track total downloads across all pages
-
     @Override
     protected List<String> getURLsFromJSON(JSONObject json) {
         List<String> urls = new ArrayList<>();
         JSONArray feed = json.getJSONArray("feed");
-        int maxDownloads = Utils.getConfigInteger("maxdownloads", -1);
+        if (downloadLimitTracker.isLimitReached()) {
+            maxDownloadLimitReached = true;
+            return urls;
+        }
         for (int i = 0; i < feed.length(); i++) {
-            if (maxDownloads > 0 && totalDownloaded >= maxDownloads) break;
+            if (downloadLimitTracker.isLimitReached()) {
+                maxDownloadLimitReached = true;
+                break;
+            }
             JSONObject post = feed.getJSONObject(i).getJSONObject("post");
             if (post.has("embed")) {
                 JSONObject embed = post.getJSONObject("embed");
@@ -353,19 +366,23 @@ public class BlueskyRipper extends AbstractJSONRipper {
                 if (embed.has("images")) {
                     JSONArray images = embed.getJSONArray("images");
                     for (int j = 0; j < images.length(); j++) {
-                        if (maxDownloads > 0 && totalDownloaded >= maxDownloads) break;
+                        if (downloadLimitTracker.isLimitReached()) {
+                            maxDownloadLimitReached = true;
+                            break;
+                        }
                         String imgUrl = images.getJSONObject(j).getString("fullsize");
                         urls.add(imgUrl);
-                        totalDownloaded++;
                     }
                 }
                 // Videos (Bluesky video embeds)
                 if (embed.has("video")) {
                     JSONObject video = embed.getJSONObject("video");
                     if (video.has("uri")) {
-                        if (maxDownloads > 0 && totalDownloaded >= maxDownloads) break;
+                        if (downloadLimitTracker.isLimitReached()) {
+                            maxDownloadLimitReached = true;
+                            break;
+                        }
                         urls.add(video.getString("uri"));
-                        totalDownloaded++;
                     }
                 }
                 // External (could be a video, e.g. mp4/gif hosted elsewhere)
@@ -375,9 +392,11 @@ public class BlueskyRipper extends AbstractJSONRipper {
                         String extUrl = external.getString("uri");
                         // Only add if it looks like a video (mp4, webm, etc)
                         if (extUrl.matches(".*\\.(mp4|webm|mov|m4v|gif)(\\?.*)?$")) {
-                            if (maxDownloads > 0 && totalDownloaded >= maxDownloads) break;
+                            if (downloadLimitTracker.isLimitReached()) {
+                                maxDownloadLimitReached = true;
+                                break;
+                            }
                             urls.add(extUrl);
-                            totalDownloaded++;
                         }
                     }
                 }
@@ -388,6 +407,20 @@ public class BlueskyRipper extends AbstractJSONRipper {
 
     @Override
     protected void downloadURL(URL url, int index) {
+        if (!downloadLimitTracker.tryAcquire(url)) {
+            if (downloadLimitTracker.isLimitReached()) {
+                maxDownloadLimitReached = true;
+                if (downloadLimitTracker.shouldNotifyLimitReached()) {
+                    String message = "Reached max download limit of " + maxDownloads + ". Stopping.";
+                    logger.info(message);
+                    sendUpdate(STATUS.DOWNLOAD_COMPLETE_HISTORY, message);
+                }
+            } else {
+                logger.debug("Max download limit of {} currently allocated, deferring {}", maxDownloads, url);
+            }
+            return;
+        }
+
         // Fix @ext to .ext in filename
         String fileName = url.getPath();
         String ext = null;
@@ -413,11 +446,52 @@ public class BlueskyRipper extends AbstractJSONRipper {
             fileName = fileName.substring(fileName.lastIndexOf('/') + 1);
         }
         options.put("fileName", fileName);
-        addURLToDownload(url, options);
+        boolean added = addURLToDownload(url, options);
+        if (added) {
+            if (Utils.getConfigBoolean("urls_only.save", false)) {
+                handleSuccessfulDownload(url);
+            }
+        } else {
+            downloadLimitTracker.onFailure(url);
+        }
     }
 
     @Override
     protected String getPrefix(int index) {
         return String.format("%03d_", index);
+    }
+
+    @Override
+    public void downloadCompleted(URL url, Path saveAs) {
+        super.downloadCompleted(url, saveAs);
+        handleSuccessfulDownload(url);
+    }
+
+    @Override
+    public void downloadExists(URL url, Path file) {
+        super.downloadExists(url, file);
+        handleSuccessfulDownload(url);
+    }
+
+    @Override
+    public void downloadErrored(URL url, String reason) {
+        downloadLimitTracker.onFailure(url);
+        super.downloadErrored(url, reason);
+    }
+
+    @Override
+    public boolean hasASAPRipping() {
+        return maxDownloadLimitReached;
+    }
+
+    private void handleSuccessfulDownload(URL url) {
+        if (downloadLimitTracker.onSuccess(url)) {
+            maxDownloadLimitReached = true;
+            if (downloadLimitTracker.shouldNotifyLimitReached()) {
+                String message = "Reached max download limit of " + maxDownloads + ". Stopping.";
+                logger.info(message);
+                sendUpdate(STATUS.DOWNLOAD_COMPLETE_HISTORY, message);
+            }
+        }
     }
 }
