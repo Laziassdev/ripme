@@ -99,6 +99,15 @@ public class DownloadLimitTracker {
         return maxDownloads;
     }
 
+    public synchronized int getAvailableSlots() {
+        if (!isEnabled()) {
+            return Integer.MAX_VALUE;
+        }
+        int inFlight = trackedUrls.size();
+        int remaining = maxDownloads - successfulDownloads.get() - inFlight;
+        return Math.max(0, remaining);
+    }
+
     public synchronized boolean shouldNotifyLimitReached() {
         if (!isEnabled() || !isLimitReachedInternal() || limitNotified) {
             return false;

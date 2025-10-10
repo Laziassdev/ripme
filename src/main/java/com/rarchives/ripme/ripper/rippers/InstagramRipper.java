@@ -23,6 +23,8 @@ import java.sql.Connection;
 import java.nio.file.*;
 
 import com.rarchives.ripme.ripper.AbstractJSONRipper;
+import com.rarchives.ripme.ui.RipStatusMessage;
+import com.rarchives.ripme.utils.DownloadLimitTracker;
 import com.rarchives.ripme.utils.Http;
 import com.rarchives.ripme.utils.Utils;
 import org.jsoup.Connection.Response;
@@ -51,6 +53,9 @@ public class InstagramRipper extends AbstractJSONRipper {
     private Map<String, String> cookies = new HashMap<>();
     private boolean hasNextPage = true;
     private String endCursor = null;
+    private final int maxDownloads = Utils.getConfigInteger("maxdownloads", -1);
+    private final DownloadLimitTracker downloadLimitTracker = new DownloadLimitTracker(maxDownloads);
+    private volatile boolean maxDownloadLimitReached = false;
 
     public InstagramRipper(URL url) throws IOException {
         super(url);
@@ -78,7 +83,29 @@ public class InstagramRipper extends AbstractJSONRipper {
 
     @Override
     protected void downloadURL(URL url, int index) {
-        addURLToDownload(url, getPrefix(index));
+        if (!downloadLimitTracker.tryAcquire(url)) {
+            if (downloadLimitTracker.isLimitReached()) {
+                maxDownloadLimitReached = true;
+                hasNextPage = false;
+                if (downloadLimitTracker.shouldNotifyLimitReached()) {
+                    String message = "Reached max download limit of " + maxDownloads + ". Stopping.";
+                    logger.info(message);
+                    sendUpdate(RipStatusMessage.STATUS.DOWNLOAD_COMPLETE_HISTORY, message);
+                }
+            } else {
+                logger.debug("Max download limit of {} currently allocated, deferring {}", maxDownloads, url);
+            }
+            return;
+        }
+
+        boolean added = addURLToDownload(url, getPrefix(index));
+        if (added) {
+            if (Utils.getConfigBoolean("urls_only.save", false)) {
+                handleSuccessfulDownload(url);
+            }
+        } else {
+            downloadLimitTracker.onFailure(url);
+        }
     }
 
     @Override
@@ -413,7 +440,16 @@ public class InstagramRipper extends AbstractJSONRipper {
     @Override
     protected List<String> getURLsFromJSON(JSONObject json) {
         List<String> urls = new ArrayList<>();
-        
+
+        boolean limitActive = downloadLimitTracker.isEnabled();
+        int remainingSlots = limitActive ? downloadLimitTracker.getAvailableSlots() : Integer.MAX_VALUE;
+
+        if (downloadLimitTracker.isLimitReached()) {
+            maxDownloadLimitReached = true;
+            hasNextPage = false;
+            return urls;
+        }
+
         try {
             if (!json.has("data") || !json.getJSONObject("data").has("user")) {
                 throw new RuntimeException("Invalid JSON response format - missing data or user object");
@@ -430,29 +466,47 @@ public class InstagramRipper extends AbstractJSONRipper {
             logger.debug("Found " + edges.length() + " media items");
             
             for (int i = 0; i < edges.length(); i++) {
+                if (limitActive && remainingSlots <= 0) {
+                    break;
+                }
                 JSONObject edge = edges.getJSONObject(i).getJSONObject("node");
-                
+
                 String typename = edge.getString("__typename");
                 switch (typename) {
                     case "GraphImage":
                         // Single image
                         urls.add(edge.getString("display_url"));
+                        if (limitActive) {
+                            remainingSlots--;
+                        }
                         break;
                     case "GraphSidecar":
                         // Multiple images
                         JSONArray sidecarEdges = edge.getJSONObject("edge_sidecar_to_children").getJSONArray("edges");
                         for (int j = 0; j < sidecarEdges.length(); j++) {
+                            if (limitActive && remainingSlots <= 0) {
+                                break;
+                            }
                             JSONObject node = sidecarEdges.getJSONObject(j).getJSONObject("node");
                             urls.add(node.getString("display_url"));
+                            if (limitActive) {
+                                remainingSlots--;
+                            }
                         }
                         break;
                     case "GraphVideo":
                         // Video
+                        if (limitActive && remainingSlots <= 0) {
+                            break;
+                        }
                         if (edge.has("video_url")) {
                             urls.add(edge.getString("video_url"));
                         } else {
                             // Fallback to thumbnail if video URL is not available
-                            urls.add(edge.getString("display_url")); 
+                            urls.add(edge.getString("display_url"));
+                        }
+                        if (limitActive) {
+                            remainingSlots--;
                         }
                         break;
                     default:
@@ -475,17 +529,58 @@ public class InstagramRipper extends AbstractJSONRipper {
             logger.debug("JSON data: " + json.toString(2));
             throw new RuntimeException("Error parsing Instagram response", e);
         }
-        
+
         return urls;
     }
 
     @Override
     protected JSONObject getNextPage(JSONObject json) throws IOException {
+        if (downloadLimitTracker.isLimitReached()) {
+            maxDownloadLimitReached = true;
+            hasNextPage = false;
+            return null;
+        }
+
         if (!hasNextPage) {
             throw new IOException("No more pages");
         }
-        
+
         String username = getGID(url);
         return getGraphQLUserPage(username, endCursor);
+    }
+
+    @Override
+    public void downloadCompleted(URL url, java.nio.file.Path saveAs) {
+        super.downloadCompleted(url, saveAs);
+        handleSuccessfulDownload(url);
+    }
+
+    @Override
+    public void downloadExists(URL url, java.nio.file.Path file) {
+        super.downloadExists(url, file);
+        handleSuccessfulDownload(url);
+    }
+
+    @Override
+    public void downloadErrored(URL url, String reason) {
+        downloadLimitTracker.onFailure(url);
+        super.downloadErrored(url, reason);
+    }
+
+    @Override
+    public boolean hasASAPRipping() {
+        return maxDownloadLimitReached;
+    }
+
+    private void handleSuccessfulDownload(URL url) {
+        if (downloadLimitTracker.onSuccess(url)) {
+            maxDownloadLimitReached = true;
+            hasNextPage = false;
+            if (downloadLimitTracker.shouldNotifyLimitReached()) {
+                String message = "Reached max download limit of " + maxDownloads + ". Stopping.";
+                logger.info(message);
+                sendUpdate(RipStatusMessage.STATUS.DOWNLOAD_COMPLETE_HISTORY, message);
+            }
+        }
     }
 }
