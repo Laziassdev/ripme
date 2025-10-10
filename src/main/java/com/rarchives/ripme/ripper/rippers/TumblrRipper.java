@@ -38,7 +38,9 @@ public class TumblrRipper extends AlbumRipper {
     private static final Logger logger = LogManager.getLogger(TumblrRipper.class);
     private static final int MAX_RETRIES = 5;
     private static final int RETRY_DELAY_SECONDS = 5;
-    private final int maxDownloads = Utils.getConfigInteger("max.downloads", 0); // 0 = no limit
+    private final int maxDownloads = Utils.getConfigInteger(
+            "maxdownloads",
+            Utils.getConfigInteger("max.downloads", 0)); // 0 or below = no limit
     private final DownloadLimitTracker downloadLimitTracker = new DownloadLimitTracker(maxDownloads);
     private final AtomicInteger nextIndex = new AtomicInteger(1);
     private volatile boolean maxDownloadLimitReached = false;
