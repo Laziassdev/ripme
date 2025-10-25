@@ -7,12 +7,17 @@ import java.net.URI;
 import java.net.URISyntaxException;
 import java.net.URL;
 import java.nio.file.Path;
-import java.sql.*;
+import java.time.Instant;
+import java.time.ZoneId;
+import java.time.format.DateTimeFormatter;
 import java.util.Arrays;
 import java.util.HashMap;
+import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Random;
+import java.util.Set;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
@@ -30,6 +35,7 @@ import com.rarchives.ripme.ripper.AlbumRipper;
 import com.rarchives.ripme.ripper.AbstractRipper;
 import com.rarchives.ripme.ui.RipStatusMessage.STATUS;
 import com.rarchives.ripme.utils.DownloadLimitTracker;
+import com.rarchives.ripme.utils.FirefoxCookieUtils;
 import com.rarchives.ripme.utils.Http;
 import com.rarchives.ripme.utils.Utils;
 
@@ -60,60 +66,55 @@ public class TumblrRipper extends AlbumRipper {
     private String subdomain, tagName, postNumber;
 
     private static final String TUMBLR_AUTH_CONFIG_KEY = "tumblr.auth";
+    private static final Pattern HIDDEN_MEDIA_PATTERN = Pattern.compile(
+            "https?://[^\\\"\\s>]+\\.(?:jpg|jpeg|png|gif|bmp|webp|mp4|m4v|webm)(?:\\?[^\\\"\\s]*)?",
+            Pattern.CASE_INSENSITIVE);
+    private static final DateTimeFormatter DASHBOARD_DATE_FORMATTER = DateTimeFormatter.ofPattern("yyyy-MM-dd HH.mm.ss")
+            .withZone(ZoneId.systemDefault());
 
     private static boolean useDefaultApiKey = false; // fall-back for bad user-specified key
     private static String API_KEY = null;
+    private static final Map<String, String> TUMBLR_FIREFOX_COOKIES = new LinkedHashMap<>();
 
-    // Loads all Tumblr cookies from Firefox (Windows), tries all profiles, returns cookie string for HTTP header
+    // Loads Tumblr cookies from Firefox profiles across supported platforms and returns a header-ready string
     private static String getTumblrCookiesFromFirefox() {
-        try {
-            String userHome = System.getProperty("user.home");
-            String profilesIniPath = userHome + "/AppData/Roaming/Mozilla/Firefox/profiles.ini";
-            java.nio.file.Path iniPath = java.nio.file.Paths.get(profilesIniPath);
-            if (!java.nio.file.Files.exists(iniPath)) return null;
-            java.util.List<String> lines = java.nio.file.Files.readAllLines(iniPath);
-            java.util.List<String> profilePaths = new java.util.ArrayList<>();
-            for (String line : lines) {
-                if (line.trim().startsWith("Path=")) {
-                    profilePaths.add(line.trim().substring(5));
-                }
-            }
-            logger.info("Found Firefox profiles: {}", profilePaths);
-            for (String profilePath : profilePaths) {
-                String sqlitePath = userHome + "/AppData/Roaming/Mozilla/Firefox/Profiles/" + profilePath + "/cookies.sqlite";
-                sqlitePath = sqlitePath.replace("Profiles/Profiles/", "Profiles/");
-                logger.info("Trying cookies.sqlite at: {}", sqlitePath);
-                try {
-                    Class.forName("org.sqlite.JDBC");
-                    java.nio.file.Path tempCopy = java.nio.file.Files.createTempFile("cookies", ".sqlite");
-                    java.nio.file.Files.copy(java.nio.file.Paths.get(sqlitePath), tempCopy, java.nio.file.StandardCopyOption.REPLACE_EXISTING);
-                    try (Connection conn = DriverManager.getConnection("jdbc:sqlite:" + tempCopy.toString())) {
-                        String sql = "SELECT name, value FROM moz_cookies WHERE host LIKE '%tumblr.com'";
-                        try (Statement stmt = conn.createStatement(); ResultSet rs = stmt.executeQuery(sql)) {
-                            StringBuilder cookieStr = new StringBuilder();
-                            boolean found = false;
-                            while (rs.next()) {
-                                String name = rs.getString("name");
-                                String value = rs.getString("value");
-                                if (cookieStr.length() > 0) cookieStr.append("; ");
-                                cookieStr.append(name).append("=").append(value);
-                                found = true;
-                            }
-                            if (found) {
-                                logger.info("Found Tumblr cookies in profile {}: {}", profilePath, cookieStr.length() > 16 ? cookieStr.substring(0,8)+"..."+cookieStr.substring(cookieStr.length()-8) : cookieStr.toString());
-                                return cookieStr.toString();
-                            }
-                        }
-                    }
-                    java.nio.file.Files.deleteIfExists(tempCopy);
-                } catch (Exception e) {
-                    logger.warn("Failed to read cookies from profile {}: {}", profilePath, e.getMessage());
-                }
-            }
-        } catch (Exception e) {
-            logger.warn("Error reading Firefox profiles.ini: {}", e.getMessage());
+        if (!FirefoxCookieUtils.isSQLiteDriverAvailable()) {
+            logger.debug("SQLite JDBC driver not available; cannot read Tumblr cookies from Firefox");
+            return null;
         }
-        return null;
+
+        Map<String, String> cookies = new LinkedHashMap<>();
+        synchronized (TUMBLR_FIREFOX_COOKIES) {
+            TUMBLR_FIREFOX_COOKIES.clear();
+        }
+        for (Path profilePath : FirefoxCookieUtils.discoverFirefoxProfiles()) {
+            Map<String, String> profileCookies = FirefoxCookieUtils.readCookiesFromProfile(profilePath,
+                    Arrays.asList("%tumblr.com", "%tumblr.co%"));
+            if (!profileCookies.isEmpty()) {
+                cookies.putAll(profileCookies);
+                logger.info("Loaded {} Tumblr cookies from Firefox profile {}", profileCookies.size(),
+                        profilePath.getFileName());
+                synchronized (TUMBLR_FIREFOX_COOKIES) {
+                    TUMBLR_FIREFOX_COOKIES.putAll(profileCookies);
+                }
+                break;
+            }
+        }
+
+        String header = FirefoxCookieUtils.toCookieHeader(cookies);
+        if (header != null && !header.isEmpty()) {
+            logger.info("Prepared Tumblr cookie header from Firefox ({} bytes)", header.length());
+        } else {
+            logger.debug("No Tumblr cookies discovered in Firefox profiles");
+        }
+
+        return header;
+    }
+
+    private static String getTumblrCookieValue(String name) {
+        synchronized (TUMBLR_FIREFOX_COOKIES) {
+            return TUMBLR_FIREFOX_COOKIES.get(name);
+        }
     }
 
     /**
@@ -257,8 +258,12 @@ public class TumblrRipper extends AlbumRipper {
                         }
                         String responseBody = http.ignoreContentType().get().body().text();
                         if (responseBody.contains("\"code\":4012")) {
-                            logger.error("This Tumblr is only viewable within the Tumblr dashboard. Cannot proceed.");
-                            sendUpdate(STATUS.DOWNLOAD_ERRORED, "Tumblr blog is not accessible via API. Dashboard-only access.");
+                            logger.warn("Tumblr API reported dashboard-only access (4012). Attempting dashboard scraping fallback.");
+                            boolean handledHidden = tryRipHiddenDashboard(tumblrCookies);
+                            if (!handledHidden) {
+                                sendUpdate(STATUS.DOWNLOAD_ERRORED,
+                                        "Tumblr blog is dashboard-only and could not be fetched via fallback.");
+                            }
                             shouldStopRipping = true;
                             break;
                         }
@@ -664,6 +669,219 @@ public class TumblrRipper extends AlbumRipper {
                 logger.info(message);
                 sendUpdate(STATUS.DOWNLOAD_COMPLETE_HISTORY, message);
             }
+        }
+    }
+
+    private boolean tryRipHiddenDashboard(String tumblrCookies) {
+        if (tumblrCookies == null || tumblrCookies.isEmpty()) {
+            logger.warn("Cannot attempt dashboard fallback without Tumblr cookies");
+            return false;
+        }
+
+        String dashboardUrl = "https://www.tumblr.com/dashboard/blog/" + subdomain;
+        try {
+            Http http = Http.url(dashboardUrl).ignoreContentType().userAgent(AbstractRipper.USER_AGENT)
+                    .referrer("https://www.tumblr.com/dashboard")
+                    .header("Cookie", tumblrCookies);
+            String html = http.get().outerHtml();
+            String initialJson = extractInitialStateJson(html);
+            if (initialJson == null || initialJson.isEmpty()) {
+                logger.error("Unable to locate Tumblr dashboard initial state JSON for {}", subdomain);
+                return false;
+            }
+
+            JSONObject root = new JSONObject(initialJson);
+            HiddenPage page = parseHiddenPage(root);
+            if (page == null || page.posts == null) {
+                logger.error("Dashboard JSON for {} did not contain posts", subdomain);
+                return false;
+            }
+
+            String apiUrl = root.optString("apiUrl", "https://www.tumblr.com");
+            JSONObject apiFetchStore = root.optJSONObject("apiFetchStore");
+            String bearerToken = apiFetchStore != null ? apiFetchStore.optString("API_TOKEN", null) : null;
+
+            handleHiddenPosts(page.posts);
+            if (maxDownloadLimitReached || isStopped()) {
+                return true;
+            }
+
+            String nextHref = page.nextHref;
+            while (nextHref != null && !nextHref.isEmpty() && !isStopped() && !maxDownloadLimitReached) {
+                String nextUrl = nextHref.startsWith("http") ? nextHref : apiUrl + nextHref;
+                JSONObject nextRoot = fetchHiddenApiPage(nextUrl, bearerToken, tumblrCookies);
+                if (nextRoot == null) {
+                    break;
+                }
+                HiddenPage nextPage = parseHiddenPage(nextRoot);
+                if (nextPage == null || nextPage.posts == null || nextPage.posts.length() == 0) {
+                    break;
+                }
+                handleHiddenPosts(nextPage.posts);
+                if (maxDownloadLimitReached || isStopped()) {
+                    break;
+                }
+                nextHref = nextPage.nextHref;
+            }
+
+            waitForThreads();
+            return true;
+        } catch (IOException e) {
+            logger.error("Failed to fetch Tumblr dashboard HTML for {}", subdomain, e);
+            return false;
+        }
+    }
+
+    private JSONObject fetchHiddenApiPage(String url, String bearerToken, String tumblrCookies) {
+        try {
+            Http http = Http.url(url).ignoreContentType().userAgent(AbstractRipper.USER_AGENT)
+                    .referrer("https://www.tumblr.com/dashboard/blog/" + subdomain)
+                    .header("Cookie", tumblrCookies);
+            String formKey = getTumblrCookieValue("form_key");
+            if (formKey != null && !formKey.isEmpty()) {
+                http = http.header("X-Tumblr-Form-Key", formKey);
+            }
+            if (bearerToken != null && !bearerToken.isEmpty()) {
+                http = http.header("Authorization", "Bearer " + bearerToken);
+            }
+            String body = http.get().body().text();
+            return new JSONObject(body);
+        } catch (IOException e) {
+            logger.warn("Failed to fetch Tumblr dashboard API page {}", url, e);
+        }
+        return null;
+    }
+
+    private HiddenPage parseHiddenPage(JSONObject root) {
+        if (root == null) {
+            return null;
+        }
+
+        JSONArray posts = null;
+        String nextHref = null;
+
+        if (root.has("PeeprRoute")) {
+            JSONObject peeprRoute = root.optJSONObject("PeeprRoute");
+            if (peeprRoute != null) {
+                JSONObject initialTimeline = peeprRoute.optJSONObject("initialTimeline");
+                if (initialTimeline != null) {
+                    posts = initialTimeline.optJSONArray("objects");
+                    JSONObject nextLink = initialTimeline.optJSONObject("nextLink");
+                    if (nextLink != null) {
+                        nextHref = nextLink.optString("href", null);
+                    }
+                }
+            }
+        }
+
+        if (posts == null && root.has("response")) {
+            JSONObject response = root.optJSONObject("response");
+            if (response != null) {
+                posts = response.optJSONArray("posts");
+                JSONObject links = response.optJSONObject("_links");
+                if (links != null) {
+                    JSONObject next = links.optJSONObject("next");
+                    if (next != null) {
+                        nextHref = next.optString("href", null);
+                    }
+                }
+            }
+        }
+
+        return new HiddenPage(posts, nextHref);
+    }
+
+    private void handleHiddenPosts(JSONArray posts) {
+        if (posts == null) {
+            return;
+        }
+        for (int i = 0; i < posts.length(); i++) {
+            if (isStopped() || maxDownloadLimitReached) {
+                break;
+            }
+
+            JSONObject post = posts.optJSONObject(i);
+            if (post == null) {
+                continue;
+            }
+
+            String dateLabel = post.optString("date", "");
+            if (dateLabel.isEmpty()) {
+                long timestamp = post.optLong("timestamp", 0L);
+                if (timestamp > 0) {
+                    dateLabel = DASHBOARD_DATE_FORMATTER.format(Instant.ofEpochSecond(timestamp));
+                }
+            }
+
+            Set<String> mediaUrls = extractHiddenMediaUrls(post);
+            if (mediaUrls.isEmpty()) {
+                continue;
+            }
+
+            for (String mediaUrl : mediaUrls) {
+                if (isStopped() || maxDownloadLimitReached) {
+                    break;
+                }
+                try {
+                    URL url = new URI(mediaUrl).toURL();
+                    downloadURL(url, dateLabel);
+                } catch (MalformedURLException | URISyntaxException e) {
+                    logger.debug("Skipping malformed Tumblr media URL {}", mediaUrl, e);
+                }
+            }
+        }
+    }
+
+    private Set<String> extractHiddenMediaUrls(JSONObject post) {
+        Set<String> urls = new LinkedHashSet<>();
+        String raw = post.toString();
+        Matcher matcher = HIDDEN_MEDIA_PATTERN.matcher(raw);
+        while (matcher.find()) {
+            String url = matcher.group();
+            if (url == null || url.isEmpty()) {
+                continue;
+            }
+            String cleaned = url.replace("\\/", "/").replace("\\u002F", "/").replace("\\u0026", "&");
+            urls.add(cleaned);
+        }
+        if (post.has("trail")) {
+            JSONArray trails = post.optJSONArray("trail");
+            if (trails != null) {
+                for (int i = 0; i < trails.length(); i++) {
+                    JSONObject trail = trails.optJSONObject(i);
+                    if (trail != null) {
+                        urls.addAll(extractHiddenMediaUrls(trail));
+                    }
+                }
+            }
+        }
+        return urls;
+    }
+
+    private String extractInitialStateJson(String html) {
+        if (html == null) {
+            return null;
+        }
+        Matcher matcher = Pattern.compile("window\\['___INITIAL_STATE___'\\]\\s*=\\s*(\\{.*?\\});", Pattern.DOTALL)
+                .matcher(html);
+        if (matcher.find()) {
+            return matcher.group(1);
+        }
+        matcher = Pattern.compile("id=\"___INITIAL_STATE___\">\\s*(\\{.*?\\})\\s*</script>", Pattern.DOTALL)
+                .matcher(html);
+        if (matcher.find()) {
+            return matcher.group(1);
+        }
+        return null;
+    }
+
+    private static class HiddenPage {
+        final JSONArray posts;
+        final String nextHref;
+
+        HiddenPage(JSONArray posts, String nextHref) {
+            this.posts = posts;
+            this.nextHref = nextHref;
         }
     }
 
