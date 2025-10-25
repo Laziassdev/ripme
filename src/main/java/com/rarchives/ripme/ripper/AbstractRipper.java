@@ -14,12 +14,17 @@ import java.net.URL;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
+import java.nio.file.StandardOpenOption;
 import java.util.ArrayList;
+import java.util.Collections;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Observable;
 import java.util.Random;
 import java.util.Scanner;
+import java.util.Set;
+import java.util.stream.Stream;
 import java.util.concurrent.atomic.AtomicBoolean;
 
 import org.apache.logging.log4j.LogManager;
@@ -46,6 +51,7 @@ public abstract class AbstractRipper
 
     private static final Logger logger = LogManager.getLogger(AbstractRipper.class);
     private final String URLHistoryFile = Utils.getURLHistoryFile();
+    private final String hashHistoryFile = Utils.getHashHistoryFile();
 
     public static final String USER_AGENT = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/134.0.0.0 Safari/537.36";
 
@@ -72,6 +78,10 @@ public abstract class AbstractRipper
     public int alreadyDownloadedUrls = 0;
     private final AtomicBoolean shouldStop = new AtomicBoolean(false);
     private static boolean thisIsATest = false;
+
+    private final Set<String> knownHashes = Collections.synchronizedSet(new HashSet<>());
+    private volatile boolean hashHistoryLoaded = false;
+    private final Object hashHistoryLock = new Object();
 
     public void stop() {
         logger.trace("stop()");
@@ -139,6 +149,65 @@ public abstract class AbstractRipper
                 ex.printStackTrace();
             }
         }
+    }
+
+    private void ensureHashHistoryLoaded() {
+        if (hashHistoryLoaded) {
+            return;
+        }
+        synchronized (hashHistoryLock) {
+            if (hashHistoryLoaded) {
+                return;
+            }
+            Path historyPath = Paths.get(hashHistoryFile);
+            if (Files.exists(historyPath)) {
+                try (Stream<String> lines = Files.lines(historyPath)) {
+                    lines.map(String::trim)
+                            .filter(line -> !line.isEmpty())
+                            .forEach(knownHashes::add);
+                } catch (IOException e) {
+                    logger.warn("Failed to load hash history from {}: {}", historyPath, e.getMessage());
+                }
+            }
+            hashHistoryLoaded = true;
+        }
+    }
+
+    private void writeDownloadedHash(String hash) {
+        synchronized (hashHistoryLock) {
+            Path historyPath = Paths.get(hashHistoryFile);
+            try {
+                if (historyPath.getParent() != null) {
+                    Files.createDirectories(historyPath.getParent());
+                }
+                Files.writeString(historyPath, hash + System.lineSeparator(),
+                        StandardOpenOption.CREATE, StandardOpenOption.APPEND);
+            } catch (IOException e) {
+                logger.warn("Failed to append hash {} to {}: {}", hash, historyPath, e.getMessage());
+            }
+        }
+    }
+
+    public boolean registerDownloadHash(Path file) {
+        if (Utils.getConfigBoolean("download.allow_duplicates", false)) {
+            return true;
+        }
+        ensureHashHistoryLoaded();
+        String hash;
+        try {
+            hash = Utils.sha256(file);
+        } catch (IOException | IllegalStateException e) {
+            logger.warn("Unable to hash {}: {}", Utils.removeCWD(file), e.getMessage());
+            return true;
+        }
+        synchronized (hashHistoryLock) {
+            if (knownHashes.contains(hash)) {
+                return false;
+            }
+            knownHashes.add(hash);
+            writeDownloadedHash(hash);
+        }
+        return true;
     }
 
     /**

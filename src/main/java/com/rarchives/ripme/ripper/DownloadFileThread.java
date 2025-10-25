@@ -300,6 +300,14 @@ class DownloadFileThread implements Runnable {
                     observer.downloadErrored(url, "File smaller than 10KB (deleted)");
                     return;
                 }
+                if (!shouldSkipFileDownload && !observer.registerDownloadHash(saveAs.toPath())) {
+                    logger.warn("[!] Deleting {} because its hash matches a previously downloaded file", prettySaveAs);
+                    if (!saveAs.delete()) {
+                        logger.warn("[!] Failed to delete duplicate file {}", saveAs.getAbsolutePath());
+                    }
+                    observer.downloadErrored(url, "Duplicate file (deleted)");
+                    return;
+                }
                 break; // Download successful: break out of infinite loop
             } catch (SocketTimeoutException timeoutEx) {
                 // Handle the timeout

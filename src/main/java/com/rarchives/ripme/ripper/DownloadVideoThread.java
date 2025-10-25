@@ -120,6 +120,16 @@ class DownloadVideoThread implements Runnable {
                 }
                 bis.close();
                 fos.close();
+                if (!observer.registerDownloadHash(saveAs)) {
+                    logger.warn("[!] Deleting {} because its hash matches a previously downloaded file", prettySaveAs);
+                    try {
+                        Files.deleteIfExists(saveAs);
+                    } catch (IOException e) {
+                        logger.warn("[!] Failed to delete duplicate file {}: {}", saveAs, e.getMessage());
+                    }
+                    observer.downloadErrored(url, "Duplicate file (deleted)");
+                    return;
+                }
                 break; // Download successful: break out of infinite loop
             } catch (IOException e) {
                 logger.error("[!] Exception while downloading file: " + url + " - " + e.getMessage(), e);

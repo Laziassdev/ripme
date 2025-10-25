@@ -3,6 +3,7 @@ package com.rarchives.ripme.utils;
 import java.io.File;
 import java.io.FileNotFoundException;
 import java.io.IOException;
+import java.io.InputStream;
 import java.lang.reflect.Constructor;
 import java.net.URI;
 import java.net.URISyntaxException;
@@ -31,6 +32,9 @@ import java.util.jar.JarEntry;
 import java.util.jar.JarFile;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
+import java.security.DigestInputStream;
+import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
 
 import javax.sound.sampled.AudioSystem;
 import javax.sound.sampled.Clip;
@@ -308,6 +312,17 @@ public class Utils {
     }
 
     /**
+     * Return the path of the hash history file
+     */
+    public static String getHashHistoryFile() {
+        String configuredLocation = getConfigString("hashhistory.location", "");
+        if (configuredLocation.isEmpty()) {
+            return getConfigDir() + File.separator + "hash_history.txt";
+        }
+        return configuredLocation;
+    }
+
+    /**
      * Return the path of the url history file
      */
     public static String getURLHistoryFile() {
@@ -316,6 +331,37 @@ public class Utils {
         } else {
             return getConfigString("history.location", "");
         }
+    }
+
+    /**
+     * Calculates the SHA-256 hash of a file and returns it as a hex string.
+     *
+     * @param path Path to the file that should be hashed.
+     * @return Hex encoded SHA-256 hash value.
+     * @throws IOException If the file cannot be read.
+     */
+    public static String sha256(Path path) throws IOException {
+        MessageDigest digest;
+        try {
+            digest = MessageDigest.getInstance("SHA-256");
+        } catch (NoSuchAlgorithmException e) {
+            throw new IllegalStateException("SHA-256 not available", e);
+        }
+
+        try (InputStream inputStream = Files.newInputStream(path);
+                DigestInputStream digestStream = new DigestInputStream(inputStream, digest)) {
+            byte[] buffer = new byte[8192];
+            while (digestStream.read(buffer) != -1) {
+                // Reading the stream updates the digest automatically.
+            }
+        }
+
+        byte[] hash = digest.digest();
+        StringBuilder builder = new StringBuilder(hash.length * 2);
+        for (byte b : hash) {
+            builder.append(String.format("%02x", b));
+        }
+        return builder.toString();
     }
 
     /**
