@@ -1,7 +1,7 @@
 {
-  "latestVersion": "2.1.134-1-7724bcd",
-  "currentHash": "87f0795fb1498c86888d393aa882e91c1c9a8df117d0382fa18e0da3680a257f",
+  "latestVersion": "2.1.135-1-b73e106",
+  "currentHash": "d40e0a30c481a50ca1388bbe36bb240d2859d6057d475ed6a5771539e2c12bfc",
   "changeList": [
-    "2.1.134-1-7724bcd: Merge pull request #51 from Laziassdev/codex/ensure-maxdownloads-limit-in-tumblr-ripper", "2.1.134-1-7724bcd: Built at 2025-10-25T17:29:50Z"
+    "2.1.135-1-b73e106: Merge pull request #52 from Laziassdev/codex/ensure-maxdownloads-limit-in-tumblr-ripper", "2.1.135-1-b73e106: Built at 2025-10-25T17:43:20Z"
   ]
 }
