@@ -6,6 +6,8 @@ import java.net.MalformedURLException;
 import java.net.URI;
 import java.net.URISyntaxException;
 import java.net.URL;
+import java.net.URLDecoder;
+import java.io.UnsupportedEncodingException;
 import java.nio.file.Path;
 import java.time.Instant;
 import java.time.ZoneId;
@@ -24,6 +26,7 @@ import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 import org.apache.commons.lang.StringUtils;
+import org.apache.commons.lang.StringEscapeUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.json.JSONArray;
@@ -732,7 +735,7 @@ public class TumblrRipper extends AlbumRipper {
             Http http = Http.url(dashboardUrl).ignoreContentType().userAgent(AbstractRipper.USER_AGENT)
                     .referrer("https://www.tumblr.com/dashboard")
                     .header("Cookie", tumblrCookies);
-            String html = http.get().outerHtml();
+            String html = http.response().body();
             String initialJson = extractInitialStateJson(html);
             if (initialJson == null || initialJson.isEmpty()) {
                 logger.error("Unable to locate Tumblr dashboard initial state JSON for {}", subdomain);
@@ -921,7 +924,36 @@ public class TumblrRipper extends AlbumRipper {
         if (matcher.find()) {
             return matcher.group(1);
         }
+        matcher = Pattern.compile(
+                "window\\['___INITIAL_STATE___'\\]\\s*=\\s*JSON\\.parse\\((?:\\\"|\\')?(.*?)(?:\\\"|\\')?\\);",
+                Pattern.DOTALL)
+                .matcher(html);
+        if (matcher.find()) {
+            return decodeInitialStateJson(matcher.group(1), false);
+        }
+        matcher = Pattern.compile(
+                "window\\['___INITIAL_STATE___'\\]\\s*=\\s*JSON\\.parse\\(decodeURIComponent\\((?:\\\"|\\')?(.*?)(?:\\\"|\\')?\\)\\)\\);",
+                Pattern.DOTALL)
+                .matcher(html);
+        if (matcher.find()) {
+            return decodeInitialStateJson(matcher.group(1), true);
+        }
         return null;
+    }
+
+    private String decodeInitialStateJson(String encoded, boolean uriDecoded) {
+        if (encoded == null) {
+            return null;
+        }
+        String unescaped = StringEscapeUtils.unescapeJavaScript(encoded);
+        if (uriDecoded) {
+            try {
+                unescaped = URLDecoder.decode(unescaped, "UTF-8");
+            } catch (IllegalArgumentException | UnsupportedEncodingException e) {
+                logger.warn("Failed to URL decode Tumblr initial state JSON", e);
+            }
+        }
+        return unescaped;
     }
 
     private static class HiddenPage {
