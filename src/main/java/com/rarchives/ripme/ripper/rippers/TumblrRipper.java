@@ -251,11 +251,31 @@ public class TumblrRipper extends AlbumRipper {
                     String response = Http.getWith429Retry(new URL(apiURL), MAX_RETRIES, RETRY_DELAY_SECONDS, AbstractRipper.USER_AGENT, headers);
                     json = new JSONObject(response);
                 } catch (IOException e) {
+                    HttpStatusException statusException = e instanceof HttpStatusException
+                            ? (HttpStatusException) e
+                            : null;
+                    int statusCode = statusException != null ? statusException.getStatusCode() : -1;
+
+                    if (statusCode == 404 || statusCode == 410) {
+                        logger.warn("Tumblr API returned {} for {}. Attempting dashboard fallback if possible.", statusCode,
+                                apiURL);
+                        boolean handledHidden = tumblrCookies != null && !tumblrCookies.isEmpty()
+                                && tryRipHiddenDashboard(tumblrCookies);
+                        if (!handledHidden) {
+                            logger.error("Tumblr blog does not exist or is private. Exiting.");
+                            sendUpdate(STATUS.DOWNLOAD_ERRORED,
+                                    "Tumblr blog not found (" + statusCode + "): " + apiURL);
+                        }
+                        shouldStopRipping = true;
+                        break;
+                    }
+
                     try {
                         Http http = Http.url(apiURL);
                         if (tumblrCookies != null && !tumblrCookies.isEmpty()) {
                             http = http.header("Cookie", tumblrCookies);
                         }
+                        http.connection().ignoreHttpErrors(true);
                         String responseBody = http.ignoreContentType().get().body().text();
                         if (responseBody.contains("\"code\":4012")) {
                             logger.warn("Tumblr API reported dashboard-only access (4012). Attempting dashboard scraping fallback.");
@@ -270,7 +290,7 @@ public class TumblrRipper extends AlbumRipper {
                         if (responseBody.contains("\"status\":404") || responseBody.contains("\"msg\":\"Not Found\"")) {
                             logger.error("Tumblr blog does not exist or is private. Exiting.");
                             sendUpdate(STATUS.DOWNLOAD_ERRORED, "Tumblr blog not found (404): " + apiURL);
-                            shouldStopRipping = false;
+                            shouldStopRipping = true;
                             break;
                         }
                         logger.error("Failed to fetch Tumblr API JSON. Raw body: " + responseBody);
@@ -502,7 +522,7 @@ public class TumblrRipper extends AlbumRipper {
     private String getTumblrApiURL(String mediaType, int offset) {
         StringBuilder sb = new StringBuilder();
         if (albumType == ALBUM_TYPE.LIKED) {
-            sb.append("http://api.tumblr.com/v2/blog/")
+            sb.append("https://api.tumblr.com/v2/blog/")
                     .append(subdomain)
                     .append("/likes")
                     .append("?api_key=")
@@ -512,7 +532,7 @@ public class TumblrRipper extends AlbumRipper {
             return sb.toString();
         }
         if (albumType == ALBUM_TYPE.POST) {
-            sb.append("http://api.tumblr.com/v2/blog/")
+            sb.append("https://api.tumblr.com/v2/blog/")
                     .append(subdomain)
                     .append("/posts?id=")
                     .append(postNumber)
@@ -520,7 +540,7 @@ public class TumblrRipper extends AlbumRipper {
                     .append(getApiKey());
             return sb.toString();
         }
-        sb.append("http://api.tumblr.com/v2/blog/")
+        sb.append("https://api.tumblr.com/v2/blog/")
                 .append(subdomain)
                 .append("/posts/")
                 .append(mediaType)
@@ -652,7 +672,7 @@ public class TumblrRipper extends AlbumRipper {
     @Override
     public void downloadExists(URL url, Path file) {
         super.downloadExists(url, file);
-        handleSuccessfulDownload(url);
+        downloadLimitTracker.onFailure(url);
     }
 
     @Override
