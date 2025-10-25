@@ -1,7 +1,7 @@
 {
-  "latestVersion": "2.1.131-1-43fc55d",
-  "currentHash": "cad3fd5b29cd1cccf9d6d6e2b0bf603b35a60d601030aad21811fcff0c8ca14c",
+  "latestVersion": "2.1.132-1-5cceafc",
+  "currentHash": "1d11e154bb3b974ae67cd71e95997fd5cc1671543ce3ce6f02a227b6612395a7",
   "changeList": [
-    "2.1.131-1-43fc55d: Merge pull request #48 from Laziassdev/codex/fix-ripper-not-found-error", "2.1.131-1-43fc55d: Built at 2025-10-25T16:08:48Z"
+    "2.1.132-1-5cceafc: Merge pull request #49 from Laziassdev/codex/update-twitter-and-tumblr-rippers", "2.1.132-1-5cceafc: Built at 2025-10-25T16:41:22Z"
   ]
 }
