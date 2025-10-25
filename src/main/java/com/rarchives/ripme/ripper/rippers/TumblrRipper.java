@@ -11,6 +11,7 @@ import java.time.Instant;
 import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
 import java.util.Arrays;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
@@ -72,8 +73,15 @@ public class TumblrRipper extends AlbumRipper {
     private static final DateTimeFormatter DASHBOARD_DATE_FORMATTER = DateTimeFormatter.ofPattern("yyyy-MM-dd HH.mm.ss")
             .withZone(ZoneId.systemDefault());
 
+    private static final String LEGACY_DEFAULT_API_KEY = "JFNLu3CbINQjRdUvZibXW9VpSEVYYtiPJ86o8YmvgLZIoKyuNX";
+    private static final List<String> DEFAULT_API_KEYS = Collections
+            .unmodifiableList(Arrays.asList(
+                    LEGACY_DEFAULT_API_KEY,
+                    "FQrwZMCxVnzonv90rgNUJcAk4FpnoS0mYuSuGYqIpM2cFgp9L4",
+                    "qpdkY6nMknksfvYAhf2xIHp0iNRLkMlcWShxqzXyFJRxIsZ1Zz"));
     private static boolean useDefaultApiKey = false; // fall-back for bad user-specified key
     private static String API_KEY = null;
+    private volatile String lastRequestedApiKey;
     private static final Map<String, String> TUMBLR_FIREFOX_COOKIES = new LinkedHashMap<>();
 
     // Loads Tumblr cookies from Firefox profiles across supported platforms and returns a header-ready string
@@ -131,23 +139,20 @@ public class TumblrRipper extends AlbumRipper {
             API_KEY = pickRandomApiKey();
         }
 
-        if (useDefaultApiKey || Utils.getConfigString(TUMBLR_AUTH_CONFIG_KEY, "JFNLu3CbINQjRdUvZibXW9VpSEVYYtiPJ86o8YmvgLZIoKyuNX").equals("JFNLu3CbINQjRdUvZibXW9VpSEVYYtiPJ86o8YmvgLZIoKyuNX")) {
+        String configuredApiKey = Utils.getConfigString(TUMBLR_AUTH_CONFIG_KEY, LEGACY_DEFAULT_API_KEY);
+        if (useDefaultApiKey || DEFAULT_API_KEYS.contains(configuredApiKey)) {
             logger.info("Using api key: " + API_KEY);
             return API_KEY;
         } else {
-            String userDefinedAPIKey = Utils.getConfigString(TUMBLR_AUTH_CONFIG_KEY, "JFNLu3CbINQjRdUvZibXW9VpSEVYYtiPJ86o8YmvgLZIoKyuNX");
-            logger.info("Using user tumblr.auth api key: " + userDefinedAPIKey);
-            return userDefinedAPIKey;
+            logger.info("Using user tumblr.auth api key: " + configuredApiKey);
+            return configuredApiKey;
         }
     }
 
     private static String pickRandomApiKey() {
-        final List<String> APIKEYS = Arrays.asList("JFNLu3CbINQjRdUvZibXW9VpSEVYYtiPJ86o8YmvgLZIoKyuNX",
-                "FQrwZMCxVnzonv90rgNUJcAk4FpnoS0mYuSuGYqIpM2cFgp9L4",
-                "qpdkY6nMknksfvYAhf2xIHp0iNRLkMlcWShxqzXyFJRxIsZ1Zz");
-        int genNum = new Random().nextInt(APIKEYS.size());
+        int genNum = new Random().nextInt(DEFAULT_API_KEYS.size());
         logger.info(genNum);
-        final String API_KEY = APIKEYS.get(genNum); // Select random API key from APIKEYS
+        final String API_KEY = DEFAULT_API_KEYS.get(genNum); // Select random API key from APIKEYS
         return API_KEY;
     }
 
@@ -240,7 +245,6 @@ public class TumblrRipper extends AlbumRipper {
                 sendUpdate(STATUS.LOADING_RESOURCE, apiURL);
 
                 JSONObject json = null;
-                boolean retry = false;
 
                 try {
                     Map<String,String> headers = null;
@@ -251,59 +255,83 @@ public class TumblrRipper extends AlbumRipper {
                     String response = Http.getWith429Retry(new URL(apiURL), MAX_RETRIES, RETRY_DELAY_SECONDS, AbstractRipper.USER_AGENT, headers);
                     json = new JSONObject(response);
                 } catch (IOException e) {
-                    try {
-                        Http http = Http.url(apiURL);
-                        if (tumblrCookies != null && !tumblrCookies.isEmpty()) {
-                            http = http.header("Cookie", tumblrCookies);
-                        }
-                        String responseBody = http.ignoreContentType().get().body().text();
-                        if (responseBody.contains("\"code\":4012")) {
-                            logger.warn("Tumblr API reported dashboard-only access (4012). Attempting dashboard scraping fallback.");
-                            boolean handledHidden = tryRipHiddenDashboard(tumblrCookies);
-                            if (!handledHidden) {
-                                sendUpdate(STATUS.DOWNLOAD_ERRORED,
-                                        "Tumblr blog is dashboard-only and could not be fetched via fallback.");
-                            }
-                            shouldStopRipping = true;
-                            break;
-                        }
-                        if (responseBody.contains("\"status\":404") || responseBody.contains("\"msg\":\"Not Found\"")) {
+                    HttpStatusException statusException = e instanceof HttpStatusException
+                            ? (HttpStatusException) e
+                            : null;
+                    int statusCode = statusException != null ? statusException.getStatusCode() : -1;
+                    String responseBody = fetchErrorBody(apiURL, tumblrCookies);
+
+                    if (statusCode == 404 || statusCode == 410) {
+                        logger.warn("Tumblr API returned {} for {}. Attempting dashboard fallback if possible.", statusCode,
+                                apiURL);
+                        boolean handledHidden = tumblrCookies != null && !tumblrCookies.isEmpty()
+                                && tryRipHiddenDashboard(tumblrCookies);
+                        if (!handledHidden) {
                             logger.error("Tumblr blog does not exist or is private. Exiting.");
-                            sendUpdate(STATUS.DOWNLOAD_ERRORED, "Tumblr blog not found (404): " + apiURL);
-                            shouldStopRipping = false;
-                            break;
+                            sendUpdate(STATUS.DOWNLOAD_ERRORED,
+                                    "Tumblr blog not found (" + statusCode + "): " + apiURL);
                         }
-                        logger.error("Failed to fetch Tumblr API JSON. Raw body: " + responseBody);
-                    } catch (Exception ex) {
-                        logger.warn("Couldn't fetch or parse raw response body", ex);
-                        sendUpdate(STATUS.DOWNLOAD_ERRORED, "Failed to parse error response from Tumblr");
                         shouldStopRipping = true;
                         break;
                     }
-                    continue;
-                }
 
-                if (retry) {
-                    useDefaultApiKey = true;
-                    String apiKey = getApiKey();
-
-                    String message = "401 Unauthorized. Will retry with default Tumblr API key: " + apiKey;
-                    logger.info(message);
-                    sendUpdate(STATUS.DOWNLOAD_WARN, message);
-
-                    Utils.setConfigString(TUMBLR_AUTH_CONFIG_KEY, apiKey); // save the default key to the config
-
-                    // retry loading the JSON
-
-                    apiURL = getTumblrApiURL(mediaType, offset);
-                    logger.info("Retrieving " + apiURL);
-                    sendUpdate(STATUS.LOADING_RESOURCE, apiURL);
-
-                    Http http = Http.url(apiURL);
-                    if (tumblrCookies != null && !tumblrCookies.isEmpty()) {
-                        http = http.header("Cookie", tumblrCookies);
+                    if (responseBody != null && responseBody.contains("\"code\":4012")) {
+                        logger.warn("Tumblr API reported dashboard-only access (4012). Attempting dashboard scraping fallback.");
+                        boolean handledHidden = tumblrCookies != null && !tumblrCookies.isEmpty()
+                                && tryRipHiddenDashboard(tumblrCookies);
+                        if (!handledHidden) {
+                            sendUpdate(STATUS.DOWNLOAD_ERRORED,
+                                    "Tumblr blog is dashboard-only and could not be fetched via fallback.");
+                        }
+                        shouldStopRipping = true;
+                        break;
                     }
-                    json = http.getJSON();
+
+                    if (statusCode == 401) {
+                        if (!isDefaultApiKeyInUse()) {
+                            String message = "401 Unauthorized from Tumblr API. Retrying with bundled key.";
+                            if (responseBody != null && !responseBody.isEmpty()) {
+                                logger.warn("{} Raw body: {}", message, responseBody);
+                            } else {
+                                logger.warn(message, e);
+                            }
+                            sendUpdate(STATUS.DOWNLOAD_WARN, message);
+                            useDefaultApiKey = true;
+                            continue;
+                        }
+
+                        if (responseBody != null && !responseBody.isEmpty()) {
+                            logger.error("Failed to fetch Tumblr API JSON. Raw body: " + responseBody);
+                        } else {
+                            logger.error("Failed to fetch Tumblr API JSON from " + apiURL, e);
+                        }
+
+                        boolean handledHidden = tumblrCookies != null && !tumblrCookies.isEmpty()
+                                && tryRipHiddenDashboard(tumblrCookies);
+                        if (!handledHidden) {
+                            sendUpdate(STATUS.DOWNLOAD_ERRORED,
+                                    "Unauthorized to fetch Tumblr API data. Provide a valid API key or Tumblr cookies.");
+                        }
+                        shouldStopRipping = true;
+                        break;
+                    }
+
+                    if (responseBody != null && (responseBody.contains("\"status\":404")
+                            || responseBody.contains("\"msg\":\"Not Found\""))) {
+                        logger.error("Tumblr blog does not exist or is private. Exiting.");
+                        sendUpdate(STATUS.DOWNLOAD_ERRORED, "Tumblr blog not found (404): " + apiURL);
+                        shouldStopRipping = true;
+                        break;
+                    }
+
+                    if (responseBody != null && !responseBody.isEmpty()) {
+                        logger.error("Failed to fetch Tumblr API JSON. Raw body: " + responseBody);
+                    } else {
+                        logger.error("Failed to fetch Tumblr API JSON from " + apiURL, e);
+                    }
+                    sendUpdate(STATUS.DOWNLOAD_ERRORED, "Failed to fetch JSON from Tumblr API: " + apiURL);
+                    shouldStopRipping = true;
+                    break;
                 }
 
                 try {
@@ -501,31 +529,34 @@ public class TumblrRipper extends AlbumRipper {
 
     private String getTumblrApiURL(String mediaType, int offset) {
         StringBuilder sb = new StringBuilder();
+        String apiKey = getApiKey();
+        lastRequestedApiKey = apiKey;
+
         if (albumType == ALBUM_TYPE.LIKED) {
-            sb.append("http://api.tumblr.com/v2/blog/")
+            sb.append("https://api.tumblr.com/v2/blog/")
                     .append(subdomain)
                     .append("/likes")
                     .append("?api_key=")
-                    .append(getApiKey())
+                    .append(apiKey)
                     .append("&offset=")
                     .append(offset);
             return sb.toString();
         }
         if (albumType == ALBUM_TYPE.POST) {
-            sb.append("http://api.tumblr.com/v2/blog/")
+            sb.append("https://api.tumblr.com/v2/blog/")
                     .append(subdomain)
                     .append("/posts?id=")
                     .append(postNumber)
                     .append("&api_key=")
-                    .append(getApiKey());
+                    .append(apiKey);
             return sb.toString();
         }
-        sb.append("http://api.tumblr.com/v2/blog/")
+        sb.append("https://api.tumblr.com/v2/blog/")
                 .append(subdomain)
                 .append("/posts/")
                 .append(mediaType)
                 .append("?api_key=")
-                .append(getApiKey())
+                .append(apiKey)
                 .append("&offset=")
                 .append(offset);
         if (albumType == ALBUM_TYPE.TAG) {
@@ -652,7 +683,7 @@ public class TumblrRipper extends AlbumRipper {
     @Override
     public void downloadExists(URL url, Path file) {
         super.downloadExists(url, file);
-        handleSuccessfulDownload(url);
+        downloadLimitTracker.onFailure(url);
     }
 
     @Override
@@ -669,6 +700,24 @@ public class TumblrRipper extends AlbumRipper {
                 logger.info(message);
                 sendUpdate(STATUS.DOWNLOAD_COMPLETE_HISTORY, message);
             }
+        }
+    }
+
+    private boolean isDefaultApiKeyInUse() {
+        return lastRequestedApiKey == null || DEFAULT_API_KEYS.contains(lastRequestedApiKey);
+    }
+
+    private String fetchErrorBody(String apiURL, String tumblrCookies) {
+        try {
+            Http http = Http.url(apiURL);
+            if (tumblrCookies != null && !tumblrCookies.isEmpty()) {
+                http = http.header("Cookie", tumblrCookies);
+            }
+            http.connection().ignoreHttpErrors(true);
+            return http.ignoreContentType().get().body().text();
+        } catch (Exception ex) {
+            logger.warn("Couldn't fetch or parse raw response body", ex);
+            return null;
         }
     }
 
