@@ -1,7 +1,7 @@
 {
-  "latestVersion": "2.1.129-1-bd2f1d8",
-  "currentHash": "ef63aec4840769b7331d9b16c7a333ffb653dc3a68f59f378d672d6be32494d7",
+  "latestVersion": "2.1.130-1-06cda8d",
+  "currentHash": "1572a17f8c935156babd3bf0fcfb104adb8ed817eb85b42fb5127258ba7ed20c",
   "changeList": [
-    "2.1.129-1-bd2f1d8: Merge pull request #46 from Laziassdev/codex/fix-ioexception-for-twitter-api-access", "2.1.129-1-bd2f1d8: Built at 2025-10-25T15:39:59Z"
+    "2.1.130-1-06cda8d: Merge pull request #47 from Laziassdev/codex/fix-ioexception-for-twitter-api-access", "2.1.130-1-06cda8d: Built at 2025-10-25T16:00:37Z"
   ]
 }
