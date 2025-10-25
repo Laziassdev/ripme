@@ -1,7 +1,7 @@
 {
-  "latestVersion": "2.1.138-1-9680661",
-  "currentHash": "0e98cb10128645fba060fad55684389c2a1678868ddbfd9470772487d02597cd",
+  "latestVersion": "2.1.139-1-e259b6b",
+  "currentHash": "f0ec03cad59da8311a543297afc958ca165f5dedef619219534602e4c3953912",
   "changeList": [
-    "2.1.138-1-9680661: Merge pull request #55 from Laziassdev/codex/investigate-tumblrripper-404-errors", "2.1.138-1-9680661: Built at 2025-10-25T22:55:53Z"
+    "2.1.139-1-e259b6b: Merge pull request #56 from Laziassdev/codex/investigate-tumblrripper-404-errors", "2.1.139-1-e259b6b: Built at 2025-10-25T23:23:18Z"
   ]
 }
