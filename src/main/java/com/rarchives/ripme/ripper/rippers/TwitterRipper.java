@@ -5,10 +5,8 @@ import java.net.MalformedURLException;
 import java.net.URI;
 import java.net.URL;
 import java.net.URISyntaxException;
-import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.nio.file.Paths;
 import java.nio.file.StandardCopyOption;
 import java.sql.Connection;
 import java.sql.DriverManager;
@@ -16,7 +14,6 @@ import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Statement;
 import java.util.ArrayList;
-import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
 import java.util.regex.Matcher;
@@ -32,6 +29,7 @@ import org.jsoup.HttpStatusException;
 import org.jsoup.nodes.Document;
 
 import com.rarchives.ripme.ripper.AbstractJSONRipper;
+import com.rarchives.ripme.utils.FirefoxCookieUtils;
 import com.rarchives.ripme.utils.Http;
 import com.rarchives.ripme.utils.Utils;
 
@@ -406,14 +404,12 @@ public class TwitterRipper extends AbstractJSONRipper {
     }
 
     private static String loadAccessTokenFromFirefox() {
-        try {
-            Class.forName("org.sqlite.JDBC");
-        } catch (ClassNotFoundException e) {
-            logger.debug("SQLite JDBC driver not available; cannot read Firefox data for twitter token", e);
+        if (!FirefoxCookieUtils.isSQLiteDriverAvailable()) {
+            logger.debug("SQLite JDBC driver not available; cannot read Firefox data for twitter token");
             return null;
         }
 
-        Set<Path> profilePaths = discoverFirefoxProfiles();
+        Set<Path> profilePaths = FirefoxCookieUtils.discoverFirefoxProfiles();
         if (profilePaths.isEmpty()) {
             logger.debug("No Firefox profiles detected while attempting to load twitter token");
             return null;
@@ -429,81 +425,6 @@ public class TwitterRipper extends AbstractJSONRipper {
 
         logger.debug("Unable to locate twitter bearer token in any Firefox profile");
         return null;
-    }
-
-    private static Set<Path> discoverFirefoxProfiles() {
-        Set<Path> profilePaths = new HashSet<>();
-        String userHome = System.getProperty("user.home");
-        if (userHome == null || userHome.isBlank()) {
-            return profilePaths;
-        }
-
-        List<Path> iniCandidates = new ArrayList<>();
-        iniCandidates.add(Paths.get(userHome, "AppData", "Roaming", "Mozilla", "Firefox", "profiles.ini"));
-        iniCandidates.add(Paths.get(userHome, "Library", "Application Support", "Firefox", "profiles.ini"));
-        iniCandidates.add(Paths.get(userHome, ".mozilla", "firefox", "profiles.ini"));
-
-        for (Path iniPath : iniCandidates) {
-            if (!Files.exists(iniPath)) {
-                continue;
-            }
-            try {
-                profilePaths.addAll(readProfilesFromIni(iniPath));
-            } catch (IOException e) {
-                logger.debug("Failed to parse Firefox profiles.ini at {}", iniPath, e);
-            }
-        }
-
-        return profilePaths;
-    }
-
-    private static Set<Path> readProfilesFromIni(Path iniPath) throws IOException {
-        Set<Path> profiles = new HashSet<>();
-        List<String> lines = Files.readAllLines(iniPath, StandardCharsets.UTF_8);
-        if (lines.isEmpty()) {
-            return profiles;
-        }
-
-        Path baseDir = iniPath.getParent();
-        boolean isRelative = true;
-
-        for (String rawLine : lines) {
-            if (rawLine == null) {
-                continue;
-            }
-
-            String line = rawLine.trim();
-            if (line.isEmpty()) {
-                continue;
-            }
-
-            if (line.startsWith("[")) {
-                isRelative = true;
-                continue;
-            }
-
-            if (line.startsWith("IsRelative=")) {
-                isRelative = !"0".equals(line.substring("IsRelative=".length()).trim());
-                continue;
-            }
-
-            if (line.startsWith("Path=")) {
-                String profileEntry = line.substring("Path=".length()).trim();
-                if (profileEntry.isEmpty()) {
-                    continue;
-                }
-
-                Path profilePath = isRelative && baseDir != null ? baseDir.resolve(profileEntry) : Paths.get(profileEntry);
-                Path normalized = profilePath.normalize();
-                if (Files.exists(normalized)) {
-                    profiles.add(normalized);
-                } else {
-                    logger.debug("Firefox profile path {} from {} does not exist", normalized, iniPath);
-                }
-            }
-        }
-
-        return profiles;
     }
 
     private static String readAccessTokenFromFirefoxProfile(Path profilePath) {

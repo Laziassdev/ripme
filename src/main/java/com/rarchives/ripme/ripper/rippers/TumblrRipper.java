@@ -7,9 +7,9 @@ import java.net.URI;
 import java.net.URISyntaxException;
 import java.net.URL;
 import java.nio.file.Path;
-import java.sql.*;
 import java.util.Arrays;
 import java.util.HashMap;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Random;
@@ -30,6 +30,7 @@ import com.rarchives.ripme.ripper.AlbumRipper;
 import com.rarchives.ripme.ripper.AbstractRipper;
 import com.rarchives.ripme.ui.RipStatusMessage.STATUS;
 import com.rarchives.ripme.utils.DownloadLimitTracker;
+import com.rarchives.ripme.utils.FirefoxCookieUtils;
 import com.rarchives.ripme.utils.Http;
 import com.rarchives.ripme.utils.Utils;
 
@@ -64,56 +65,33 @@ public class TumblrRipper extends AlbumRipper {
     private static boolean useDefaultApiKey = false; // fall-back for bad user-specified key
     private static String API_KEY = null;
 
-    // Loads all Tumblr cookies from Firefox (Windows), tries all profiles, returns cookie string for HTTP header
+    // Loads Tumblr cookies from Firefox profiles across supported platforms and returns a header-ready string
     private static String getTumblrCookiesFromFirefox() {
-        try {
-            String userHome = System.getProperty("user.home");
-            String profilesIniPath = userHome + "/AppData/Roaming/Mozilla/Firefox/profiles.ini";
-            java.nio.file.Path iniPath = java.nio.file.Paths.get(profilesIniPath);
-            if (!java.nio.file.Files.exists(iniPath)) return null;
-            java.util.List<String> lines = java.nio.file.Files.readAllLines(iniPath);
-            java.util.List<String> profilePaths = new java.util.ArrayList<>();
-            for (String line : lines) {
-                if (line.trim().startsWith("Path=")) {
-                    profilePaths.add(line.trim().substring(5));
-                }
-            }
-            logger.info("Found Firefox profiles: {}", profilePaths);
-            for (String profilePath : profilePaths) {
-                String sqlitePath = userHome + "/AppData/Roaming/Mozilla/Firefox/Profiles/" + profilePath + "/cookies.sqlite";
-                sqlitePath = sqlitePath.replace("Profiles/Profiles/", "Profiles/");
-                logger.info("Trying cookies.sqlite at: {}", sqlitePath);
-                try {
-                    Class.forName("org.sqlite.JDBC");
-                    java.nio.file.Path tempCopy = java.nio.file.Files.createTempFile("cookies", ".sqlite");
-                    java.nio.file.Files.copy(java.nio.file.Paths.get(sqlitePath), tempCopy, java.nio.file.StandardCopyOption.REPLACE_EXISTING);
-                    try (Connection conn = DriverManager.getConnection("jdbc:sqlite:" + tempCopy.toString())) {
-                        String sql = "SELECT name, value FROM moz_cookies WHERE host LIKE '%tumblr.com'";
-                        try (Statement stmt = conn.createStatement(); ResultSet rs = stmt.executeQuery(sql)) {
-                            StringBuilder cookieStr = new StringBuilder();
-                            boolean found = false;
-                            while (rs.next()) {
-                                String name = rs.getString("name");
-                                String value = rs.getString("value");
-                                if (cookieStr.length() > 0) cookieStr.append("; ");
-                                cookieStr.append(name).append("=").append(value);
-                                found = true;
-                            }
-                            if (found) {
-                                logger.info("Found Tumblr cookies in profile {}: {}", profilePath, cookieStr.length() > 16 ? cookieStr.substring(0,8)+"..."+cookieStr.substring(cookieStr.length()-8) : cookieStr.toString());
-                                return cookieStr.toString();
-                            }
-                        }
-                    }
-                    java.nio.file.Files.deleteIfExists(tempCopy);
-                } catch (Exception e) {
-                    logger.warn("Failed to read cookies from profile {}: {}", profilePath, e.getMessage());
-                }
-            }
-        } catch (Exception e) {
-            logger.warn("Error reading Firefox profiles.ini: {}", e.getMessage());
+        if (!FirefoxCookieUtils.isSQLiteDriverAvailable()) {
+            logger.debug("SQLite JDBC driver not available; cannot read Tumblr cookies from Firefox");
+            return null;
         }
-        return null;
+
+        Map<String, String> cookies = new LinkedHashMap<>();
+        for (Path profilePath : FirefoxCookieUtils.discoverFirefoxProfiles()) {
+            Map<String, String> profileCookies = FirefoxCookieUtils.readCookiesFromProfile(profilePath,
+                    Arrays.asList("%tumblr.com", "%tumblr.co%"));
+            if (!profileCookies.isEmpty()) {
+                cookies.putAll(profileCookies);
+                logger.info("Loaded {} Tumblr cookies from Firefox profile {}", profileCookies.size(),
+                        profilePath.getFileName());
+                break;
+            }
+        }
+
+        String header = FirefoxCookieUtils.toCookieHeader(cookies);
+        if (header != null && !header.isEmpty()) {
+            logger.info("Prepared Tumblr cookie header from Firefox ({} bytes)", header.length());
+        } else {
+            logger.debug("No Tumblr cookies discovered in Firefox profiles");
+        }
+
+        return header;
     }
 
     /**
