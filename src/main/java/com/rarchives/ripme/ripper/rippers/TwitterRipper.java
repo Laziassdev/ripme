@@ -4,6 +4,7 @@ import java.io.IOException;
 import java.net.MalformedURLException;
 import java.net.URI;
 import java.net.URL;
+import java.net.URISyntaxException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -60,6 +61,7 @@ public class TwitterRipper extends AbstractJSONRipper {
     private int currentRequest = 0;
 
     private boolean hasTweets = true;
+    private String originalHost;
 
     public TwitterRipper(URL url) throws IOException {
         super(url);
@@ -82,9 +84,22 @@ public class TwitterRipper extends AbstractJSONRipper {
 
     @Override
     public URL sanitizeURL(URL url) throws MalformedURLException {
-        // Convert x.com URLs to twitter.com
-        String urlString = url.toExternalForm().replace("x.com", "twitter.com");
-        
+        originalHost = url.getHost() != null ? url.getHost().toLowerCase() : "";
+
+        String urlString = url.toExternalForm();
+        if (originalHost.endsWith("x.com")) {
+            try {
+                URI uri = url.toURI();
+                String sanitizedHost = originalHost.replaceFirst("(?i)x\\.com$", "twitter.com");
+                URI sanitizedUri = new URI(uri.getScheme(), uri.getUserInfo(), sanitizedHost, uri.getPort(), uri.getPath(),
+                        uri.getQuery(), uri.getFragment());
+                url = sanitizedUri.toURL();
+                urlString = url.toExternalForm();
+            } catch (URISyntaxException e) {
+                throw new MalformedURLException("Unable to normalize x.com URL: " + e.getMessage());
+            }
+        }
+
         // https://twitter.com/search?q=from%3Apurrbunny%20filter%3Aimages&src=typd
         Pattern p = Pattern.compile("^https?://(m\\.)?twitter\\.com/search\\?(.*)q=(?<search>[a-zA-Z0-9%\\-_]+).*$");
         Matcher m = p.matcher(urlString);
@@ -244,10 +259,14 @@ public class TwitterRipper extends AbstractJSONRipper {
     @Override
     public String getHost() {
         return HOST;
-    }    @Override
+    }
+
+    @Override
     protected String getDomain() {
-        // Check URL and return appropriate domain
-        return url.getHost().contains("x.com") ? "x.com" : DOMAIN;
+        if (originalHost != null && originalHost.endsWith("x.com")) {
+            return "x.com";
+        }
+        return DOMAIN;
     }
 
     @Override
