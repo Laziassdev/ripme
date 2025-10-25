@@ -24,6 +24,7 @@ import com.rarchives.ripme.utils.Utils;
  */
 class DownloadFileThread implements Runnable {
     private static final Logger logger = LogManager.getLogger(DownloadFileThread.class);
+    private static final long MIN_FILE_SIZE_BYTES = 10 * 1024;
 
     private String referrer = "";
     private Map<String, String> cookies = new HashMap<>();
@@ -288,6 +289,17 @@ class DownloadFileThread implements Runnable {
                 }
                 bis.close();
                 fos.close();
+
+                long finalSize = saveAs.length();
+                if (!shouldSkipFileDownload && finalSize < MIN_FILE_SIZE_BYTES) {
+                    logger.warn("[!] Deleting {} ({} bytes) because it is smaller than {} bytes", prettySaveAs, finalSize,
+                            MIN_FILE_SIZE_BYTES);
+                    if (!saveAs.delete()) {
+                        logger.warn("[!] Failed to delete {} after size check", saveAs.getAbsolutePath());
+                    }
+                    observer.downloadErrored(url, "File smaller than 10KB (deleted)");
+                    return;
+                }
                 break; // Download successful: break out of infinite loop
             } catch (SocketTimeoutException timeoutEx) {
                 // Handle the timeout
