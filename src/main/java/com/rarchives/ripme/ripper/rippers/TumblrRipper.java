@@ -730,7 +730,13 @@ public class TumblrRipper extends AlbumRipper {
             return false;
         }
 
-        String dashboardUrl = "https://www.tumblr.com/dashboard/blog/" + subdomain;
+        String dashboardBlogIdentifier = getDashboardBlogIdentifier();
+        if (dashboardBlogIdentifier == null || dashboardBlogIdentifier.isEmpty()) {
+            logger.warn("Cannot attempt dashboard fallback without a valid blog identifier for {}", subdomain);
+            return false;
+        }
+
+        String dashboardUrl = "https://www.tumblr.com/dashboard/blog/" + dashboardBlogIdentifier;
         try {
             Http http = Http.url(dashboardUrl).ignoreContentType().userAgent(AbstractRipper.USER_AGENT)
                     .referrer("https://www.tumblr.com/dashboard")
@@ -738,14 +744,14 @@ public class TumblrRipper extends AlbumRipper {
             String html = http.response().body();
             String initialJson = extractInitialStateJson(html);
             if (initialJson == null || initialJson.isEmpty()) {
-                logger.error("Unable to locate Tumblr dashboard initial state JSON for {}", subdomain);
+                logger.error("Unable to locate Tumblr dashboard initial state JSON for {}", dashboardBlogIdentifier);
                 return false;
             }
 
             JSONObject root = new JSONObject(initialJson);
             HiddenPage page = parseHiddenPage(root);
             if (page == null || page.posts == null) {
-                logger.error("Dashboard JSON for {} did not contain posts", subdomain);
+                logger.error("Dashboard JSON for {} did not contain posts", dashboardBlogIdentifier);
                 return false;
             }
 
@@ -761,7 +767,7 @@ public class TumblrRipper extends AlbumRipper {
             String nextHref = page.nextHref;
             while (nextHref != null && !nextHref.isEmpty() && !isStopped() && !maxDownloadLimitReached) {
                 String nextUrl = nextHref.startsWith("http") ? nextHref : apiUrl + nextHref;
-                JSONObject nextRoot = fetchHiddenApiPage(nextUrl, bearerToken, tumblrCookies);
+                JSONObject nextRoot = fetchHiddenApiPage(nextUrl, bearerToken, tumblrCookies, dashboardBlogIdentifier);
                 if (nextRoot == null) {
                     break;
                 }
@@ -779,15 +785,15 @@ public class TumblrRipper extends AlbumRipper {
             waitForThreads();
             return true;
         } catch (IOException e) {
-            logger.error("Failed to fetch Tumblr dashboard HTML for {}", subdomain, e);
+            logger.error("Failed to fetch Tumblr dashboard HTML for {}", dashboardBlogIdentifier, e);
             return false;
         }
     }
 
-    private JSONObject fetchHiddenApiPage(String url, String bearerToken, String tumblrCookies) {
+    private JSONObject fetchHiddenApiPage(String url, String bearerToken, String tumblrCookies, String dashboardBlogIdentifier) {
         try {
             Http http = Http.url(url).ignoreContentType().userAgent(AbstractRipper.USER_AGENT)
-                    .referrer("https://www.tumblr.com/dashboard/blog/" + subdomain)
+                    .referrer("https://www.tumblr.com/dashboard/blog/" + dashboardBlogIdentifier)
                     .header("Cookie", tumblrCookies);
             String formKey = getTumblrCookieValue("form_key");
             if (formKey != null && !formKey.isEmpty()) {
@@ -802,6 +808,16 @@ public class TumblrRipper extends AlbumRipper {
             logger.warn("Failed to fetch Tumblr dashboard API page {}", url, e);
         }
         return null;
+    }
+
+    private String getDashboardBlogIdentifier() {
+        if (subdomain == null || subdomain.isEmpty()) {
+            return null;
+        }
+        if (subdomain.endsWith(".tumblr.com")) {
+            return subdomain.substring(0, subdomain.length() - ".tumblr.com".length());
+        }
+        return subdomain;
     }
 
     private HiddenPage parseHiddenPage(JSONObject root) {
