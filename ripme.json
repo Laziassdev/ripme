@@ -1,7 +1,7 @@
 {
-  "latestVersion": "2.1.136-1-7c779b5",
-  "currentHash": "33326150b6d61ab00c22049688d3878568d83b1a33570bd2c2615fad3cc40fb8",
+  "latestVersion": "2.1.137-1-1f536a0",
+  "currentHash": "17a8fc28ae435d9f53cc64e176d7ca074859ad56d419d06a9c4146a3b87b06bf",
   "changeList": [
-    "2.1.136-1-7c779b5: Merge pull request #53 from Laziassdev/codex/fix-tumblr-ripper-for-hidden-pages", "2.1.136-1-7c779b5: Built at 2025-10-25T18:00:59Z"
+    "2.1.137-1-1f536a0: Merge pull request #54 from Laziassdev/codex/investigate-tumblrripper-404-errors", "2.1.137-1-1f536a0: Built at 2025-10-25T22:34:31Z"
   ]
 }
