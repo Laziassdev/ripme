@@ -14,8 +14,12 @@ import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Statement;
 import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
@@ -29,6 +33,8 @@ import org.jsoup.HttpStatusException;
 import org.jsoup.nodes.Document;
 
 import com.rarchives.ripme.ripper.AbstractJSONRipper;
+import com.rarchives.ripme.ui.RipStatusMessage.STATUS;
+import com.rarchives.ripme.utils.DownloadLimitTracker;
 import com.rarchives.ripme.utils.FirefoxCookieUtils;
 import com.rarchives.ripme.utils.Http;
 import com.rarchives.ripme.utils.Utils;
@@ -60,6 +66,13 @@ public class TwitterRipper extends AbstractJSONRipper {
 
     private boolean hasTweets = true;
     private String originalHost;
+    private final int maxDownloads = Utils.getConfigInteger("maxdownloads",
+            Utils.getConfigInteger("max.downloads", 0));
+    private final DownloadLimitTracker downloadLimitTracker = new DownloadLimitTracker(maxDownloads);
+    private final AtomicInteger nextIndex = new AtomicInteger(1);
+    private volatile boolean maxDownloadLimitReached = false;
+    private String twitterCookieHeader;
+    private final Map<String, String> twitterCookies = new LinkedHashMap<>();
 
     public TwitterRipper(URL url) throws IOException {
         super(url);
@@ -74,6 +87,7 @@ public class TwitterRipper extends AbstractJSONRipper {
         if (accessToken == null || accessToken.isEmpty()) {
             accessToken = loadAccessTokenFromFirefox();
         }
+        loadTwitterCookiesFromFirefox();
         if ((authKey == null || authKey.isEmpty()) && (accessToken == null || accessToken.isEmpty())) {
             logger.debug(
                     "Twitter ripper instantiated without credentials; rip attempts will fail until authentication details are provided.");
@@ -171,10 +185,18 @@ public class TwitterRipper extends AbstractJSONRipper {
     }
 
     private void checkRateLimits(String resource, String api) throws IOException {
-        Document doc = Http.url("https://api.twitter.com/1.1/application/rate_limit_status.json?resources=" + resource)
+        Http http = Http.url("https://api.twitter.com/1.1/application/rate_limit_status.json?resources=" + resource)
                 .ignoreContentType().header("Authorization", "Bearer " + accessToken)
                 .header("Content-Type", "application/x-www-form-urlencoded;charset=UTF-8")
-                .header("User-agent", "ripe and zipe").get();
+                .header("User-agent", "ripe and zipe");
+        if (twitterCookieHeader != null && !twitterCookieHeader.isEmpty()) {
+            http = http.header("Cookie", twitterCookieHeader);
+            String csrf = getTwitterCookie("ct0");
+            if (csrf != null && !csrf.isEmpty()) {
+                http = http.header("x-csrf-token", csrf);
+            }
+        }
+        Document doc = http.get();
         String body = doc.body().html().replaceAll("&quot;", "\"");
         try {
             JSONObject json = new JSONObject(body);
@@ -216,9 +238,17 @@ public class TwitterRipper extends AbstractJSONRipper {
         currentRequest++;
         String url = getApiURL(lastMaxID - 1);
         logger.info("    Retrieving " + url);
-        Document doc = Http.url(url).ignoreContentType().header("Authorization", "Bearer " + accessToken)
+        Http http = Http.url(url).ignoreContentType().header("Authorization", "Bearer " + accessToken)
                 .header("Content-Type", "application/x-www-form-urlencoded;charset=UTF-8")
-                .header("User-agent", "ripe and zipe").get();
+                .header("User-agent", "ripe and zipe");
+        if (twitterCookieHeader != null && !twitterCookieHeader.isEmpty()) {
+            http = http.header("Cookie", twitterCookieHeader);
+            String csrf = getTwitterCookie("ct0");
+            if (csrf != null && !csrf.isEmpty()) {
+                http = http.header("x-csrf-token", csrf);
+            }
+        }
+        Document doc = http.get();
         String body = doc.body().html().replaceAll("&quot;", "\"");
         Object jsonObj = new JSONTokener(body).nextValue();
         JSONArray statuses;
@@ -264,6 +294,9 @@ public class TwitterRipper extends AbstractJSONRipper {
             Thread.sleep(WAIT_TIME);
         } catch (InterruptedException e) {
             logger.error("[!] Interrupted while waiting to load more results", e);
+        }
+        if (maxDownloadLimitReached) {
+            return null;
         }
         return currentRequest <= MAX_REQUESTS ? getTweets() : null;
     }
@@ -312,6 +345,10 @@ public class TwitterRipper extends AbstractJSONRipper {
     @Override
     protected List<String> getURLsFromJSON(JSONObject json) {
         List<String> urls = new ArrayList<>();
+        if (maxDownloadLimitReached) {
+            hasTweets = false;
+            return urls;
+        }
         List<JSONObject> tweets = new ArrayList<>();
         JSONArray statuses = json.getJSONArray("tweets");
 
@@ -394,13 +431,55 @@ public class TwitterRipper extends AbstractJSONRipper {
 
     @Override
     protected void downloadURL(URL url, int index) {
-        addURLToDownload(url, getPrefix(index));
+        if (!downloadLimitTracker.tryAcquire(url)) {
+            if (downloadLimitTracker.isLimitReached()) {
+                maxDownloadLimitReached = true;
+                hasTweets = false;
+                if (downloadLimitTracker.shouldNotifyLimitReached()) {
+                    String message = "Reached max download limit of " + maxDownloads + ". Stopping.";
+                    logger.info(message);
+                    sendUpdate(STATUS.DOWNLOAD_COMPLETE_HISTORY, message);
+                }
+            } else {
+                logger.debug("Max download limit of {} currently allocated, deferring {}", maxDownloads, url);
+            }
+            return;
+        }
+
+        int currentIndex = nextIndex.get();
+        boolean added = addURLToDownload(url, getPrefix(currentIndex));
+        if (added) {
+            nextIndex.incrementAndGet();
+            if (Utils.getConfigBoolean("urls_only.save", false)) {
+                handleSuccessfulDownload(url);
+            }
+        } else {
+            downloadLimitTracker.onFailure(url);
+        }
     }
 
     @Override
     public boolean canRip(URL url) {
         String host = url.getHost().toLowerCase();
         return host.endsWith("twitter.com") || host.endsWith("x.com");
+    }
+
+    @Override
+    public void downloadCompleted(URL url, Path saveAs) {
+        super.downloadCompleted(url, saveAs);
+        handleSuccessfulDownload(url);
+    }
+
+    @Override
+    public void downloadExists(URL url, Path file) {
+        super.downloadExists(url, file);
+        handleSuccessfulDownload(url);
+    }
+
+    @Override
+    public void downloadErrored(URL url, String reason) {
+        downloadLimitTracker.onFailure(url);
+        super.downloadErrored(url, reason);
     }
 
     private static String loadAccessTokenFromFirefox() {
@@ -425,6 +504,29 @@ public class TwitterRipper extends AbstractJSONRipper {
 
         logger.debug("Unable to locate twitter bearer token in any Firefox profile");
         return null;
+    }
+
+    private void loadTwitterCookiesFromFirefox() {
+        if (!FirefoxCookieUtils.isSQLiteDriverAvailable()) {
+            logger.debug("SQLite JDBC driver not available; cannot read Firefox cookies for twitter");
+            return;
+        }
+
+        twitterCookies.clear();
+        for (Path profilePath : FirefoxCookieUtils.discoverFirefoxProfiles()) {
+            Map<String, String> cookies = FirefoxCookieUtils.readCookiesFromProfile(profilePath,
+                    Arrays.asList("%twitter.com", "%x.com"));
+            if (!cookies.isEmpty()) {
+                twitterCookies.putAll(cookies);
+                logger.info("Loaded {} twitter cookies from Firefox profile {}", cookies.size(), profilePath.getFileName());
+                break;
+            }
+        }
+
+        twitterCookieHeader = FirefoxCookieUtils.toCookieHeader(twitterCookies);
+        if (twitterCookieHeader != null && !twitterCookieHeader.isEmpty()) {
+            logger.debug("Prepared twitter cookie header from Firefox ({} bytes)", twitterCookieHeader.length());
+        }
     }
 
     private static String readAccessTokenFromFirefoxProfile(Path profilePath) {
@@ -525,6 +627,13 @@ public class TwitterRipper extends AbstractJSONRipper {
         return null;
     }
 
+    private String getTwitterCookie(String name) {
+        if (name == null) {
+            return null;
+        }
+        return twitterCookies.get(name);
+    }
+
     private static String extractAccessTokenFromCookieValue(String value) {
         if (value == null) {
             return null;
@@ -567,6 +676,18 @@ public class TwitterRipper extends AbstractJSONRipper {
         }
 
         return trimmed;
+    }
+
+    private void handleSuccessfulDownload(URL url) {
+        if (downloadLimitTracker.onSuccess(url)) {
+            maxDownloadLimitReached = true;
+            hasTweets = false;
+            if (downloadLimitTracker.shouldNotifyLimitReached()) {
+                String message = "Reached max download limit of " + maxDownloads + ". Stopping.";
+                logger.info(message);
+                sendUpdate(STATUS.DOWNLOAD_COMPLETE_HISTORY, message);
+            }
+        }
     }
 
 }
