@@ -77,8 +77,8 @@ public class TwitterRipper extends AbstractJSONRipper {
             accessToken = loadAccessTokenFromFirefox();
         }
         if ((authKey == null || authKey.isEmpty()) && (accessToken == null || accessToken.isEmpty())) {
-            throw new IOException(
-                    "Could not find twitter authentication credentials in configuration. Provide twitter.auth or twitter.access_token");
+            logger.debug(
+                    "Twitter ripper instantiated without credentials; rip attempts will fail until authentication details are provided.");
         }
     }
 
@@ -133,8 +133,22 @@ public class TwitterRipper extends AbstractJSONRipper {
             return;
         }
 
+        if (accessToken == null || accessToken.isBlank()) {
+            String firefoxToken = loadAccessTokenFromFirefox();
+            if (firefoxToken != null && !firefoxToken.isBlank()) {
+                accessToken = firefoxToken.trim();
+                logger.info("Loaded twitter bearer token from Firefox profile during rip");
+            }
+        }
+
+        if (accessToken != null && !accessToken.trim().isEmpty()) {
+            logger.debug("Using twitter access token discovered during rip");
+            return;
+        }
+
         if (authKey == null || authKey.isEmpty()) {
-            throw new IOException("Could not find twitter authentication key in configuration");
+            throw new IOException(
+                    "Could not find twitter authentication credentials in configuration. Provide twitter.auth or twitter.access_token");
         }
 
         try {
