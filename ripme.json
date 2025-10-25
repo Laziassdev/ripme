@@ -1,7 +1,7 @@
 {
-  "latestVersion": "2.1.128-1-27f7bc5",
-  "currentHash": "d9b6d6ab130380344ef9d76289b58daa5c75ad0e2ad320dc18b6b86dd63e4d4f",
+  "latestVersion": "2.1.129-1-bd2f1d8",
+  "currentHash": "ef63aec4840769b7331d9b16c7a333ffb653dc3a68f59f378d672d6be32494d7",
   "changeList": [
-    "2.1.128-1-27f7bc5: Merge pull request #45 from Laziassdev/codex/fix-maxdownloads-limiter-in-instagram-ripper", "2.1.128-1-27f7bc5: Built at 2025-10-10T22:56:29Z"
+    "2.1.129-1-bd2f1d8: Merge pull request #46 from Laziassdev/codex/fix-ioexception-for-twitter-api-access", "2.1.129-1-bd2f1d8: Built at 2025-10-25T15:39:59Z"
   ]
 }
