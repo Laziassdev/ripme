@@ -1,7 +1,7 @@
 {
-  "latestVersion": "2.1.144-1-bc3a2df",
-  "currentHash": "7044f9300b27b1121c7c81cc017be0d4e805b7c59b8c0d497d481cf6d24bd807",
+  "latestVersion": "2.1.145-1-de07cea",
+  "currentHash": "8d20c35f6fd5298770447ef996213e73f0af41524ce20de412e729b738399ad9",
   "changeList": [
-    "2.1.144-1-bc3a2df: Merge pull request #61 from Laziassdev/codex/prevent-duplicate-images-in-tumblr-downloads", "2.1.144-1-bc3a2df: Built at 2025-10-27T18:55:32Z"
+    "2.1.145-1-de07cea: Merge pull request #62 from Laziassdev/codex/review-tumblrthreeapp-for-duplicate-handling", "2.1.145-1-de07cea: Built at 2025-10-27T19:17:01Z"
   ]
 }
