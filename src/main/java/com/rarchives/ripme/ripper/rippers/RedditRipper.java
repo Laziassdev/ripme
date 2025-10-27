@@ -219,7 +219,30 @@ public class RedditRipper extends AlbumRipper {
     }
 
     private boolean tryQueueDownload(URL url, Supplier<Boolean> downloadAction) {
-        if (!downloadLimitTracker.tryAcquire(url)) {
+        return tryQueueDownload(url, downloadAction, null);
+    }
+
+    private boolean tryQueueDownload(URL url, Supplier<Boolean> downloadAction,
+            Supplier<Path> existingPathSupplier) {
+        boolean countTowardsLimit = true;
+        Path existingPath = null;
+        if (existingPathSupplier != null && downloadLimitTracker.isEnabled()) {
+            try {
+                existingPath = existingPathSupplier.get();
+            } catch (Exception e) {
+                logger.warn("Unable to resolve existing path for {}: {}", url, e.getMessage());
+            }
+            if (existingPath != null && Files.exists(existingPath)) {
+                if (!Utils.getConfigBoolean("file.overwrite", false)) {
+                    logger.debug("Skipping existing file due to max download limit: {}", existingPath);
+                    super.downloadExists(url, existingPath);
+                    return false;
+                }
+                countTowardsLimit = false;
+            }
+        }
+
+        if (!downloadLimitTracker.tryAcquire(url, countTowardsLimit)) {
             if (downloadLimitTracker.isLimitReached()) {
                 maxDownloadLimitReached = true;
                 if (downloadLimitTracker.shouldNotifyLimitReached()) {
@@ -623,14 +646,14 @@ public class RedditRipper extends AlbumRipper {
                 String savePath = this.workingDir + "/" + id + "-" + m.group(1) + Utils.filesystemSafe(title) + ".jpg";
                 final URL singleUrl = urls.get(0);
                 final Path targetPath = Utils.getPath(savePath);
-                tryQueueDownload(singleUrl, () -> addURLToDownload(singleUrl, targetPath));
+                tryQueueDownload(singleUrl, () -> addURLToDownload(singleUrl, targetPath), () -> targetPath);
             } else if (url.contains("v.redd.it")) {
                 String savePath = this.workingDir + "/" + id + "-" + url.split("/")[3] + Utils.filesystemSafe(title) + ".mp4";
                 URL urlToDownload = parseRedditVideoMPD(urls.get(0).toExternalForm());
                 if (urlToDownload != null) {
                     final URL downloadUrl = urlToDownload;
                     final Path videoPath = Utils.getPath(savePath);
-                    tryQueueDownload(downloadUrl, () -> addURLToDownload(downloadUrl, videoPath));
+                    tryQueueDownload(downloadUrl, () -> addURLToDownload(downloadUrl, videoPath), () -> videoPath);
                 }
             } else {
                 if (url.contains("redgifs.com")) {
@@ -639,7 +662,16 @@ public class RedditRipper extends AlbumRipper {
                 final URL singleUrl = urls.get(0);
                 final String safeName = Utils.filesystemSafe(id + title);
                 final String refUrl = theUrl;
-                tryQueueDownload(singleUrl, () -> addURLToDownload(singleUrl, safeName, "", refUrl, null));
+                tryQueueDownload(singleUrl,
+                        () -> addURLToDownload(singleUrl, safeName, "", refUrl, null),
+                        () -> {
+                            try {
+                                return getFilePath(singleUrl, "", safeName, null, null);
+                            } catch (IOException e) {
+                                logger.warn("Unable to determine existing file path for {}: {}", singleUrl, e.getMessage());
+                                return null;
+                            }
+                        });
             }
         } else if (urls.size() > 1) {
             for (int i = 0; i < urls.size(); i++) {
@@ -655,7 +687,16 @@ public class RedditRipper extends AlbumRipper {
                 final String prefixFinal = prefix;
                 final String subdirectoryFinal = subdirectory;
                 final String refUrl = theUrl;
-                tryQueueDownload(itemUrl, () -> addURLToDownload(itemUrl, prefixFinal, subdirectoryFinal, refUrl, null));
+                tryQueueDownload(itemUrl,
+                        () -> addURLToDownload(itemUrl, prefixFinal, subdirectoryFinal, refUrl, null),
+                        () -> {
+                            try {
+                                return getFilePath(itemUrl, subdirectoryFinal, prefixFinal, null, null);
+                            } catch (IOException e) {
+                                logger.warn("Unable to determine existing file path for {}: {}", itemUrl, e.getMessage());
+                                return null;
+                            }
+                        });
             }
         }
     }
@@ -687,7 +728,16 @@ public class RedditRipper extends AlbumRipper {
                 final URL mediaUrlFinal = mediaURL;
                 final String prefixFinal = prefix;
                 final String subdirectoryFinal = subdirectory;
-                tryQueueDownload(mediaUrlFinal, () -> addURLToDownload(mediaUrlFinal, prefixFinal, subdirectoryFinal));
+                tryQueueDownload(mediaUrlFinal,
+                        () -> addURLToDownload(mediaUrlFinal, prefixFinal, subdirectoryFinal),
+                        () -> {
+                            try {
+                                return getFilePath(mediaUrlFinal, subdirectoryFinal, prefixFinal, null, null);
+                            } catch (IOException e) {
+                                logger.warn("Unable to determine existing file path for {}: {}", mediaUrlFinal, e.getMessage());
+                                return null;
+                            }
+                        });
             } catch (MalformedURLException | JSONException | URISyntaxException e) {
                 logger.error("[!] Unable to parse gallery JSON:\ngallery_data:\n" + data +"\nmedia_metadata:\n" + metadata);
             }

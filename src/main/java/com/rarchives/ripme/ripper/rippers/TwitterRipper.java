@@ -431,7 +431,25 @@ public class TwitterRipper extends AbstractJSONRipper {
 
     @Override
     protected void downloadURL(URL url, int index) {
-        if (!downloadLimitTracker.tryAcquire(url)) {
+        int currentIndex = nextIndex.get();
+        boolean countTowardsLimit = true;
+        if (downloadLimitTracker.isEnabled()) {
+            try {
+                Path existingPath = getFilePath(url, "", getPrefix(currentIndex), null, null);
+                if (Files.exists(existingPath)) {
+                    if (!Utils.getConfigBoolean("file.overwrite", false)) {
+                        logger.debug("Skipping existing file due to max download limit: {}", existingPath);
+                        super.downloadExists(url, existingPath);
+                        return;
+                    }
+                    countTowardsLimit = false;
+                }
+            } catch (IOException e) {
+                logger.warn("Unable to determine existing file path for {}: {}", url, e.getMessage());
+            }
+        }
+
+        if (!downloadLimitTracker.tryAcquire(url, countTowardsLimit)) {
             if (downloadLimitTracker.isLimitReached()) {
                 maxDownloadLimitReached = true;
                 hasTweets = false;
@@ -446,7 +464,6 @@ public class TwitterRipper extends AbstractJSONRipper {
             return;
         }
 
-        int currentIndex = nextIndex.get();
         boolean added = addURLToDownload(url, getPrefix(currentIndex));
         if (added) {
             nextIndex.incrementAndGet();

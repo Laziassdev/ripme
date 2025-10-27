@@ -83,20 +83,24 @@ public class InstagramRipper extends AbstractJSONRipper {
 
     @Override
     protected void downloadURL(URL url, int index) {
+        boolean countTowardsLimit = true;
         if (downloadLimitTracker.isEnabled()) {
             try {
                 Path existingPath = getFilePath(url, "", getPrefix(index), null, null);
                 if (Files.exists(existingPath)) {
-                    logger.debug("Skipping existing file due to max download limit: {}", existingPath);
-                    super.downloadExists(url, existingPath);
-                    return;
+                    if (!Utils.getConfigBoolean("file.overwrite", false)) {
+                        logger.debug("Skipping existing file due to max download limit: {}", existingPath);
+                        super.downloadExists(url, existingPath);
+                        return;
+                    }
+                    countTowardsLimit = false;
                 }
             } catch (IOException e) {
                 logger.warn("Unable to determine existing file path for {}: {}", url, e.getMessage());
             }
         }
 
-        if (!downloadLimitTracker.tryAcquire(url)) {
+        if (!downloadLimitTracker.tryAcquire(url, countTowardsLimit)) {
             if (downloadLimitTracker.isLimitReached()) {
                 maxDownloadLimitReached = true;
                 hasNextPage = false;

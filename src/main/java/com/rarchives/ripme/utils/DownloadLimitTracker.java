@@ -1,8 +1,8 @@
 package com.rarchives.ripme.utils;
 
 import java.net.URL;
-import java.util.HashSet;
-import java.util.Set;
+import java.util.HashMap;
+import java.util.Map;
 import java.util.concurrent.atomic.AtomicInteger;
 
 /**
@@ -13,7 +13,8 @@ public class DownloadLimitTracker {
 
     private final int maxDownloads;
     private final AtomicInteger successfulDownloads = new AtomicInteger(0);
-    private final Set<String> trackedUrls = new HashSet<>();
+    private final Map<String, Boolean> trackedUrls = new HashMap<>();
+    private int countedInFlight = 0;
     private boolean limitNotified = false;
 
     public DownloadLimitTracker(int maxDownloads) {
@@ -28,20 +29,26 @@ public class DownloadLimitTracker {
      *         the limit has already been exhausted.
      */
     public synchronized boolean tryAcquire(URL url) {
+        return tryAcquire(url, true);
+    }
+
+    public synchronized boolean tryAcquire(URL url, boolean countTowardsLimit) {
         if (!isEnabled()) {
             return true;
         }
-        if (isLimitReachedInternal()) {
-            return false;
-        }
         String key = keyFor(url);
-        if (trackedUrls.contains(key)) {
+        if (trackedUrls.containsKey(key)) {
             return true;
         }
-        if (successfulDownloads.get() + trackedUrls.size() >= maxDownloads) {
-            return false;
+        if (countTowardsLimit) {
+            if (successfulDownloads.get() + countedInFlight >= maxDownloads) {
+                return false;
+            }
         }
-        trackedUrls.add(key);
+        trackedUrls.put(key, countTowardsLimit);
+        if (countTowardsLimit) {
+            countedInFlight++;
+        }
         return true;
     }
 
@@ -55,8 +62,16 @@ public class DownloadLimitTracker {
         if (!isEnabled()) {
             return false;
         }
-        trackedUrls.remove(keyFor(url));
-        successfulDownloads.incrementAndGet();
+        String key = keyFor(url);
+        Boolean counted = trackedUrls.remove(key);
+        if (Boolean.TRUE.equals(counted)) {
+            countedInFlight--;
+            successfulDownloads.incrementAndGet();
+            return isLimitReachedInternal();
+        }
+        if (Boolean.FALSE.equals(counted)) {
+            return false;
+        }
         return isLimitReachedInternal();
     }
 
@@ -69,7 +84,11 @@ public class DownloadLimitTracker {
         if (!isEnabled()) {
             return;
         }
-        trackedUrls.remove(keyFor(url));
+        String key = keyFor(url);
+        Boolean counted = trackedUrls.remove(key);
+        if (Boolean.TRUE.equals(counted)) {
+            countedInFlight--;
+        }
     }
 
     /**
@@ -103,8 +122,7 @@ public class DownloadLimitTracker {
         if (!isEnabled()) {
             return Integer.MAX_VALUE;
         }
-        int inFlight = trackedUrls.size();
-        int remaining = maxDownloads - successfulDownloads.get() - inFlight;
+        int remaining = maxDownloads - successfulDownloads.get() - countedInFlight;
         return Math.max(0, remaining);
     }
 

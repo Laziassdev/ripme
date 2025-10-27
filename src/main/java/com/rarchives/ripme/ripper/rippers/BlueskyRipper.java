@@ -12,6 +12,7 @@ import org.json.JSONObject;
 import java.io.IOException;
 import java.net.MalformedURLException;
 import java.net.URL;
+import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
@@ -407,7 +408,43 @@ public class BlueskyRipper extends AbstractJSONRipper {
 
     @Override
     protected void downloadURL(URL url, int index) {
-        if (!downloadLimitTracker.tryAcquire(url)) {
+        String fileName = url.getPath();
+        String ext = null;
+        int atIdx = fileName.lastIndexOf('@');
+        if (atIdx != -1 && atIdx < fileName.length() - 1) {
+            ext = fileName.substring(atIdx + 1);
+        } else {
+            int lastDot = fileName.lastIndexOf('.');
+            if (lastDot != -1 && lastDot < fileName.length() - 1) {
+                ext = fileName.substring(lastDot + 1);
+            }
+        }
+        String prefix = getPrefix(index);
+        String resolvedFileName;
+        if (atIdx != -1) {
+            resolvedFileName = fileName.substring(fileName.lastIndexOf('/') + 1, atIdx);
+        } else {
+            resolvedFileName = fileName.substring(fileName.lastIndexOf('/') + 1);
+        }
+
+        boolean countTowardsLimit = true;
+        if (downloadLimitTracker.isEnabled()) {
+            try {
+                Path existingPath = getFilePath(url, "", prefix, resolvedFileName, ext);
+                if (Files.exists(existingPath)) {
+                    if (!Utils.getConfigBoolean("file.overwrite", false)) {
+                        logger.debug("Skipping existing file due to max download limit: {}", existingPath);
+                        super.downloadExists(url, existingPath);
+                        return;
+                    }
+                    countTowardsLimit = false;
+                }
+            } catch (IOException e) {
+                logger.warn("Unable to determine existing file path for {}: {}", url, e.getMessage());
+            }
+        }
+
+        if (!downloadLimitTracker.tryAcquire(url, countTowardsLimit)) {
             if (downloadLimitTracker.isLimitReached()) {
                 maxDownloadLimitReached = true;
                 if (downloadLimitTracker.shouldNotifyLimitReached()) {
@@ -421,31 +458,13 @@ public class BlueskyRipper extends AbstractJSONRipper {
             return;
         }
 
-        // Fix @ext to .ext in filename
-        String fileName = url.getPath();
-        String ext = null;
-        int atIdx = fileName.lastIndexOf('@');
-        if (atIdx != -1 && atIdx < fileName.length() - 1) {
-            ext = fileName.substring(atIdx + 1);
-        } else {
-            int lastDot = fileName.lastIndexOf('.');
-            if (lastDot != -1 && lastDot < fileName.length() - 1) {
-                ext = fileName.substring(lastDot + 1);
-            }
-        }
-        String prefix = getPrefix(index);
         java.util.HashMap<String, String> options = new java.util.HashMap<>();
         options.put("prefix", prefix);
         if (ext != null) {
             options.put("extension", ext);
         }
         // Remove @ext from the fileName if present
-        if (atIdx != -1) {
-            fileName = fileName.substring(fileName.lastIndexOf('/') + 1, atIdx);
-        } else {
-            fileName = fileName.substring(fileName.lastIndexOf('/') + 1);
-        }
-        options.put("fileName", fileName);
+        options.put("fileName", resolvedFileName);
         boolean added = addURLToDownload(url, options);
         if (added) {
             if (Utils.getConfigBoolean("urls_only.save", false)) {
