@@ -943,26 +943,146 @@ public class TumblrRipper extends AlbumRipper {
 
     private Set<String> extractHiddenMediaUrls(JSONObject post) {
         Set<String> urls = new LinkedHashSet<>();
-        String raw = post.toString();
-        Matcher matcher = HIDDEN_MEDIA_PATTERN.matcher(raw);
-        while (matcher.find()) {
-            String url = matcher.group();
-            if (url == null || url.isEmpty()) {
+        collectHiddenMediaFromContent(post.optJSONArray("content"), urls);
+        collectHiddenMediaFromTrail(post.optJSONArray("trail"), urls);
+        collectHiddenMediaFromAttachments(post.optJSONArray("attachments"), urls);
+
+        if (urls.isEmpty()) {
+            urls.addAll(extractHiddenMediaUrlsFromRaw(post.toString()));
+        }
+
+        return urls;
+    }
+
+    private void collectHiddenMediaFromTrail(JSONArray trails, Set<String> urls) {
+        if (trails == null) {
+            return;
+        }
+        for (int i = 0; i < trails.length(); i++) {
+            JSONObject trail = trails.optJSONObject(i);
+            if (trail == null) {
                 continue;
             }
-            String cleaned = url.replace("\\/", "/").replace("\\u002F", "/").replace("\\u0026", "&");
-            urls.add(cleaned);
-        }
-        if (post.has("trail")) {
-            JSONArray trails = post.optJSONArray("trail");
-            if (trails != null) {
-                for (int i = 0; i < trails.length(); i++) {
-                    JSONObject trail = trails.optJSONObject(i);
-                    if (trail != null) {
-                        urls.addAll(extractHiddenMediaUrls(trail));
-                    }
-                }
+            collectHiddenMediaFromContent(trail.optJSONArray("content"), urls);
+            JSONObject trailPost = trail.optJSONObject("post");
+            if (trailPost != null) {
+                collectHiddenMediaFromContent(trailPost.optJSONArray("content"), urls);
+                collectHiddenMediaFromAttachments(trailPost.optJSONArray("attachments"), urls);
             }
+        }
+    }
+
+    private void collectHiddenMediaFromAttachments(JSONArray attachments, Set<String> urls) {
+        if (attachments == null) {
+            return;
+        }
+        for (int i = 0; i < attachments.length(); i++) {
+            JSONObject attachment = attachments.optJSONObject(i);
+            if (attachment == null) {
+                continue;
+            }
+            Object media = attachment.opt("media");
+            if (media != null) {
+                collectHiddenMediaFromValue(media, urls);
+            }
+            collectHiddenMediaFromContent(attachment.optJSONArray("content"), urls);
+        }
+    }
+
+    private void collectHiddenMediaFromContent(JSONArray content, Set<String> urls) {
+        if (content == null) {
+            return;
+        }
+        for (int i = 0; i < content.length(); i++) {
+            JSONObject block = content.optJSONObject(i);
+            if (block == null) {
+                continue;
+            }
+            Object media = block.opt("media");
+            if (media != null) {
+                collectHiddenMediaFromValue(media, urls);
+            }
+            Object poster = block.opt("poster");
+            if (poster != null) {
+                collectHiddenMediaFromValue(poster, urls);
+            }
+            Object thumbnail = block.opt("thumbnail");
+            if (thumbnail != null) {
+                collectHiddenMediaFromValue(thumbnail, urls);
+            }
+            String directUrl = block.optString("url", null);
+            if (directUrl != null) {
+                addHiddenMediaCandidate(urls, directUrl);
+            }
+            collectHiddenMediaFromContent(block.optJSONArray("content"), urls);
+        }
+    }
+
+    private void collectHiddenMediaFromValue(Object value, Set<String> urls) {
+        if (value == null) {
+            return;
+        }
+        if (value instanceof JSONArray) {
+            JSONArray array = (JSONArray) value;
+            for (int i = 0; i < array.length(); i++) {
+                collectHiddenMediaFromValue(array.opt(i), urls);
+            }
+            return;
+        }
+        if (value instanceof JSONObject) {
+            JSONObject object = (JSONObject) value;
+            String url = object.optString("url", null);
+            if (url != null) {
+                addHiddenMediaCandidate(urls, url);
+            }
+            collectHiddenMediaFromValue(object.opt("media"), urls);
+            collectHiddenMediaFromValue(object.opt("poster"), urls);
+            return;
+        }
+        if (value instanceof String) {
+            addHiddenMediaCandidate(urls, (String) value);
+        }
+    }
+
+    private void addHiddenMediaCandidate(Set<String> urls, String url) {
+        if (!isHiddenMediaCandidate(url)) {
+            return;
+        }
+        String cleaned = url.replace("\\/", "/").replace("\\u002F", "/").replace("\\u0026", "&");
+        try {
+            cleaned = URLDecoder.decode(cleaned, "UTF-8");
+        } catch (IllegalArgumentException | UnsupportedEncodingException ignored) {
+            // Ignore malformed escape sequences and fall back to the un-decoded URL
+        }
+        urls.add(cleaned);
+    }
+
+    private boolean isHiddenMediaCandidate(String url) {
+        if (url == null || url.isEmpty()) {
+            return false;
+        }
+        Matcher matcher = HIDDEN_MEDIA_PATTERN.matcher(url);
+        if (!matcher.matches()) {
+            return false;
+        }
+        String lower = url.toLowerCase();
+        if (lower.contains("tumblr.com")) {
+            if (lower.contains("/avatar") || lower.contains("tumblr_static") || lower.contains("assets.tumblr.com")) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    private Set<String> extractHiddenMediaUrlsFromRaw(String raw) {
+        Set<String> urls = new LinkedHashSet<>();
+        if (raw == null || raw.isEmpty()) {
+            return urls;
+        }
+        Matcher matcher = HIDDEN_MEDIA_PATTERN.matcher(raw);
+        while (matcher.find()) {
+            String candidate = matcher.group();
+            addHiddenMediaCandidate(urls, candidate);
         }
         return urls;
     }
