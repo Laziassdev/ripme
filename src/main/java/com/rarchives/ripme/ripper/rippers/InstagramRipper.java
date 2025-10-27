@@ -83,6 +83,19 @@ public class InstagramRipper extends AbstractJSONRipper {
 
     @Override
     protected void downloadURL(URL url, int index) {
+        if (downloadLimitTracker.isEnabled()) {
+            try {
+                Path existingPath = getFilePath(url, "", getPrefix(index), null, null);
+                if (Files.exists(existingPath)) {
+                    logger.debug("Skipping existing file due to max download limit: {}", existingPath);
+                    super.downloadExists(url, existingPath);
+                    return;
+                }
+            } catch (IOException e) {
+                logger.warn("Unable to determine existing file path for {}: {}", url, e.getMessage());
+            }
+        }
+
         if (!downloadLimitTracker.tryAcquire(url)) {
             if (downloadLimitTracker.isLimitReached()) {
                 maxDownloadLimitReached = true;
@@ -558,7 +571,11 @@ public class InstagramRipper extends AbstractJSONRipper {
     @Override
     public void downloadExists(URL url, java.nio.file.Path file) {
         super.downloadExists(url, file);
-        handleSuccessfulDownload(url);
+        if (downloadLimitTracker.isEnabled()) {
+            downloadLimitTracker.onFailure(url);
+        } else {
+            handleSuccessfulDownload(url);
+        }
     }
 
     @Override
