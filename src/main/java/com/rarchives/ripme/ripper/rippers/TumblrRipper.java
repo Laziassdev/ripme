@@ -20,8 +20,8 @@ import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
-import java.util.Random;
 import java.util.Set;
+import java.util.Random;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
@@ -74,6 +74,9 @@ public class TumblrRipper extends AlbumRipper {
     private static final Pattern HIDDEN_MEDIA_PATTERN = Pattern.compile(
             "https?://[^\\\"\\s>]+\\.(?:jpg|jpeg|png|gif|bmp|webp|mp4|m4v|webm)(?:\\?[^\\\"\\s]*)?",
             Pattern.CASE_INSENSITIVE);
+    private static final Pattern HIDDEN_MEDIA_SIZE_SUFFIX_PATTERN = Pattern.compile(
+            "_(raw|\\d{2,4})(?=\\.[^./]+$)",
+            Pattern.CASE_INSENSITIVE);
     private static final DateTimeFormatter DASHBOARD_DATE_FORMATTER = DateTimeFormatter.ofPattern("yyyy-MM-dd HH.mm.ss")
             .withZone(ZoneId.systemDefault());
 
@@ -87,6 +90,7 @@ public class TumblrRipper extends AlbumRipper {
     private static String API_KEY = null;
     private volatile String lastRequestedApiKey;
     private static final Map<String, String> TUMBLR_FIREFOX_COOKIES = new LinkedHashMap<>();
+    private final Set<String> hiddenFallbackSeenKeys = Collections.synchronizedSet(new LinkedHashSet<>());
 
     // Loads Tumblr cookies from Firefox profiles across supported platforms and returns a header-ready string
     private static String getTumblrCookiesFromFirefox() {
@@ -912,9 +916,20 @@ public class TumblrRipper extends AlbumRipper {
                 continue;
             }
 
-            for (String mediaUrl : mediaUrls) {
+            Set<String> filteredMediaUrls = selectBestHiddenMediaUrls(mediaUrls);
+            for (String mediaUrl : filteredMediaUrls) {
                 if (isStopped() || maxDownloadLimitReached) {
                     break;
+                }
+                String normalized = normalizeHiddenMediaUrl(mediaUrl);
+                if (normalized == null) {
+                    normalized = mediaUrl;
+                }
+                synchronized (hiddenFallbackSeenKeys) {
+                    if (!hiddenFallbackSeenKeys.add(normalized)) {
+                        logger.debug("Skipping duplicate Tumblr fallback media URL {}", mediaUrl);
+                        continue;
+                    }
                 }
                 try {
                     URL url = new URI(mediaUrl).toURL();
@@ -950,6 +965,56 @@ public class TumblrRipper extends AlbumRipper {
             }
         }
         return urls;
+    }
+
+    private Set<String> selectBestHiddenMediaUrls(Set<String> urls) {
+        Map<String, String> bestByKey = new LinkedHashMap<>();
+        for (String url : urls) {
+            if (url == null || url.isEmpty()) {
+                continue;
+            }
+            String key = normalizeHiddenMediaUrl(url);
+            if (key == null || key.isEmpty()) {
+                key = url;
+            }
+            String existing = bestByKey.get(key);
+            if (existing == null || hiddenMediaQualityScore(url) > hiddenMediaQualityScore(existing)) {
+                bestByKey.put(key, url);
+            }
+        }
+        return new LinkedHashSet<>(bestByKey.values());
+    }
+
+    private int hiddenMediaQualityScore(String url) {
+        if (url == null) {
+            return 0;
+        }
+        Matcher matcher = HIDDEN_MEDIA_SIZE_SUFFIX_PATTERN.matcher(url);
+        if (matcher.find()) {
+            String token = matcher.group(1);
+            if ("raw".equalsIgnoreCase(token)) {
+                return Integer.MAX_VALUE;
+            }
+            try {
+                return Integer.parseInt(token);
+            } catch (NumberFormatException ignored) {
+                return 0;
+            }
+        }
+        return 0;
+    }
+
+    private String normalizeHiddenMediaUrl(String url) {
+        if (url == null) {
+            return null;
+        }
+        int queryIndex = url.indexOf('?');
+        String withoutQuery = queryIndex >= 0 ? url.substring(0, queryIndex) : url;
+        Matcher matcher = HIDDEN_MEDIA_SIZE_SUFFIX_PATTERN.matcher(withoutQuery);
+        if (matcher.find()) {
+            return withoutQuery.substring(0, matcher.start()) + withoutQuery.substring(matcher.end());
+        }
+        return withoutQuery;
     }
 
     private String extractInitialStateJson(String html) {
