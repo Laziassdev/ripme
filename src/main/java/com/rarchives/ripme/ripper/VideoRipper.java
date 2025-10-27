@@ -22,6 +22,7 @@ public abstract class VideoRipper extends AbstractRipper {
 
     private int bytesTotal = 1;
     private int bytesCompleted = 1;
+    private int downloadsCompleted = 0;
 
     protected VideoRipper(URL url) throws IOException {
         super(url);
@@ -133,6 +134,7 @@ public abstract class VideoRipper extends AbstractRipper {
         }
 
         try {
+            downloadsCompleted += 1;
             String path = Utils.removeCWD(saveAs);
             RipStatusMessage msg = new RipStatusMessage(STATUS.DOWNLOAD_COMPLETE, path);
             observer.update(this, msg);
@@ -172,6 +174,11 @@ public abstract class VideoRipper extends AbstractRipper {
 
         observer.update(this, new RipStatusMessage(STATUS.DOWNLOAD_WARN, url + " already saved as " + file));
         checkIfComplete();
+    }
+
+    @Override
+    public int getCount() {
+        return downloadsCompleted;
     }
 
     /**
