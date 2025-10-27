@@ -39,6 +39,7 @@ public abstract class AbstractHTMLRipper extends AbstractRipper {
 
     private final Map<URL, File> itemsPending = Collections.synchronizedMap(new HashMap<>());
     private final Map<URL, Path> itemsCompleted = Collections.synchronizedMap(new HashMap<>());
+    private final Map<URL, Path> itemsSkipped = Collections.synchronizedMap(new HashMap<>());
     private final Map<URL, String> itemsErrored = Collections.synchronizedMap(new HashMap<>());
     Document cachedFirstPage;
 
@@ -363,7 +364,8 @@ public abstract class AbstractHTMLRipper extends AbstractRipper {
         if (!allowDuplicates()
                 && ( itemsPending.containsKey(url)
                   || itemsCompleted.containsKey(url)
-                  || itemsErrored.containsKey(url) )) {
+                  || itemsErrored.containsKey(url)
+                  || itemsSkipped.containsKey(url) )) {
             // Item is already downloaded/downloading, skip it.
             logger.info("[!] Skipping " + url + " -- already attempted: " + Utils.removeCWD(saveAs));
             return false;
@@ -463,7 +465,7 @@ public abstract class AbstractHTMLRipper extends AbstractRipper {
         }
 
         itemsPending.remove(url);
-        itemsCompleted.put(url, file);
+        itemsSkipped.put(url, file);
         observer.update(this, new RipStatusMessage(STATUS.DOWNLOAD_WARN, url + " already saved as " + file));
 
         checkIfComplete();
@@ -518,7 +520,10 @@ public abstract class AbstractHTMLRipper extends AbstractRipper {
      */
     @Override
     public int getCompletionPercentage() {
-        double total = itemsPending.size()  + itemsErrored.size() + itemsCompleted.size();
+        double total = itemsPending.size()  + itemsErrored.size() + itemsCompleted.size() + itemsSkipped.size();
+        if (total == 0) {
+            return 0;
+        }
         return (int) (100 * ( (total - itemsPending.size()) / total));
     }
 
@@ -532,6 +537,7 @@ public abstract class AbstractHTMLRipper extends AbstractRipper {
                 "% " +
                 "- Pending: " + itemsPending.size() +
                 ", Completed: " + itemsCompleted.size() +
+                ", Skipped: " + itemsSkipped.size() +
                 ", Errored: " + itemsErrored.size();
     }
 

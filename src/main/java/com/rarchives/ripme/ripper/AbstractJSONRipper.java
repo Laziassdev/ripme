@@ -33,6 +33,7 @@ public abstract class AbstractJSONRipper extends AbstractRipper {
 
     private Map<URL, File> itemsPending = Collections.synchronizedMap(new HashMap<URL, File>());
     private Map<URL, Path> itemsCompleted = Collections.synchronizedMap(new HashMap<URL, Path>());
+    private Map<URL, Path> itemsSkipped = Collections.synchronizedMap(new HashMap<URL, Path>());
     private Map<URL, String> itemsErrored = Collections.synchronizedMap(new HashMap<URL, String>());
 
     protected AbstractJSONRipper(URL url) throws IOException {
@@ -162,7 +163,8 @@ public abstract class AbstractJSONRipper extends AbstractRipper {
         if (!allowDuplicates()
                 && ( itemsPending.containsKey(url)
                   || itemsCompleted.containsKey(url)
-                  || itemsErrored.containsKey(url) )) {
+                  || itemsErrored.containsKey(url)
+                  || itemsSkipped.containsKey(url) )) {
             // Item is already downloaded/downloading, skip it.
             logger.info("[!] Skipping " + url + " -- already attempted: " + Utils.removeCWD(saveAs));
             return false;
@@ -262,7 +264,7 @@ public abstract class AbstractJSONRipper extends AbstractRipper {
         }
 
         itemsPending.remove(url);
-        itemsCompleted.put(url, file);
+        itemsSkipped.put(url, file);
         observer.update(this, new RipStatusMessage(STATUS.DOWNLOAD_WARN, url + " already saved as " + file));
 
         checkIfComplete();
@@ -315,7 +317,10 @@ public abstract class AbstractJSONRipper extends AbstractRipper {
      */
     @Override
     public int getCompletionPercentage() {
-        double total = itemsPending.size()  + itemsErrored.size() + itemsCompleted.size();
+        double total = itemsPending.size()  + itemsErrored.size() + itemsCompleted.size() + itemsSkipped.size();
+        if (total == 0) {
+            return 0;
+        }
         return (int) (100 * ( (total - itemsPending.size()) / total));
     }
 
@@ -330,6 +335,7 @@ public abstract class AbstractJSONRipper extends AbstractRipper {
           .append("% ")
           .append("- Pending: "  ).append(itemsPending.size())
           .append(", Completed: ").append(itemsCompleted.size())
+          .append(", Skipped: "  ).append(itemsSkipped.size())
           .append(", Errored: "  ).append(itemsErrored.size());
         return sb.toString();
     }
