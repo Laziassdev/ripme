@@ -1,7 +1,7 @@
 {
-  "latestVersion": "2.1.143-1-7acaf9a",
-  "currentHash": "4c922b6ab0eb206f8011fc84e336860aea211198eaa94f23b8cf4998dc3d05ab",
+  "latestVersion": "2.1.144-1-bc3a2df",
+  "currentHash": "7044f9300b27b1121c7c81cc017be0d4e805b7c59b8c0d497d481cf6d24bd807",
   "changeList": [
-    "2.1.143-1-7acaf9a: Merge pull request #60 from Laziassdev/codex/fix-instagram-ripper-http-status-429-error", "2.1.143-1-7acaf9a: Built at 2025-10-27T12:10:15Z"
+    "2.1.144-1-bc3a2df: Merge pull request #61 from Laziassdev/codex/prevent-duplicate-images-in-tumblr-downloads", "2.1.144-1-bc3a2df: Built at 2025-10-27T18:55:32Z"
   ]
 }
