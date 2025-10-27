@@ -1,7 +1,7 @@
 {
-  "latestVersion": "2.1.141-1-6573b33",
-  "currentHash": "badda3ab27fbd7ab7ffb61e5803fbfb1fbcc84ae1bd10c59f41bd5e32ec01346",
+  "latestVersion": "2.1.142-1-8b07586",
+  "currentHash": "a967b71ded3d3bc27fa45a9bca54a9ef73509071e5ef94a4b71b65e2bb1ee700",
   "changeList": [
-    "2.1.141-1-6573b33: Merge pull request #58 from Laziassdev/codex/fix-overwrite-existing-files-flag", "2.1.141-1-6573b33: Built at 2025-10-27T11:08:51Z"
+    "2.1.142-1-8b07586: Merge pull request #59 from Laziassdev/codex/fix-incorrect-download-count-increment", "2.1.142-1-8b07586: Built at 2025-10-27T11:41:03Z"
   ]
 }
