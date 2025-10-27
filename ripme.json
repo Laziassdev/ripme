@@ -1,7 +1,7 @@
 {
-  "latestVersion": "2.1.139-1-e259b6b",
-  "currentHash": "f0ec03cad59da8311a543297afc958ca165f5dedef619219534602e4c3953912",
+  "latestVersion": "2.1.140-1-b2e49af",
+  "currentHash": "466b9da970d8c3e83b967a8ce96a79a509ff202d2b19d1888709b127b1474d8f",
   "changeList": [
-    "2.1.139-1-e259b6b: Merge pull request #56 from Laziassdev/codex/investigate-tumblrripper-404-errors", "2.1.139-1-e259b6b: Built at 2025-10-25T23:23:18Z"
+    "2.1.140-1-b2e49af: Merge pull request #57 from Laziassdev/codex/fix-re-queue-bug-in-downloader", "2.1.140-1-b2e49af: Built at 2025-10-27T10:36:46Z"
   ]
 }
