@@ -11,6 +11,8 @@ import java.util.Set;
 import java.util.HashMap;
 import java.util.Map;
 import java.sql.*;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import java.util.stream.Collectors;
@@ -284,7 +286,24 @@ public class CoomerPartyRipper extends AbstractJSONRipper {
             }
             URL resolvedUrl = Http.followRedirectsWithRetry(url, 5, 5, COOMER_USER_AGENT, headers);
 
-            if (!downloadLimitTracker.tryAcquire(resolvedUrl)) {
+            boolean countTowardsLimit = true;
+            if (downloadLimitTracker.isEnabled()) {
+                try {
+                    Path existingPath = getFilePath(resolvedUrl, "", getPrefix(index), null, null);
+                    if (Files.exists(existingPath)) {
+                        if (!Utils.getConfigBoolean("file.overwrite", false)) {
+                            logger.debug("Skipping existing file due to max download limit: {}", existingPath);
+                            super.downloadExists(resolvedUrl, existingPath);
+                            return;
+                        }
+                        countTowardsLimit = false;
+                    }
+                } catch (IOException e) {
+                    logger.warn("Unable to determine existing file path for {}: {}", resolvedUrl, e.getMessage());
+                }
+            }
+
+            if (!downloadLimitTracker.tryAcquire(resolvedUrl, countTowardsLimit)) {
                 if (downloadLimitTracker.isLimitReached()) {
                     maxDownloadLimitReached = true;
                     if (downloadLimitTracker.shouldNotifyLimitReached()) {

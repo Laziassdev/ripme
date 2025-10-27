@@ -3,7 +3,9 @@ package com.rarchives.ripme.ripper;
 import java.io.*;
 import java.net.*;
 import java.nio.file.Files;
+import java.nio.file.Path;
 import java.nio.file.Paths;
+import java.nio.file.StandardCopyOption;
 import java.util.Arrays;
 import java.util.HashMap;
 import java.util.Map;
@@ -67,13 +69,17 @@ class DownloadFileThread implements Runnable {
     @Override
     public void run() {
         // First thing we make sure the file name doesn't have any illegal chars in it
-        saveAs = new File(
+        File targetFile = new File(
                 saveAs.getParentFile().getAbsolutePath() + File.separator + Utils.sanitizeSaveAs(saveAs.getName()));
+        saveAs = targetFile;
+        File workingFile = targetFile;
+        Path targetPath = targetFile.toPath();
         long fileSize = 0;
         int bytesTotal;
         int bytesDownloaded = 0;
-        if (saveAs.exists() && observer.tryResumeDownload()) {
-            fileSize = saveAs.length();
+        boolean resumeDownload = observer.tryResumeDownload();
+        if (targetFile.exists() && resumeDownload) {
+            fileSize = targetFile.length();
         }
         try {
             observer.stopCheck();
@@ -81,16 +87,28 @@ class DownloadFileThread implements Runnable {
             observer.downloadErrored(url, Utils.getLocalizedString("download.interrupted"));
             return;
         }
-        if (saveAs.exists() && !observer.tryResumeDownload() && !getFileExtFromMIME
-                || Utils.fuzzyExists(Paths.get(saveAs.getParent()), saveAs.getName()) && getFileExtFromMIME
-                        && !observer.tryResumeDownload()) {
+        boolean useTempFile = false;
+        if (targetFile.exists() && !resumeDownload && !getFileExtFromMIME
+                || Utils.fuzzyExists(Paths.get(targetFile.getParent()), targetFile.getName()) && getFileExtFromMIME
+                        && !resumeDownload) {
             if (Utils.getConfigBoolean("file.overwrite", false)) {
-                logger.info("[!] " + Utils.getLocalizedString("deleting.existing.file") + prettySaveAs);
-                if (!saveAs.delete()) logger.error("could not delete existing file: " + saveAs.getAbsolutePath());
+                useTempFile = true;
             } else {
                 logger.info("[!] " + Utils.getLocalizedString("skipping") + " " + url + " -- "
                         + Utils.getLocalizedString("file.already.exists") + ": " + prettySaveAs);
-                observer.downloadExists(url, saveAs.toPath());
+                observer.downloadExists(url, targetPath);
+                return;
+            }
+        }
+        Path tempFilePath = null;
+        if (useTempFile) {
+            try {
+                tempFilePath = Files.createTempFile(targetFile.getParentFile().toPath(), "ripme-", ".tmp");
+                workingFile = tempFilePath.toFile();
+            } catch (IOException e) {
+                logger.error("[!] Failed to prepare temporary file for {}: {}", targetFile.getAbsolutePath(),
+                        e.getMessage());
+                observer.downloadErrored(url, Utils.getLocalizedString("download.interrupted"));
                 return;
             }
         }
@@ -129,7 +147,7 @@ class DownloadFileThread implements Runnable {
                     cookie.append(key).append("=").append(cookies.get(key));
                 }
                 huc.setRequestProperty("Cookie", cookie.toString());
-                if (observer.tryResumeDownload()) {
+                if (resumeDownload) {
                     if (fileSize != 0) {
                         huc.setRequestProperty("Range", "bytes=" + fileSize + "-");
                     }
@@ -140,7 +158,7 @@ class DownloadFileThread implements Runnable {
                 int statusCode = huc.getResponseCode();
                 logger.debug("Status code: " + statusCode);
                 // If the server doesn't allow resuming downloads error out
-                if (statusCode != 206 && observer.tryResumeDownload() && saveAs.exists()) {
+                if (statusCode != 206 && resumeDownload && targetFile.exists()) {
                     // TODO find a better way to handle servers that don't support resuming
                     // downloads then just erroring out
                     throw new IOException(Utils.getLocalizedString("server.doesnt.support.resuming.downloads"));
@@ -213,7 +231,6 @@ class DownloadFileThread implements Runnable {
                     String fileExt = URLConnection.guessContentTypeFromStream(bis);
                     if (fileExt != null) {
                         fileExt = fileExt.replaceAll("image/", "");
-                        saveAs = new File(saveAs.toString() + "." + fileExt);
                     } else {
                         logger.error("Was unable to get content type from stream");
                         // Try to get the file type from the magic number
@@ -221,46 +238,55 @@ class DownloadFileThread implements Runnable {
                         bis.read(magicBytes, 0, 5);
                         bis.reset();
                         fileExt = Utils.getEXTFromMagic(magicBytes);
-                        if (fileExt != null) {
-                            saveAs = new File(saveAs.toString() + "." + fileExt);
-                        } else {
+                        if (fileExt == null) {
                             logger.error(Utils.getLocalizedString("was.unable.to.get.content.type.using.magic.number"));
                             logger.error(
                                     Utils.getLocalizedString("magic.number.was") + ": " + Arrays.toString(magicBytes));
+                        }
+                    }
+                    if (fileExt != null) {
+                        targetFile = new File(targetFile.toString() + "." + fileExt);
+                        targetPath = targetFile.toPath();
+                        saveAs = targetFile;
+                        if (!useTempFile) {
+                            workingFile = targetFile;
                         }
                     }
                 }
                 // If we're resuming a download we append data to the existing file
                 OutputStream fos = null;
                 if (statusCode == 206) {
-                    fos = new FileOutputStream(saveAs, true);
+                    fos = new FileOutputStream(workingFile, true);
                 } else {
                     try {
-                        fos = new FileOutputStream(saveAs);
+                        fos = new FileOutputStream(workingFile);
                     } catch (FileNotFoundException e) {
                         // We do this because some filesystems have a max name length
                         if (e.getMessage().contains("File name too long")) {
                             logger.error("The filename " + saveAs.getName()
                                     + " is to long to be saved on this file system.");
                             logger.info("Shortening filename");
-                            String[] saveAsSplit = saveAs.getName().split("\\.");
+                            String[] saveAsSplit = workingFile.getName().split("\\.");
                             // Get the file extension so when we shorten the file name we don't cut off the
                             // file extension
                             String fileExt = saveAsSplit[saveAsSplit.length - 1];
                             // The max limit for filenames on Linux with Ext3/4 is 255 bytes
-                            logger.info(saveAs.getName().substring(0, 254 - fileExt.length()) + fileExt);
-                            String filename = saveAs.getName().substring(0, 254 - fileExt.length()) + "." + fileExt;
+                            logger.info(workingFile.getName().substring(0, 254 - fileExt.length()) + fileExt);
+                            String filename = workingFile.getName().substring(0, 254 - fileExt.length()) + "." + fileExt;
                             // We can't just use the new file name as the saveAs because the file name
                             // doesn't include the
                             // users save path, so we get the user save path from the old saveAs
-                            saveAs = new File(saveAs.getParentFile().getAbsolutePath() + File.separator + filename);
-                            fos = new FileOutputStream(saveAs);
-                        } else if (saveAs.getAbsolutePath().length() > 259 && Utils.isWindows()) {
+                            targetFile = new File(targetFile.getParentFile().getAbsolutePath() + File.separator + filename);
+                            targetPath = targetFile.toPath();
+                            saveAs = targetFile;
+                            workingFile = useTempFile ? workingFile : targetFile;
+                            fos = new FileOutputStream(workingFile);
+                        } else if (targetFile.getAbsolutePath().length() > 259 && Utils.isWindows()) {
                             // This if is for when the file path has gone above 260 chars which windows does
                             // not allow
                             fos = Files.newOutputStream(
-                                    Utils.shortenSaveAsWindows(saveAs.getParentFile().getPath(), saveAs.getName()));
-                            assert fos != null: "After shortenSaveAsWindows: " + saveAs.getAbsolutePath();
+                                    Utils.shortenSaveAsWindows(targetFile.getParentFile().getPath(), targetFile.getName()));
+                            assert fos != null: "After shortenSaveAsWindows: " + targetFile.getAbsolutePath();
                         }
                         assert fos != null: e.getStackTrace();
                     }
@@ -290,23 +316,37 @@ class DownloadFileThread implements Runnable {
                 bis.close();
                 fos.close();
 
-                long finalSize = saveAs.length();
+                File fileToInspect = workingFile;
+                long finalSize = fileToInspect.length();
                 if (!shouldSkipFileDownload && finalSize < MIN_FILE_SIZE_BYTES) {
                     logger.warn("[!] Deleting {} ({} bytes) because it is smaller than {} bytes", prettySaveAs, finalSize,
                             MIN_FILE_SIZE_BYTES);
-                    if (!saveAs.delete()) {
-                        logger.warn("[!] Failed to delete {} after size check", saveAs.getAbsolutePath());
+                    if (!fileToInspect.delete()) {
+                        logger.warn("[!] Failed to delete {} after size check", fileToInspect.getAbsolutePath());
                     }
                     observer.downloadErrored(url, "File smaller than 10KB (deleted)");
                     return;
                 }
-                if (!shouldSkipFileDownload && !observer.registerDownloadHash(saveAs.toPath())) {
+                if (!shouldSkipFileDownload && !observer.registerDownloadHash(fileToInspect.toPath())) {
                     logger.warn("[!] Deleting {} because its hash matches a previously downloaded file", prettySaveAs);
-                    if (!saveAs.delete()) {
-                        logger.warn("[!] Failed to delete duplicate file {}", saveAs.getAbsolutePath());
+                    if (!fileToInspect.delete()) {
+                        logger.warn("[!] Failed to delete duplicate file {}", fileToInspect.getAbsolutePath());
                     }
                     observer.downloadErrored(url, "Duplicate file (deleted)");
                     return;
+                }
+                if (useTempFile) {
+                    try {
+                        Files.move(fileToInspect.toPath(), targetPath, StandardCopyOption.REPLACE_EXISTING);
+                        workingFile = targetFile;
+                    } catch (IOException moveException) {
+                        logger.error("[!] Failed to replace existing file {}: {}", targetPath, moveException.getMessage());
+                        if (!fileToInspect.delete()) {
+                            logger.warn("[!] Failed to delete temporary file {}", fileToInspect.getAbsolutePath());
+                        }
+                        observer.downloadErrored(url, Utils.getLocalizedString("download.interrupted"));
+                        return;
+                    }
                 }
                 break; // Download successful: break out of infinite loop
             } catch (SocketTimeoutException timeoutEx) {

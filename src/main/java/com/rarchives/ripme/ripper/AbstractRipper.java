@@ -189,7 +189,8 @@ public abstract class AbstractRipper
     }
 
     public boolean registerDownloadHash(Path file) {
-        if (Utils.getConfigBoolean("download.allow_duplicates", false)) {
+        if (Utils.getConfigBoolean("download.allow_duplicates", false)
+                || Utils.getConfigBoolean("file.overwrite", false)) {
             return true;
         }
         ensureHashHistoryLoaded();
@@ -392,7 +393,8 @@ public abstract class AbstractRipper
         }
 
         // Don't re-add the url if it was downloaded in a previous rip
-        if (Utils.getConfigBoolean("remember.url_history", true) && !isThisATest()) {
+        if (!Utils.getConfigBoolean("file.overwrite", false)
+                && Utils.getConfigBoolean("remember.url_history", true) && !isThisATest()) {
             if (hasDownloadedURL(url.toExternalForm())) {
                 sendUpdate(STATUS.DOWNLOAD_WARN, "Already downloaded " + url.toExternalForm());
                 alreadyDownloadedUrls += 1;

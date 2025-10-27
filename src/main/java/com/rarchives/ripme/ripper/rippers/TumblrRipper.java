@@ -8,6 +8,7 @@ import java.net.URISyntaxException;
 import java.net.URL;
 import java.net.URLDecoder;
 import java.io.UnsupportedEncodingException;
+import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.Instant;
 import java.time.ZoneId;
@@ -639,7 +640,33 @@ public class TumblrRipper extends AlbumRipper {
     }
 
     public void downloadURL(URL url, String date) {
-        if (!downloadLimitTracker.tryAcquire(url)) {
+        int currentIndex = nextIndex.get();
+        boolean countTowardsLimit = true;
+        if (downloadLimitTracker.isEnabled()) {
+            try {
+                String prefix;
+                if (url.getHost().equals("va.media.tumblr.com")) {
+                    prefix = getPrefix(currentIndex) + "tumblr_video_" + currentIndex;
+                } else if (albumType == ALBUM_TYPE.TAG) {
+                    prefix = date + " ";
+                } else {
+                    prefix = getPrefix(currentIndex);
+                }
+                Path existingPath = getFilePath(url, "", prefix, null, null);
+                if (Files.exists(existingPath)) {
+                    if (!Utils.getConfigBoolean("file.overwrite", false)) {
+                        logger.debug("Skipping existing file due to max download limit: {}", existingPath);
+                        super.downloadExists(url, existingPath);
+                        return;
+                    }
+                    countTowardsLimit = false;
+                }
+            } catch (IOException e) {
+                logger.warn("Unable to determine existing file path for {}: {}", url, e.getMessage());
+            }
+        }
+
+        if (!downloadLimitTracker.tryAcquire(url, countTowardsLimit)) {
             if (downloadLimitTracker.isLimitReached()) {
                 maxDownloadLimitReached = true;
                 if (downloadLimitTracker.shouldNotifyLimitReached()) {
@@ -653,7 +680,6 @@ public class TumblrRipper extends AlbumRipper {
             return;
         }
 
-        int currentIndex = nextIndex.get();
         boolean added = false;
 
         if (url.getHost().equals("va.media.tumblr.com")) {

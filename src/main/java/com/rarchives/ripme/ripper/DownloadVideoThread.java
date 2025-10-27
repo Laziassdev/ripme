@@ -8,6 +8,7 @@ import java.net.HttpURLConnection;
 import java.net.URL;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.nio.file.StandardCopyOption;
 
 import javax.net.ssl.HttpsURLConnection;
 
@@ -51,17 +52,23 @@ class DownloadVideoThread implements Runnable {
             observer.downloadErrored(url, "Download interrupted");
             return;
         }
-        if (Files.exists(saveAs)) {
-            if (Utils.getConfigBoolean("file.overwrite", false)) {
-                logger.info("[!] Deleting existing file" + prettySaveAs);
+        Path targetPath = saveAs;
+        Path workingPath = targetPath;
+        Path tempPath = null;
+        boolean overwrite = Utils.getConfigBoolean("file.overwrite", false);
+        if (Files.exists(targetPath)) {
+            if (overwrite) {
                 try {
-                    Files.delete(saveAs);
+                    tempPath = Files.createTempFile(targetPath.getParent(), "ripme-", ".tmp");
+                    workingPath = tempPath;
                 } catch (IOException e) {
-                    e.printStackTrace();
+                    logger.error("[!] Failed to prepare temporary file for {}: {}", prettySaveAs, e.getMessage());
+                    observer.downloadErrored(url, "Download interrupted");
+                    return;
                 }
             } else {
                 logger.info("[!] Skipping " + url + " -- file already exists: " + prettySaveAs);
-                observer.downloadExists(url, saveAs);
+                observer.downloadExists(url, targetPath);
                 return;
             }
         }
@@ -105,7 +112,7 @@ class DownloadVideoThread implements Runnable {
                 huc.connect();
                 // Check status code
                 bis = new BufferedInputStream(huc.getInputStream());
-                fos = Files.newOutputStream(saveAs);
+                fos = Files.newOutputStream(workingPath);
                 while ( (bytesRead = bis.read(data)) != -1) {
                     try {
                         observer.stopCheck();
@@ -120,15 +127,26 @@ class DownloadVideoThread implements Runnable {
                 }
                 bis.close();
                 fos.close();
-                if (!observer.registerDownloadHash(saveAs)) {
+                if (!observer.registerDownloadHash(workingPath)) {
                     logger.warn("[!] Deleting {} because its hash matches a previously downloaded file", prettySaveAs);
                     try {
-                        Files.deleteIfExists(saveAs);
+                        Files.deleteIfExists(workingPath);
                     } catch (IOException e) {
-                        logger.warn("[!] Failed to delete duplicate file {}: {}", saveAs, e.getMessage());
+                        logger.warn("[!] Failed to delete duplicate file {}: {}", workingPath, e.getMessage());
                     }
                     observer.downloadErrored(url, "Duplicate file (deleted)");
                     return;
+                }
+                if (tempPath != null) {
+                    try {
+                        Files.move(tempPath, targetPath, StandardCopyOption.REPLACE_EXISTING);
+                        workingPath = targetPath;
+                    } catch (IOException moveException) {
+                        logger.error("[!] Failed to replace existing file {}: {}", prettySaveAs, moveException.getMessage());
+                        Files.deleteIfExists(tempPath);
+                        observer.downloadErrored(url, "Download interrupted");
+                        return;
+                    }
                 }
                 break; // Download successful: break out of infinite loop
             } catch (IOException e) {
@@ -148,7 +166,7 @@ class DownloadVideoThread implements Runnable {
                 return;
             }
         } while (true);
-        observer.downloadCompleted(url, saveAs);
+        observer.downloadCompleted(url, targetPath);
         logger.info("[+] Saved " + url + " as " + this.prettySaveAs);
     }
 
