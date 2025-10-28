@@ -1,7 +1,7 @@
 {
-  "latestVersion": "2.1.146-1-ec44621",
-  "currentHash": "59b7bb2825807897fdf36c85e4c61196d6122ce5c0887c84567df4547ac080fc",
+  "latestVersion": "2.1.147-1-b555245",
+  "currentHash": "44bd6a9081651dd9426877552f8977164abcb204c1e06ea54aec62a47fa4548b",
   "changeList": [
-    "2.1.146-1-ec44621: Merge pull request #63 from Laziassdev/codex/learn-de-duplication-from-tumblthree", "2.1.146-1-ec44621: Built at 2025-10-28T19:26:49Z"
+    "2.1.147-1-b555245: Merge pull request #64 from Laziassdev/codex/fix-sqlite-file-cleanup-in-temp-folder", "2.1.147-1-b555245: Built at 2025-10-28T19:58:40Z"
   ]
 }
