@@ -1,7 +1,7 @@
 {
-  "latestVersion": "2.1.148-1-2fa4916",
-  "currentHash": "cfe7796c5bfeb6e0ede4e26347e877a2c20536763469bf2f4a04d4ab27b42ca1",
+  "latestVersion": "2.1.149-1-95e5825",
+  "currentHash": "aab9fbb7b70de5243342702f7a9f0a5bb2f26cb24aadf573d52d50805da5edba",
   "changeList": [
-    "2.1.148-1-2fa4916: Merge pull request #65 from Laziassdev/codex/ensure-only-largest-image-files-are-ripped", "2.1.148-1-2fa4916: Built at 2025-10-28T20:27:26Z"
+    "2.1.149-1-95e5825: Merge pull request #66 from Laziassdev/codex/count-only-downloaded-items-in-history-tab", "2.1.149-1-95e5825: Built at 2025-10-28T20:44:14Z"
   ]
 }
