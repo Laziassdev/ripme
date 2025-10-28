@@ -77,10 +77,12 @@ public class RedditRipper extends AlbumRipper {
                 // Remove duplicate Profiles/ if present
                 sqlitePath = sqlitePath.replace("Profiles/Profiles/", "Profiles/");
                 logger.info("Trying cookies.sqlite at: {}", sqlitePath);
+                java.nio.file.Path tempCopy = null;
                 try {
                     Class.forName("org.sqlite.JDBC");
                     // Copy to temp file to avoid lock issues
-                    java.nio.file.Path tempCopy = java.nio.file.Files.createTempFile("cookies", ".sqlite");
+                    tempCopy = java.nio.file.Files.createTempFile("cookies", ".sqlite");
+                    tempCopy.toFile().deleteOnExit();
                     java.nio.file.Files.copy(java.nio.file.Paths.get(sqlitePath), tempCopy, java.nio.file.StandardCopyOption.REPLACE_EXISTING);
                     try (Connection conn = DriverManager.getConnection("jdbc:sqlite:" + tempCopy.toString())) {
                         String sql = "SELECT name, value FROM moz_cookies WHERE host LIKE '%reddit.com'";
@@ -100,9 +102,16 @@ public class RedditRipper extends AlbumRipper {
                             }
                         }
                     }
-                    java.nio.file.Files.deleteIfExists(tempCopy);
                 } catch (Exception e) {
                     logger.warn("Failed to read cookies from profile {}: {}", profilePath, e.getMessage());
+                } finally {
+                    if (tempCopy != null) {
+                        try {
+                            java.nio.file.Files.deleteIfExists(tempCopy);
+                        } catch (IOException cleanupException) {
+                            logger.debug("Unable to delete temporary Firefox cookie copy", cleanupException);
+                        }
+                    }
                 }
             }
         } catch (Exception e) {

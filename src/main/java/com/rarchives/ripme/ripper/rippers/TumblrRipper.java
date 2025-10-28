@@ -19,6 +19,7 @@ import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
 import java.util.Random;
@@ -1119,21 +1120,62 @@ public class TumblrRipper extends AlbumRipper {
     }
 
     private Set<String> selectBestHiddenMediaUrls(Set<String> urls) {
-        Map<String, String> bestByKey = new LinkedHashMap<>();
+        Map<String, String> bestByGroup = new LinkedHashMap<>();
         for (String url : urls) {
             if (url == null || url.isEmpty()) {
                 continue;
             }
-            String key = normalizeHiddenMediaUrl(url);
-            if (key == null || key.isEmpty()) {
-                key = url;
+            String groupKey = hiddenMediaGroupKey(url);
+            if (groupKey == null || groupKey.isEmpty()) {
+                groupKey = url;
             }
-            String existing = bestByKey.get(key);
-            if (existing == null || hiddenMediaQualityScore(url) > hiddenMediaQualityScore(existing)) {
-                bestByKey.put(key, url);
+            String existing = bestByGroup.get(groupKey);
+            if (existing == null || hiddenMediaVariantScore(url) > hiddenMediaVariantScore(existing)) {
+                bestByGroup.put(groupKey, url);
             }
         }
-        return new LinkedHashSet<>(bestByKey.values());
+        return new LinkedHashSet<>(bestByGroup.values());
+    }
+
+    private int hiddenMediaVariantScore(String url) {
+        int quality = hiddenMediaQualityScore(url);
+        if (quality == Integer.MAX_VALUE) {
+            return Integer.MAX_VALUE;
+        }
+        long combined = quality * 1000L + hiddenMediaExtensionScore(url);
+        if (combined > Integer.MAX_VALUE) {
+            return Integer.MAX_VALUE;
+        }
+        return (int) combined;
+    }
+
+    private int hiddenMediaExtensionScore(String url) {
+        if (url == null) {
+            return 0;
+        }
+        String lower = url.toLowerCase(Locale.ROOT);
+        if (lower.endsWith(".mp4")) {
+            return 600;
+        }
+        if (lower.endsWith(".webm") || lower.endsWith(".m4v")) {
+            return 550;
+        }
+        if (lower.endsWith(".gifv")) {
+            return 525;
+        }
+        if (lower.endsWith(".gif")) {
+            return 500;
+        }
+        if (lower.endsWith(".webp")) {
+            return 400;
+        }
+        if (lower.endsWith(".png")) {
+            return 350;
+        }
+        if (lower.endsWith(".jpg") || lower.endsWith(".jpeg")) {
+            return 300;
+        }
+        return 0;
     }
 
     private int hiddenMediaQualityScore(String url) {
@@ -1166,6 +1208,19 @@ public class TumblrRipper extends AlbumRipper {
             return withoutQuery.substring(0, matcher.start()) + withoutQuery.substring(matcher.end());
         }
         return withoutQuery;
+    }
+
+    private String hiddenMediaGroupKey(String url) {
+        String normalized = normalizeHiddenMediaUrl(url);
+        if (normalized == null || normalized.isEmpty()) {
+            return normalized;
+        }
+        int lastSlash = normalized.lastIndexOf('/');
+        int lastDot = normalized.lastIndexOf('.');
+        if (lastDot > lastSlash) {
+            return normalized.substring(0, lastDot);
+        }
+        return normalized;
     }
 
     private URL maybeUpgradeTumblrMediaUrl(URL url) {
