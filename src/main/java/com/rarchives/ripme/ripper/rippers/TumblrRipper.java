@@ -51,6 +51,8 @@ public class TumblrRipper extends AlbumRipper {
     private static final Logger logger = LogManager.getLogger(TumblrRipper.class);
     private static final int MAX_RETRIES = 5;
     private static final int RETRY_DELAY_SECONDS = 5;
+    private static final int HIDDEN_API_MAX_ATTEMPTS = 3;
+    private static final long HIDDEN_API_RETRY_DELAY_MS = 1000L;
     private final int maxDownloads = Utils.getConfigInteger(
             "maxdownloads",
             Utils.getConfigInteger("max.downloads", 0)); // 0 or below = no limit
@@ -865,25 +867,38 @@ public class TumblrRipper extends AlbumRipper {
     }
 
     private JSONObject fetchHiddenApiPage(String url, String bearerToken, String tumblrCookies, String dashboardBlogIdentifier) {
-        try {
-            Http http = Http.url(url).ignoreContentType().userAgent(AbstractRipper.USER_AGENT)
-                    .referrer("https://www.tumblr.com/dashboard/blog/" + dashboardBlogIdentifier)
-                    .header("Cookie", tumblrCookies);
-            String formKey = getTumblrCookieValue("form_key");
-            if (formKey != null && !formKey.isEmpty()) {
-                http = http.header("X-Tumblr-Form-Key", formKey);
-            }
-            if (bearerToken != null && !bearerToken.isEmpty()) {
-                http = http.header("Authorization", "Bearer " + bearerToken);
-            }
-            String body = http.get().body().text();
+        for (int attempt = 1; attempt <= HIDDEN_API_MAX_ATTEMPTS && !isStopped(); attempt++) {
             try {
-                return new JSONObject(body);
-            } catch (JSONException e) {
-                logger.warn("Received invalid JSON from Tumblr dashboard API {}: {}", url, e.getMessage());
+                Http http = Http.url(url).ignoreContentType().userAgent(AbstractRipper.USER_AGENT)
+                        .referrer("https://www.tumblr.com/dashboard/blog/" + dashboardBlogIdentifier)
+                        .header("Cookie", tumblrCookies);
+                String formKey = getTumblrCookieValue("form_key");
+                if (formKey != null && !formKey.isEmpty()) {
+                    http = http.header("X-Tumblr-Form-Key", formKey);
+                }
+                if (bearerToken != null && !bearerToken.isEmpty()) {
+                    http = http.header("Authorization", "Bearer " + bearerToken);
+                }
+                String body = http.get().body().text();
+                try {
+                    return new JSONObject(body);
+                } catch (JSONException e) {
+                    logger.warn("Received invalid JSON from Tumblr dashboard API {} (attempt {}/{}): {}", url,
+                            attempt, HIDDEN_API_MAX_ATTEMPTS, e.getMessage());
+                }
+            } catch (IOException e) {
+                logger.warn("Failed to fetch Tumblr dashboard API page {} (attempt {}/{})", url, attempt,
+                        HIDDEN_API_MAX_ATTEMPTS, e);
             }
-        } catch (IOException e) {
-            logger.warn("Failed to fetch Tumblr dashboard API page {}", url, e);
+
+            if (attempt < HIDDEN_API_MAX_ATTEMPTS) {
+                try {
+                    Thread.sleep(HIDDEN_API_RETRY_DELAY_MS);
+                } catch (InterruptedException interruptedException) {
+                    Thread.currentThread().interrupt();
+                    return null;
+                }
+            }
         }
         return null;
     }
