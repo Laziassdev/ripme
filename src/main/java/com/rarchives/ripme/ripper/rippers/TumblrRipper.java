@@ -91,6 +91,8 @@ public class TumblrRipper extends AlbumRipper {
     private volatile String lastRequestedApiKey;
     private static final Map<String, String> TUMBLR_FIREFOX_COOKIES = new LinkedHashMap<>();
     private final Set<String> hiddenFallbackSeenKeys = Collections.synchronizedSet(new LinkedHashSet<>());
+    private final Set<String> seenMediaKeys = Collections.synchronizedSet(new LinkedHashSet<>());
+    private final Map<String, String> mediaKeyByUrl = Collections.synchronizedMap(new LinkedHashMap<>());
 
     // Loads Tumblr cookies from Firefox profiles across supported platforms and returns a header-ready string
     private static String getTumblrCookiesFromFirefox() {
@@ -644,33 +646,52 @@ public class TumblrRipper extends AlbumRipper {
     }
 
     public void downloadURL(URL url, String date) {
+        URL resolvedUrl = maybeUpgradeTumblrMediaUrl(url);
+        if (resolvedUrl == null) {
+            resolvedUrl = url;
+        }
+
+        String canonicalKey = canonicalTumblrMediaKey(resolvedUrl);
+        if (canonicalKey != null) {
+            synchronized (seenMediaKeys) {
+                if (!seenMediaKeys.add(canonicalKey)) {
+                    logger.debug("Skipping duplicate Tumblr media candidate {}", resolvedUrl);
+                    return;
+                }
+            }
+            synchronized (mediaKeyByUrl) {
+                mediaKeyByUrl.put(resolvedUrl.toExternalForm(), canonicalKey);
+            }
+        }
+
         int currentIndex = nextIndex.get();
         boolean countTowardsLimit = true;
         if (downloadLimitTracker.isEnabled()) {
             try {
                 String prefix;
-                if (url.getHost().equals("va.media.tumblr.com")) {
+                if (resolvedUrl.getHost().equals("va.media.tumblr.com")) {
                     prefix = getPrefix(currentIndex) + "tumblr_video_" + currentIndex;
                 } else if (albumType == ALBUM_TYPE.TAG) {
                     prefix = date + " ";
                 } else {
                     prefix = getPrefix(currentIndex);
                 }
-                Path existingPath = getFilePath(url, "", prefix, null, null);
+                Path existingPath = getFilePath(resolvedUrl, "", prefix, null, null);
                 if (Files.exists(existingPath)) {
                     if (!Utils.getConfigBoolean("file.overwrite", false)) {
                         logger.debug("Skipping existing file due to max download limit: {}", existingPath);
-                        super.downloadExists(url, existingPath);
+                        super.downloadExists(resolvedUrl, existingPath);
+                        unregisterMediaKeyMapping(resolvedUrl);
                         return;
                     }
                     countTowardsLimit = false;
                 }
             } catch (IOException e) {
-                logger.warn("Unable to determine existing file path for {}: {}", url, e.getMessage());
+                logger.warn("Unable to determine existing file path for {}: {}", resolvedUrl, e.getMessage());
             }
         }
 
-        if (!downloadLimitTracker.tryAcquire(url, countTowardsLimit)) {
+        if (!downloadLimitTracker.tryAcquire(resolvedUrl, countTowardsLimit)) {
             if (downloadLimitTracker.isLimitReached()) {
                 maxDownloadLimitReached = true;
                 if (downloadLimitTracker.shouldNotifyLimitReached()) {
@@ -679,31 +700,38 @@ public class TumblrRipper extends AlbumRipper {
                     sendUpdate(STATUS.DOWNLOAD_COMPLETE_HISTORY, message);
                 }
             } else {
-                logger.debug("Max download limit of {} currently allocated, deferring {}", maxDownloads, url);
+                logger.debug("Max download limit of {} currently allocated, deferring {}", maxDownloads, resolvedUrl);
+            }
+            if (canonicalKey != null) {
+                unregisterTumblrMediaKey(resolvedUrl);
             }
             return;
         }
 
         boolean added = false;
 
-        if (url.getHost().equals("va.media.tumblr.com")) {
-            added = addURLToDownload(url, getPrefix(currentIndex) + "tumblr_video_" + currentIndex);
+        if (resolvedUrl.getHost().equals("va.media.tumblr.com")) {
+            added = addURLToDownload(resolvedUrl, getPrefix(currentIndex) + "tumblr_video_" + currentIndex);
         } else {
             if (albumType == ALBUM_TYPE.TAG) {
-                added = addURLToDownload(url, date + " ");
+                added = addURLToDownload(resolvedUrl, date + " ");
             }
             if (!added) {
-                added = addURLToDownload(url, getPrefix(currentIndex));
+                added = addURLToDownload(resolvedUrl, getPrefix(currentIndex));
             }
         }
 
         if (added) {
             nextIndex.incrementAndGet();
             if (Utils.getConfigBoolean("urls_only.save", false)) {
-                handleSuccessfulDownload(url);
+                handleSuccessfulDownload(resolvedUrl);
+                unregisterMediaKeyMapping(resolvedUrl);
             }
         } else {
-            downloadLimitTracker.onFailure(url);
+            downloadLimitTracker.onFailure(resolvedUrl);
+            if (canonicalKey != null) {
+                unregisterTumblrMediaKey(resolvedUrl);
+            }
         }
     }
 
@@ -711,18 +739,21 @@ public class TumblrRipper extends AlbumRipper {
     public void downloadCompleted(URL url, Path saveAs) {
         super.downloadCompleted(url, saveAs);
         handleSuccessfulDownload(url);
+        unregisterMediaKeyMapping(url);
     }
 
     @Override
     public void downloadExists(URL url, Path file) {
         super.downloadExists(url, file);
         downloadLimitTracker.onFailure(url);
+        unregisterMediaKeyMapping(url);
     }
 
     @Override
     public void downloadErrored(URL url, String reason) {
         downloadLimitTracker.onFailure(url);
         super.downloadErrored(url, reason);
+        unregisterTumblrMediaKey(url);
     }
 
     private void handleSuccessfulDownload(URL url) {
@@ -1135,6 +1166,91 @@ public class TumblrRipper extends AlbumRipper {
             return withoutQuery.substring(0, matcher.start()) + withoutQuery.substring(matcher.end());
         }
         return withoutQuery;
+    }
+
+    private URL maybeUpgradeTumblrMediaUrl(URL url) {
+        if (url == null) {
+            return null;
+        }
+        String host = url.getHost();
+        if (host == null || !host.toLowerCase().contains("tumblr.com")) {
+            return url;
+        }
+        String original = url.toExternalForm();
+        int queryIndex = original.indexOf('?');
+        String withoutQuery = queryIndex >= 0 ? original.substring(0, queryIndex) : original;
+        Matcher matcher = HIDDEN_MEDIA_SIZE_SUFFIX_PATTERN.matcher(withoutQuery);
+        if (matcher.find()) {
+            String token = matcher.group(1);
+            if (!"raw".equalsIgnoreCase(token)) {
+                String candidate = withoutQuery.substring(0, matcher.start()) + "_raw" + withoutQuery.substring(matcher.end());
+                try {
+                    URL rawUrl = new URL(candidate);
+                    if (hasReachableTumblrMedia(rawUrl)) {
+                        return rawUrl;
+                    }
+                } catch (MalformedURLException e) {
+                    logger.debug("Ignoring malformed Tumblr raw candidate {}", candidate, e);
+                }
+            }
+        }
+        return url;
+    }
+
+    private boolean hasReachableTumblrMedia(URL url) {
+        HttpURLConnection connection = null;
+        try {
+            connection = (HttpURLConnection) url.openConnection();
+            connection.setRequestMethod("HEAD");
+            connection.setInstanceFollowRedirects(true);
+            connection.setConnectTimeout(5000);
+            connection.setReadTimeout(5000);
+            connection.setRequestProperty("User-Agent", USER_AGENT);
+            int status = connection.getResponseCode();
+            return status >= 200 && status < 400;
+        } catch (IOException e) {
+            logger.debug("Failed to probe Tumblr media URL {}", url, e);
+            return false;
+        } finally {
+            if (connection != null) {
+                connection.disconnect();
+            }
+        }
+    }
+
+    private String canonicalTumblrMediaKey(URL url) {
+        if (url == null) {
+            return null;
+        }
+        String host = url.getHost();
+        if (host == null || !host.toLowerCase().contains("tumblr.com")) {
+            return null;
+        }
+        return normalizeHiddenMediaUrl(url.toExternalForm());
+    }
+
+    private void unregisterTumblrMediaKey(URL url) {
+        if (url == null) {
+            return;
+        }
+        String key;
+        synchronized (mediaKeyByUrl) {
+            key = mediaKeyByUrl.remove(url.toExternalForm());
+        }
+        if (key != null) {
+            synchronized (seenMediaKeys) {
+                seenMediaKeys.remove(key);
+            }
+        }
+    }
+
+    private void unregisterMediaKeyMapping(URL url) {
+        if (url == null) {
+            return;
+        }
+        synchronized (mediaKeyByUrl) {
+            mediaKeyByUrl.remove(url.toExternalForm());
+        }
     }
 
     private String extractInitialStateJson(String html) {
