@@ -1,7 +1,7 @@
 {
-  "latestVersion": "2.1.149-1-95e5825",
-  "currentHash": "aab9fbb7b70de5243342702f7a9f0a5bb2f26cb24aadf573d52d50805da5edba",
+  "latestVersion": "2.1.150-1-c5f800b",
+  "currentHash": "000ae0d0ae2b2bafa3bd41187f5b3a801e1b81ad7ae2cd4d9bdc56702175a56a",
   "changeList": [
-    "2.1.149-1-95e5825: Merge pull request #66 from Laziassdev/codex/count-only-downloaded-items-in-history-tab", "2.1.149-1-95e5825: Built at 2025-10-28T20:44:14Z"
+    "2.1.150-1-c5f800b: Merge pull request #67 from Laziassdev/codex/count-only-downloaded-items-in-history-tab-t2tg77", "2.1.150-1-c5f800b: Built at 2025-10-28T20:58:38Z"
   ]
 }
