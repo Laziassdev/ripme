@@ -1,7 +1,7 @@
 {
-  "latestVersion": "2.1.145-1-de07cea",
-  "currentHash": "8d20c35f6fd5298770447ef996213e73f0af41524ce20de412e729b738399ad9",
+  "latestVersion": "2.1.146-1-ec44621",
+  "currentHash": "59b7bb2825807897fdf36c85e4c61196d6122ce5c0887c84567df4547ac080fc",
   "changeList": [
-    "2.1.145-1-de07cea: Merge pull request #62 from Laziassdev/codex/review-tumblrthreeapp-for-duplicate-handling", "2.1.145-1-de07cea: Built at 2025-10-27T19:17:01Z"
+    "2.1.146-1-ec44621: Merge pull request #63 from Laziassdev/codex/learn-de-duplication-from-tumblthree", "2.1.146-1-ec44621: Built at 2025-10-28T19:26:49Z"
   ]
 }
