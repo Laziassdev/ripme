@@ -772,6 +772,14 @@ public class TumblrRipper extends AlbumRipper {
         }
     }
 
+    @Override
+    public int getCount() {
+        if (downloadLimitTracker.isEnabled()) {
+            return downloadLimitTracker.getTotalSuccessfulDownloads();
+        }
+        return super.getCount();
+    }
+
     private boolean isDefaultApiKeyInUse() {
         return lastRequestedApiKey == null || DEFAULT_API_KEYS.contains(lastRequestedApiKey);
     }

@@ -13,6 +13,7 @@ public class DownloadLimitTracker {
 
     private final int maxDownloads;
     private final AtomicInteger successfulDownloads = new AtomicInteger(0);
+    private final AtomicInteger totalSuccessfulDownloads = new AtomicInteger(0);
     private final Map<String, Boolean> trackedUrls = new HashMap<>();
     private int countedInFlight = 0;
     private boolean limitNotified = false;
@@ -64,6 +65,9 @@ public class DownloadLimitTracker {
         }
         String key = keyFor(url);
         Boolean counted = trackedUrls.remove(key);
+        if (counted != null) {
+            totalSuccessfulDownloads.incrementAndGet();
+        }
         if (Boolean.TRUE.equals(counted)) {
             countedInFlight--;
             successfulDownloads.incrementAndGet();
@@ -112,6 +116,10 @@ public class DownloadLimitTracker {
 
     public int getSuccessfulDownloads() {
         return successfulDownloads.get();
+    }
+
+    public int getTotalSuccessfulDownloads() {
+        return totalSuccessfulDownloads.get();
     }
 
     public int getMaxDownloads() {
