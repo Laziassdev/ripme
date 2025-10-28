@@ -78,6 +78,9 @@ public class TumblrRipper extends AlbumRipper {
     private static final Pattern HIDDEN_MEDIA_SIZE_SUFFIX_PATTERN = Pattern.compile(
             "_(raw|\\d{2,4})(?=\\.[^./]+$)",
             Pattern.CASE_INSENSITIVE);
+    private static final Pattern HIDDEN_MEDIA_PATH_SIZE_PATTERN = Pattern.compile(
+            "/s(\\d{2,4})x(\\d{2,4})(?:_[^/]+)?/",
+            Pattern.CASE_INSENSITIVE);
     private static final DateTimeFormatter DASHBOARD_DATE_FORMATTER = DateTimeFormatter.ofPattern("yyyy-MM-dd HH.mm.ss")
             .withZone(ZoneId.systemDefault());
 
@@ -1194,6 +1197,16 @@ public class TumblrRipper extends AlbumRipper {
                 return 0;
             }
         }
+        matcher = HIDDEN_MEDIA_PATH_SIZE_PATTERN.matcher(url);
+        if (matcher.find()) {
+            try {
+                int width = Integer.parseInt(matcher.group(1));
+                int height = Integer.parseInt(matcher.group(2));
+                return Math.max(width, height);
+            } catch (NumberFormatException ignored) {
+                return 0;
+            }
+        }
         return 0;
     }
 
@@ -1203,15 +1216,22 @@ public class TumblrRipper extends AlbumRipper {
         }
         int queryIndex = url.indexOf('?');
         String withoutQuery = queryIndex >= 0 ? url.substring(0, queryIndex) : url;
-        Matcher matcher = HIDDEN_MEDIA_SIZE_SUFFIX_PATTERN.matcher(withoutQuery);
-        if (matcher.find()) {
-            return withoutQuery.substring(0, matcher.start()) + withoutQuery.substring(matcher.end());
-        }
-        return withoutQuery;
+        String normalized = HIDDEN_MEDIA_SIZE_SUFFIX_PATTERN.matcher(withoutQuery).replaceAll("");
+        normalized = HIDDEN_MEDIA_PATH_SIZE_PATTERN.matcher(normalized).replaceAll("/");
+        return normalized;
     }
 
     private String hiddenMediaGroupKey(String url) {
-        String normalized = normalizeHiddenMediaUrl(url);
+        if (url == null || url.isEmpty()) {
+            return url;
+        }
+        int queryIndex = url.indexOf('?');
+        String withoutQuery = queryIndex >= 0 ? url.substring(0, queryIndex) : url;
+        Matcher sizeSegmentMatcher = HIDDEN_MEDIA_PATH_SIZE_PATTERN.matcher(withoutQuery);
+        if (sizeSegmentMatcher.find()) {
+            return withoutQuery.substring(0, sizeSegmentMatcher.start());
+        }
+        String normalized = normalizeHiddenMediaUrl(withoutQuery);
         if (normalized == null || normalized.isEmpty()) {
             return normalized;
         }
