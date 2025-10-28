@@ -1,7 +1,7 @@
 {
-  "latestVersion": "2.1.147-1-b555245",
-  "currentHash": "44bd6a9081651dd9426877552f8977164abcb204c1e06ea54aec62a47fa4548b",
+  "latestVersion": "2.1.148-1-2fa4916",
+  "currentHash": "cfe7796c5bfeb6e0ede4e26347e877a2c20536763469bf2f4a04d4ab27b42ca1",
   "changeList": [
-    "2.1.147-1-b555245: Merge pull request #64 from Laziassdev/codex/fix-sqlite-file-cleanup-in-temp-folder", "2.1.147-1-b555245: Built at 2025-10-28T19:58:40Z"
+    "2.1.148-1-2fa4916: Merge pull request #65 from Laziassdev/codex/ensure-only-largest-image-files-are-ripped", "2.1.148-1-2fa4916: Built at 2025-10-28T20:27:26Z"
   ]
 }
