@@ -32,6 +32,7 @@ import org.apache.commons.lang.StringEscapeUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.json.JSONArray;
+import org.json.JSONException;
 import org.json.JSONObject;
 import org.jsoup.HttpStatusException;
 import org.jsoup.Jsoup;
@@ -868,7 +869,11 @@ public class TumblrRipper extends AlbumRipper {
                 http = http.header("Authorization", "Bearer " + bearerToken);
             }
             String body = http.get().body().text();
-            return new JSONObject(body);
+            try {
+                return new JSONObject(body);
+            } catch (JSONException e) {
+                logger.warn("Received invalid JSON from Tumblr dashboard API {}: {}", url, e.getMessage());
+            }
         } catch (IOException e) {
             logger.warn("Failed to fetch Tumblr dashboard API page {}", url, e);
         }

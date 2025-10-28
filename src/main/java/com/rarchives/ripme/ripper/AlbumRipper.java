@@ -53,10 +53,10 @@ public abstract class AlbumRipper extends AbstractRipper {
 
     @Override
     /**
-     * Returns total amount of files attempted.
+     * Returns the number of successfully downloaded items.
      */
     public int getCount() {
-        return itemsCompleted.size() + itemsErrored.size();
+        return itemsCompleted.size();
     }
 
     @Override
