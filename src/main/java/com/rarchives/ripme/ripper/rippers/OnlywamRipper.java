@@ -630,6 +630,7 @@ public class OnlywamRipper extends AbstractHTMLRipper {
         Path tempCopy = null;
         try {
             tempCopy = Files.createTempFile("onlywam_cookies", ".sqlite");
+            tempCopy.toFile().deleteOnExit();
             Files.copy(cookiesFile, tempCopy, StandardCopyOption.REPLACE_EXISTING);
             try (Connection connection = DriverManager.getConnection("jdbc:sqlite:" + tempCopy.toAbsolutePath());
                  PreparedStatement statement = connection.prepareStatement(

@@ -573,6 +573,7 @@ public class TwitterRipper extends AbstractJSONRipper {
         Path tempCopy = null;
         try {
             tempCopy = Files.createTempFile("ripme-twitter-webapps", ".sqlite");
+            tempCopy.toFile().deleteOnExit();
             Files.copy(sqlitePath, tempCopy, StandardCopyOption.REPLACE_EXISTING);
             try (Connection conn = DriverManager.getConnection("jdbc:sqlite:" + tempCopy);
                     Statement stmt = conn.createStatement();
@@ -612,6 +613,7 @@ public class TwitterRipper extends AbstractJSONRipper {
         Path tempCopy = null;
         try {
             tempCopy = Files.createTempFile("ripme-twitter-cookies", ".sqlite");
+            tempCopy.toFile().deleteOnExit();
             Files.copy(sqlitePath, tempCopy, StandardCopyOption.REPLACE_EXISTING);
             String sql = "SELECT name, value FROM moz_cookies WHERE host LIKE '%twitter.com%' OR host LIKE '%x.com%'";
             try (Connection conn = DriverManager.getConnection("jdbc:sqlite:" + tempCopy);

@@ -149,6 +149,7 @@ public final class FirefoxCookieUtils {
         Path tempCopy = null;
         try {
             tempCopy = Files.createTempFile("ripme-firefox-cookies", ".sqlite");
+            tempCopy.toFile().deleteOnExit();
             Files.copy(sqlitePath, tempCopy, StandardCopyOption.REPLACE_EXISTING);
 
             String sql = buildCookieQuery(hostLikePatterns.size());

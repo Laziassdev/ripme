@@ -371,6 +371,7 @@ public class RedgifsRipper extends AbstractJSONRipper {
                 Path tempCopy = null;
                 try {
                     tempCopy = Files.createTempFile("ripme-reddit-cookies", ".sqlite");
+                    tempCopy.toFile().deleteOnExit();
                     Files.copy(sqlitePath, tempCopy, StandardCopyOption.REPLACE_EXISTING);
                     try (Connection conn = DriverManager.getConnection("jdbc:sqlite:" + tempCopy.toString());
                          Statement stmt = conn.createStatement();
