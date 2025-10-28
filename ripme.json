@@ -1,7 +1,7 @@
 {
-  "latestVersion": "2.1.150-1-c5f800b",
-  "currentHash": "000ae0d0ae2b2bafa3bd41187f5b3a801e1b81ad7ae2cd4d9bdc56702175a56a",
+  "latestVersion": "2.1.151-1-deb3d59",
+  "currentHash": "4a5114c4643c7c5cf937c631902baf75b1f60a0e7e9d737c223dae55b2f4c259",
   "changeList": [
-    "2.1.150-1-c5f800b: Merge pull request #67 from Laziassdev/codex/count-only-downloaded-items-in-history-tab-t2tg77", "2.1.150-1-c5f800b: Built at 2025-10-28T20:58:38Z"
+    "2.1.151-1-deb3d59: Merge pull request #68 from Laziassdev/codex/handle-json-parsing-errors-in-tumblr-api", "2.1.151-1-deb3d59: Built at 2025-10-28T21:08:30Z"
   ]
 }
