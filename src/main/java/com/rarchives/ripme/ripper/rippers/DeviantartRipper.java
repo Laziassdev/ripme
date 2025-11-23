@@ -303,8 +303,8 @@ public class DeviantartRipper extends AbstractHTMLRipper {
 		}
 
 		// Start Thread and add to pool.
-		DeviantartImageThread t = new DeviantartImageThread(url);
-		deviantartThreadPool.addThread(t);
+                DeviantartImageThread t = new DeviantartImageThread(url);
+                deviantartThreadPool.addThread(url, t);
 
 	}
 

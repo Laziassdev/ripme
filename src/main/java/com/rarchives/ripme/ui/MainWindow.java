@@ -21,7 +21,12 @@ import java.util.Date;
 import java.util.List;
 import java.util.Arrays;
 import java.util.HashSet;
+import java.util.Locale;
 import java.util.Set;
+import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 import java.util.stream.Stream;
 
 import javax.imageio.ImageIO;
@@ -62,6 +67,9 @@ public final class MainWindow implements Runnable, RipStatusHandler {
 
     /* not static! */
     private boolean isRipping = false; // Flag to indicate if we're ripping something
+    private final Map<AbstractRipper, String> activeRippers = new ConcurrentHashMap<>();
+    private final Set<String> activeDomains = Collections.newSetFromMap(new ConcurrentHashMap<>());
+    private final ExecutorService ripExecutor = Executors.newCachedThreadPool();
 
     private static JFrame mainFrame;
 
@@ -952,17 +960,15 @@ public final class MainWindow implements Runnable, RipStatusHandler {
         });
 
         stopButton.addActionListener(event -> {
-            if (ripper != null) {
-                ripper.stop();
-                isRipping = false;
-                stopButton.setEnabled(false);
-                statusProgress.setValue(0);
-                statusProgress.setVisible(false);
-                pack();
-                statusProgress.setValue(0);
-                status(Utils.getLocalizedString("download.interrupted"));
-                appendLog("Download interrupted", Color.RED);
-            }
+            activeRippers.keySet().forEach(AbstractRipper::stop);
+            isRipping = false;
+            stopButton.setEnabled(false);
+            statusProgress.setValue(0);
+            statusProgress.setVisible(false);
+            pack();
+            statusProgress.setValue(0);
+            status(Utils.getLocalizedString("download.interrupted"));
+            appendLog("Download interrupted", Color.RED);
         });
 
         optionLog.addActionListener(event -> {
@@ -1474,37 +1480,60 @@ public final class MainWindow implements Runnable, RipStatusHandler {
         }
     }
 
-    private void ripNextAlbum() {
-        isRipping = true;
-
+    private synchronized void ripNextAlbum() {
         // Save current state of queue to configuration.
         Utils.setConfigList("queue", queueListModel.elements());
 
-        if (queueListModel.isEmpty()) {
-            // End of queue
-            isRipping = false;
+        LOGGER.debug("Scanning queue ({} items) with active domains: {}", queueListModel.getSize(), activeDomains);
+
+        boolean started;
+        do {
+            started = false;
+            for (int i = 0; i < queueListModel.size(); i++) {
+                String nextAlbum = (String) queueListModel.get(i);
+                String domain = getDomainFromUrl(nextAlbum);
+                if (domain == null) {
+                    queueListModel.remove(i);
+                    updateQueue();
+                    continue;
+                }
+                if (activeDomains.contains(domain)) {
+                    continue;
+                }
+
+                queueListModel.remove(i);
+                updateQueue();
+                LOGGER.debug("Starting queued rip for domain {}: {}", domain, nextAlbum);
+                launchRipper(nextAlbum, domain);
+                started = true;
+                break;
+            }
+        } while (started);
+
+        isRipping = !activeDomains.isEmpty() || !queueListModel.isEmpty();
+    }
+
+    private void launchRipper(String urlString, String domain) {
+        RipperRun ripperRun = ripAlbum(urlString);
+        if (ripperRun == null) {
+            onRipperFinished(domain, null);
             return;
         }
 
-        String nextAlbum = (String) queueListModel.remove(0);
+        stopButton.setEnabled(true);
+        activeDomains.add(domain);
+        activeRippers.put(ripperRun.ripper, domain);
 
-        updateQueue();
-
-        Thread t = ripAlbum(nextAlbum);
-        if (t == null) {
+        ripExecutor.submit(() -> {
             try {
-                Thread.sleep(500);
-            } catch (InterruptedException ie) {
-                LOGGER.error(Utils.getLocalizedString("interrupted.while.waiting.to.rip.next.album"), ie);
+                ripperRun.thread.run();
+            } finally {
+                onRipperFinished(domain, ripperRun.ripper);
             }
-
-            ripNextAlbum();
-        } else {
-            t.start();
-        }
+        });
     }
 
-    private Thread ripAlbum(String urlString) {
+    private RipperRun ripAlbum(String urlString) {
         if (!logPanel.isVisible()) {
             optionLog.doClick();
         }
@@ -1529,6 +1558,7 @@ public final class MainWindow implements Runnable, RipStatusHandler {
         statusLabel.setVisible(true);
         pack();
         boolean failed = false;
+        AbstractRipper ripper = null;
         try {
             ripper = AbstractRipper.getRipper(url);
             ripper.setup();
@@ -1567,7 +1597,7 @@ public final class MainWindow implements Runnable, RipStatusHandler {
                         LOGGER.error("Could not send popup, are tray icons supported?");
                     }
                 }
-                return t;
+                return new RipperRun(ripper, t);
             } catch (Exception e) {
                 LOGGER.error("[!] Error while ripping: " + e.getMessage(), e);
                 error("Unable to rip this URL: " + e.getMessage());
@@ -1577,6 +1607,49 @@ public final class MainWindow implements Runnable, RipStatusHandler {
         statusProgress.setValue(0);
         pack();
         return null;
+    }
+
+    private String getDomainFromUrl(String urlString) {
+        try {
+            String trimmed = urlString.trim();
+            if (!trimmed.startsWith("http")) {
+                trimmed = "http://" + trimmed;
+            }
+            URL url = new URI(trimmed).toURL();
+            return url.getHost() == null ? null : url.getHost().toLowerCase(Locale.ROOT);
+        } catch (MalformedURLException | URISyntaxException e) {
+            LOGGER.error("[!] Could not generate URL for '" + urlString + "'", e);
+            error("Given URL is not valid, expecting http://website.com/page/...");
+            return null;
+        }
+    }
+
+    private void onRipperFinished(String domain, AbstractRipper ripper) {
+        if (ripper != null) {
+            activeRippers.remove(ripper);
+        }
+        if (domain != null) {
+            activeDomains.remove(domain);
+        }
+
+        SwingUtilities.invokeLater(() -> {
+            if (activeDomains.isEmpty()) {
+                stopButton.setEnabled(false);
+                statusProgress.setValue(0);
+                statusProgress.setVisible(false);
+            }
+            ripNextAlbum();
+        });
+    }
+
+    private static final class RipperRun {
+        private final AbstractRipper ripper;
+        private final Thread thread;
+
+        private RipperRun(AbstractRipper ripper, Thread thread) {
+            this.ripper = ripper;
+            this.thread = thread;
+        }
     }
 
     private boolean canRip(String urlString) {
@@ -1668,7 +1741,7 @@ public final class MainWindow implements Runnable, RipStatusHandler {
 
     private synchronized void handleEvent(StatusEvent evt) {
         RipStatusMessage msg = evt.msg;
-        if (ripper.isStopped() && msg.getStatus() != RipStatusMessage.STATUS.RIP_COMPLETE) {
+        if (evt.ripper.isStopped() && msg.getStatus() != RipStatusMessage.STATUS.RIP_COMPLETE) {
             return;
         }
 
@@ -1724,7 +1797,7 @@ public final class MainWindow implements Runnable, RipStatusHandler {
 
         case RIP_COMPLETE:
             RipStatusComplete rsc = (RipStatusComplete) msg.getObject();
-            String url = ripper.getURL().toExternalForm();
+            String url = evt.ripper.getURL().toExternalForm();
             HistoryEntry entry;
             if (HISTORY.containsURL(url)) {
                 entry = HISTORY.getEntryByURL(url);
@@ -1739,7 +1812,7 @@ public final class MainWindow implements Runnable, RipStatusHandler {
                 entry.dir = rsc.getDir();
                 entry.count = rsc.count;
                 try {
-                    entry.title = ripper.getAlbumTitle(ripper.getURL());
+                    entry.title = evt.ripper.getAlbumTitle(evt.ripper.getURL());
                 } catch (MalformedURLException | URISyntaxException e) {
                     LOGGER.warn(e.getMessage());
                 }
@@ -1810,7 +1883,6 @@ public final class MainWindow implements Runnable, RipStatusHandler {
                 }
             });
             pack();
-            ripNextAlbum();
             break;
         case COMPLETED_BYTES:
             // Update completed bytes

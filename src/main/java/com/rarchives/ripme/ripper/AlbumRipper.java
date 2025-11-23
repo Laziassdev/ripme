@@ -103,7 +103,7 @@ public abstract class AlbumRipper extends AbstractRipper {
             if (cookies != null) {
                 dft.setCookies(cookies);
             }
-            threadPool.addThread(dft);
+            threadPool.addThread(url, dft);
         }
 
         return true;

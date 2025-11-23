@@ -105,7 +105,7 @@ public class NfsfwRipper extends AbstractHTMLRipper {
             index = ++this.index;
         }
         NfsfwImageThread t = new NfsfwImageThread(url, currentDir, index);
-        nfsfwThreadPool.addThread(t);
+        nfsfwThreadPool.addThread(url, t);
     }
 
     @Override
