@@ -1,7 +1,7 @@
 {
-  "latestVersion": "2.1.154-1-d7e65cf",
-  "currentHash": "9e33f4ee89f218c1e86643868d1ef083b9dc9765e337dfa9702c8ab72073ad7c",
+  "latestVersion": "2.1.155-1-3360dd3",
+  "currentHash": "f67f3427c8a0c4afd264181820182c729b3cdcdce16f8c8179f8c00c1abba85d",
   "changeList": [
-    "2.1.154-1-d7e65cf: Merge pull request #71 from Laziassdev/codex/update-code-for-concurrent-domain-downloads", "2.1.154-1-d7e65cf: Built at 2025-11-23T16:44:36Z"
+    "2.1.155-1-3360dd3: Merge pull request #72 from Laziassdev/codex/update-code-for-concurrent-domain-downloads-k1grrk", "2.1.155-1-3360dd3: Built at 2025-11-23T16:59:31Z"
   ]
 }
