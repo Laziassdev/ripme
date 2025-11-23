@@ -1484,6 +1484,8 @@ public final class MainWindow implements Runnable, RipStatusHandler {
         // Save current state of queue to configuration.
         Utils.setConfigList("queue", queueListModel.elements());
 
+        LOGGER.debug("Scanning queue ({} items) with active domains: {}", queueListModel.getSize(), activeDomains);
+
         boolean started;
         do {
             started = false;
@@ -1501,6 +1503,7 @@ public final class MainWindow implements Runnable, RipStatusHandler {
 
                 queueListModel.remove(i);
                 updateQueue();
+                LOGGER.debug("Starting queued rip for domain {}: {}", domain, nextAlbum);
                 launchRipper(nextAlbum, domain);
                 started = true;
                 break;
