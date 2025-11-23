@@ -1,7 +1,7 @@
 {
-  "latestVersion": "2.1.156-1-c1cd72f",
-  "currentHash": "6b3cc3e34f6f5e29ea93cfb49c448af36e758ad8203e74ad56865bcb5b43c2aa",
+  "latestVersion": "2.1.157-1-4dcfe5f",
+  "currentHash": "d9bd4c56ad48cb3819f4f35cdfa4fcbc1fabd3cbfb7a75e71b7d54f419c68b98",
   "changeList": [
-    "2.1.156-1-c1cd72f: Merge pull request #73 from Laziassdev/codex/update-code-for-concurrent-domain-downloads-3nkhp0", "2.1.156-1-c1cd72f: Built at 2025-11-23T17:37:38Z"
+    "2.1.157-1-4dcfe5f: Merge pull request #74 from Laziassdev/codex/add-active-rippers-panel-to-mainwindow", "2.1.157-1-4dcfe5f: Built at 2025-11-23T18:04:59Z"
   ]
 }
