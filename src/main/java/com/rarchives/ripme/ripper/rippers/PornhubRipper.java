@@ -82,7 +82,7 @@ public class PornhubRipper extends AbstractHTMLRipper {
     @Override
     protected void downloadURL(URL url, int index) {
         PornhubImageThread t = new PornhubImageThread(url, index, this.workingDir.toPath());
-        pornhubThreadPool.addThread(t);
+        pornhubThreadPool.addThread(url, t);
         try {
             Thread.sleep(IMAGE_SLEEP_TIME);
         } catch (InterruptedException e) {
