@@ -27,6 +27,7 @@ import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import java.util.function.BiConsumer;
 import java.util.stream.Stream;
 
 import javax.imageio.ImageIO;
@@ -70,6 +71,7 @@ public final class MainWindow implements Runnable, RipStatusHandler {
     private final Map<AbstractRipper, String> activeRippers = new ConcurrentHashMap<>();
     private final Set<String> activeDomains = Collections.newSetFromMap(new ConcurrentHashMap<>());
     private final ExecutorService ripExecutor = Executors.newCachedThreadPool();
+    private BiConsumer<String, String> ripperLauncher = this::launchRipper;
 
     private static JFrame mainFrame;
 
@@ -192,6 +194,15 @@ public final class MainWindow implements Runnable, RipStatusHandler {
     }
 
     public MainWindow() throws IOException {
+        this(false);
+    }
+
+    MainWindow(boolean headless) throws IOException {
+        if (headless) {
+            initializeHeadlessComponents();
+            return;
+        }
+
         mainFrame = new JFrame("RipMe v" + UpdateUtils.getThisJarVersion());
         mainFrame.setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
         mainFrame.setLayout(new GridBagLayout());
@@ -212,6 +223,14 @@ public final class MainWindow implements Runnable, RipStatusHandler {
         boolean autoripEnabled = Utils.getConfigBoolean("clipboard.autorip", false);
         ClipboardUtils.setClipboardAutoRip(autoripEnabled);
         trayMenuAutorip.setState(autoripEnabled);
+    }
+
+    private void initializeHeadlessComponents() {
+        queueListModel = new DefaultListModel<>();
+        queueList = new JList<>(queueListModel);
+        optionQueue = new JButton(Utils.getLocalizedString("queue"));
+        stopButton = new JButton();
+        statusProgress = new JProgressBar();
     }
 
     private void upgradeProgram() {
@@ -1480,7 +1499,7 @@ public final class MainWindow implements Runnable, RipStatusHandler {
         }
     }
 
-    private synchronized void ripNextAlbum() {
+    synchronized void ripNextAlbum() {
         // Save current state of queue to configuration.
         Utils.setConfigList("queue", queueListModel.elements());
 
@@ -1498,13 +1517,14 @@ public final class MainWindow implements Runnable, RipStatusHandler {
                     continue;
                 }
                 if (activeDomains.contains(domain)) {
+                    LOGGER.debug("Deferring queued rip for domain {} because another ripper is active", domain);
                     continue;
                 }
 
                 queueListModel.remove(i);
                 updateQueue();
                 LOGGER.debug("Starting queued rip for domain {}: {}", domain, nextAlbum);
-                launchRipper(nextAlbum, domain);
+                ripperLauncher.accept(nextAlbum, domain);
                 started = true;
                 break;
             }
@@ -1624,12 +1644,12 @@ public final class MainWindow implements Runnable, RipStatusHandler {
         }
     }
 
-    private void onRipperFinished(String domain, AbstractRipper ripper) {
+    void onRipperFinished(String domain, AbstractRipper ripper) {
         if (ripper != null) {
             activeRippers.remove(ripper);
         }
-        if (domain != null) {
-            activeDomains.remove(domain);
+        if (domain != null && activeDomains.remove(domain)) {
+            LOGGER.debug("Completed ripper for domain {}. Remaining active domains: {}", domain, activeDomains);
         }
 
         SwingUtilities.invokeLater(() -> {
@@ -1638,8 +1658,19 @@ public final class MainWindow implements Runnable, RipStatusHandler {
                 statusProgress.setValue(0);
                 statusProgress.setVisible(false);
             }
+            LOGGER.debug("Scheduling next rip after completion of domain {}", domain);
             ripNextAlbum();
         });
+    }
+
+    void setRipperLauncher(BiConsumer<String, String> ripperLauncher) {
+        if (ripperLauncher != null) {
+            this.ripperLauncher = ripperLauncher;
+        }
+    }
+
+    Set<String> getActiveDomains() {
+        return activeDomains;
     }
 
     private static final class RipperRun {
