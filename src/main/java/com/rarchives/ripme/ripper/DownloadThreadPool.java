@@ -1,6 +1,10 @@
 package com.rarchives.ripme.ripper;
 
+import java.net.URL;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ConcurrentMap;
 import java.util.concurrent.Executors;
+import java.util.concurrent.Semaphore;
 import java.util.concurrent.ThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
 
@@ -15,6 +19,8 @@ public class DownloadThreadPool {
 
     private static final Logger logger = LogManager.getLogger(DownloadThreadPool.class);
     private ThreadPoolExecutor threadPool = null;
+    private final ConcurrentMap<String, Semaphore> domainSemaphores = new ConcurrentHashMap<>();
+    private int maxPerDomain;
 
     public DownloadThreadPool() {
         initialize("Main");
@@ -29,9 +35,10 @@ public class DownloadThreadPool {
      * @param threadPoolName Name of the threadpool.
      */
     private void initialize(String threadPoolName) {
-        int threads = Utils.getConfigInteger("threads.size", 10);
-        logger.debug("Initializing " + threadPoolName + " thread pool with " + threads + " threads");
-        threadPool = (ThreadPoolExecutor) Executors.newFixedThreadPool(threads);
+        maxPerDomain = Utils.getConfigInteger("threads.size", 10);
+        logger.debug("Initializing " + threadPoolName + " thread pool with up to " + maxPerDomain
+                + " threads per domain");
+        threadPool = (ThreadPoolExecutor) Executors.newCachedThreadPool();
     }
     /**
      * For adding threads to execution pool.
@@ -40,6 +47,36 @@ public class DownloadThreadPool {
      */
     public void addThread(Runnable t) {
         threadPool.execute(t);
+    }
+
+    public void addThread(URL url, Runnable t) {
+        threadPool.execute(wrapWithDomainLimit(url, t));
+    }
+
+    private Runnable wrapWithDomainLimit(URL url, Runnable task) {
+        if (url == null) {
+            return task;
+        }
+        String host = url.getHost();
+        if (host == null || host.isEmpty()) {
+            return task;
+        }
+        Semaphore semaphore = domainSemaphores.computeIfAbsent(host, ignored -> new Semaphore(maxPerDomain));
+        return () -> {
+            boolean acquired = false;
+            try {
+                semaphore.acquire();
+                acquired = true;
+                task.run();
+            } catch (InterruptedException e) {
+                logger.error("[!] Interrupted while waiting for domain permit: ", e);
+                Thread.currentThread().interrupt();
+            } finally {
+                if (acquired) {
+                    semaphore.release();
+                }
+            }
+        };
     }
 
     /**
