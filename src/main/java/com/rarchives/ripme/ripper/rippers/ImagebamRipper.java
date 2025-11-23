@@ -90,7 +90,7 @@ public class ImagebamRipper extends AbstractHTMLRipper {
     @Override
     public void downloadURL(URL url, int index) {
         ImagebamImageThread t = new ImagebamImageThread(url, index);
-        imagebamThreadPool.addThread(t);
+        imagebamThreadPool.addThread(url, t);
         sleep(500);
     }
 

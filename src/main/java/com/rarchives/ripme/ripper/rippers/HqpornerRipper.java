@@ -111,8 +111,8 @@ public class HqpornerRipper extends AbstractHTMLRipper {
 
 	@Override
 	public void downloadURL(URL url, int index) {
-		hqpornerThreadPool.addThread(new HqpornerDownloadThread(url, index, subdirectory));
-	}
+            hqpornerThreadPool.addThread(url, new HqpornerDownloadThread(url, index, subdirectory));
+        }
 
 	@Override
 	public Document getNextPage(Document doc) throws IOException {

@@ -77,7 +77,7 @@ public class ListalRipper extends AbstractHTMLRipper {
 
     @Override
     public void downloadURL(URL url, int index) {
-        listalThreadPool.addThread(new ListalImageDownloadThread(url, index));
+        listalThreadPool.addThread(url, new ListalImageDownloadThread(url, index));
     }
 
     @Override
