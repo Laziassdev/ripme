@@ -105,6 +105,11 @@ public final class MainWindow implements Runnable, RipStatusHandler {
     private static QueueMenuMouseListener queueMenuMouseListener;
     private static JButton queueButtonTop, queueButtonUp, queueButtonDown;
 
+    // Active downloads
+    private static JButton optionActive;
+    private static JPanel activePanel;
+    private static JPanel activeListPanel;
+
     // Configuration
     private static JButton optionConfiguration;
     private static JPanel configurationPanel;
@@ -171,6 +176,55 @@ public final class MainWindow implements Runnable, RipStatusHandler {
 
     private void updateQueue() {
         updateQueue(null);
+    }
+
+    private void refreshActivePanel() {
+        SwingUtilities.invokeLater(() -> {
+            activeListPanel.removeAll();
+            if (activeRippers.isEmpty()) {
+                JLabel emptyLabel = new JLabel(Utils.getLocalizedString("active.none"));
+                emptyLabel.setBorder(new EmptyBorder(5, 5, 5, 5));
+                activeListPanel.add(emptyLabel);
+            } else {
+                activeRippers.forEach((ripperEntry, domain) -> {
+                    JPanel rowPanel = new JPanel(new GridBagLayout());
+                    rowPanel.setBorder(new EmptyBorder(5, 5, 5, 5));
+                    GridBagConstraints rowGbc = new GridBagConstraints();
+                    rowGbc.gridy = 0;
+                    rowGbc.insets = new Insets(0, 0, 0, 5);
+                    rowGbc.fill = GridBagConstraints.HORIZONTAL;
+                    rowGbc.weightx = 1;
+                    JLabel urlLabel = new JLabel(ripperEntry.getURL().toString());
+                    urlLabel.setToolTipText(ripperEntry.getURL().toString());
+                    rowPanel.add(urlLabel, rowGbc);
+
+                    rowGbc.gridx = 1;
+                    rowGbc.weightx = 0;
+                    JLabel domainLabel = new JLabel(
+                            String.format("%s: %s", Utils.getLocalizedString("active.domain"), domain));
+                    rowPanel.add(domainLabel, rowGbc);
+
+                    rowGbc.gridx = 2;
+                    JButton cancelButton = new JButton(Utils.getLocalizedString("cancel"));
+                    cancelButton.addActionListener(e -> cancelRipper(ripperEntry));
+                    rowPanel.add(cancelButton, rowGbc);
+
+                    activeListPanel.add(rowPanel);
+                });
+            }
+            activeListPanel.revalidate();
+            activeListPanel.repaint();
+            pack();
+        });
+    }
+
+    private void cancelRipper(AbstractRipper ripper) {
+        String domain = activeRippers.get(ripper);
+        if (domain != null) {
+            ripper.stop();
+            onRipperFinished(domain, ripper);
+        }
+        refreshActivePanel();
     }
 
     private static void addCheckboxListener(JCheckBox checkBox, String configString) {
@@ -279,7 +333,7 @@ public final class MainWindow implements Runnable, RipStatusHandler {
 
     private boolean isCollapsed() {
         return (!logPanel.isVisible() && !historyPanel.isVisible() && !queuePanel.isVisible()
-                && !configurationPanel.isVisible());
+                && !configurationPanel.isVisible() && !activePanel.isVisible());
     }
 
     private void createUI(Container pane) {
@@ -401,10 +455,12 @@ public final class MainWindow implements Runnable, RipStatusHandler {
         optionLog = new JButton(Utils.getLocalizedString("Log"));
         optionHistory = new JButton(Utils.getLocalizedString("History"));
         optionQueue = new JButton(Utils.getLocalizedString("queue"));
+        optionActive = new JButton(Utils.getLocalizedString("active.downloads"));
         optionConfiguration = new JButton(Utils.getLocalizedString("Configuration"));
         optionLog.setFont(optionLog.getFont().deriveFont(Font.PLAIN));
         optionHistory.setFont(optionLog.getFont().deriveFont(Font.PLAIN));
         optionQueue.setFont(optionLog.getFont().deriveFont(Font.PLAIN));
+        optionActive.setFont(optionLog.getFont().deriveFont(Font.PLAIN));
         optionConfiguration.setFont(optionLog.getFont().deriveFont(Font.PLAIN));
         try {
             Image icon;
@@ -414,6 +470,8 @@ public final class MainWindow implements Runnable, RipStatusHandler {
             optionHistory.setIcon(new ImageIcon(icon));
             icon = ImageIO.read(getClass().getClassLoader().getResource("list.png"));
             optionQueue.setIcon(new ImageIcon(icon));
+            icon = ImageIO.read(getClass().getClassLoader().getResource("wrench.png"));
+            optionActive.setIcon(new ImageIcon(icon));
             icon = ImageIO.read(getClass().getClassLoader().getResource("gear.png"));
             optionConfiguration.setIcon(new ImageIcon(icon));
         } catch (Exception e) {
@@ -426,6 +484,8 @@ public final class MainWindow implements Runnable, RipStatusHandler {
         gbc.gridx = 2;
         optionsPanel.add(optionQueue, gbc);
         gbc.gridx = 3;
+        optionsPanel.add(optionActive, gbc);
+        gbc.gridx = 4;
         optionsPanel.add(optionConfiguration, gbc);
 
         logPanel = new JPanel(new GridBagLayout());
@@ -545,6 +605,14 @@ public final class MainWindow implements Runnable, RipStatusHandler {
         JScrollPane queueListScroll = new JScrollPane(queueList, JScrollPane.VERTICAL_SCROLLBAR_AS_NEEDED,
                 JScrollPane.HORIZONTAL_SCROLLBAR_NEVER);
 
+        activePanel = new JPanel(new GridBagLayout());
+        activePanel.setBorder(emptyBorder);
+        activePanel.setVisible(false);
+        activeListPanel = new JPanel();
+        activeListPanel.setLayout(new BoxLayout(activeListPanel, BoxLayout.Y_AXIS));
+        JScrollPane activeListScroll = new JScrollPane(activeListPanel, JScrollPane.VERTICAL_SCROLLBAR_AS_NEEDED,
+                JScrollPane.HORIZONTAL_SCROLLBAR_AS_NEEDED);
+
         for (String item : Utils.getConfigList("queue")) {
             queueListModel.addElement(item);
         }
@@ -646,6 +714,12 @@ public final class MainWindow implements Runnable, RipStatusHandler {
         gbc.fill = GridBagConstraints.HORIZONTAL;
         gbc.weighty = 0;
         gbc.weightx = 0;
+
+        GridBagConstraints activeGbc = new GridBagConstraints();
+        activeGbc.fill = GridBagConstraints.BOTH;
+        activeGbc.weightx = 1;
+        activeGbc.weighty = 1;
+        activePanel.add(activeListScroll, activeGbc);
 
         configMainPanel = new JPanel(new GridBagLayout());
         configMainPanel.setBorder(emptyBorder);
@@ -800,10 +874,12 @@ public final class MainWindow implements Runnable, RipStatusHandler {
         pane.add(logPanel, gbc);
         pane.add(historyPanel, gbc);
         pane.add(queuePanel, gbc);
+        pane.add(activePanel, gbc);
         pane.add(configurationPanel, gbc);
         pane.add(emptyPanel, gbc);
         gbc.weighty = 0;
         gbc.fill = GridBagConstraints.HORIZONTAL;
+        refreshActivePanel();
     }
 
     private JTextField configField(String key, int defaultValue) {
@@ -919,7 +995,9 @@ public final class MainWindow implements Runnable, RipStatusHandler {
         optionLog.setText(Utils.getLocalizedString("Log"));
         optionHistory.setText(Utils.getLocalizedString("History"));
         optionQueue.setText(Utils.getLocalizedString("queue"));
+        optionActive.setText(Utils.getLocalizedString("active.downloads"));
         optionConfiguration.setText(Utils.getLocalizedString("Configuration"));
+        refreshActivePanel();
     }
 
     private void setupHandlers() {
@@ -969,6 +1047,7 @@ public final class MainWindow implements Runnable, RipStatusHandler {
             statusProgress.setValue(0);
             status(Utils.getLocalizedString("download.interrupted"));
             appendLog("Download interrupted", Color.RED);
+            refreshActivePanel();
         });
 
         optionLog.addActionListener(event -> {
@@ -976,6 +1055,7 @@ public final class MainWindow implements Runnable, RipStatusHandler {
             emptyPanel.setVisible(!logPanel.isVisible());
             historyPanel.setVisible(false);
             queuePanel.setVisible(false);
+            activePanel.setVisible(false);
             configurationPanel.setVisible(false);
             if (logPanel.isVisible()) {
                 optionLog.setFont(optionLog.getFont().deriveFont(Font.BOLD));
@@ -984,6 +1064,7 @@ public final class MainWindow implements Runnable, RipStatusHandler {
             }
             optionHistory.setFont(optionLog.getFont().deriveFont(Font.PLAIN));
             optionQueue.setFont(optionLog.getFont().deriveFont(Font.PLAIN));
+            optionActive.setFont(optionLog.getFont().deriveFont(Font.PLAIN));
             optionConfiguration.setFont(optionLog.getFont().deriveFont(Font.PLAIN));
             pack();
         });
@@ -993,6 +1074,7 @@ public final class MainWindow implements Runnable, RipStatusHandler {
             historyPanel.setVisible(!historyPanel.isVisible());
             emptyPanel.setVisible(!historyPanel.isVisible());
             queuePanel.setVisible(false);
+            activePanel.setVisible(false);
             configurationPanel.setVisible(false);
             optionLog.setFont(optionLog.getFont().deriveFont(Font.PLAIN));
             if (historyPanel.isVisible()) {
@@ -1001,6 +1083,7 @@ public final class MainWindow implements Runnable, RipStatusHandler {
                 optionHistory.setFont(optionLog.getFont().deriveFont(Font.PLAIN));
             }
             optionQueue.setFont(optionLog.getFont().deriveFont(Font.PLAIN));
+            optionActive.setFont(optionLog.getFont().deriveFont(Font.PLAIN));
             optionConfiguration.setFont(optionLog.getFont().deriveFont(Font.PLAIN));
             pack();
         });
@@ -1010,6 +1093,7 @@ public final class MainWindow implements Runnable, RipStatusHandler {
             historyPanel.setVisible(false);
             queuePanel.setVisible(!queuePanel.isVisible());
             emptyPanel.setVisible(!queuePanel.isVisible());
+            activePanel.setVisible(false);
             configurationPanel.setVisible(false);
             optionLog.setFont(optionLog.getFont().deriveFont(Font.PLAIN));
             optionHistory.setFont(optionLog.getFont().deriveFont(Font.PLAIN));
@@ -1017,6 +1101,26 @@ public final class MainWindow implements Runnable, RipStatusHandler {
                 optionQueue.setFont(optionLog.getFont().deriveFont(Font.BOLD));
             } else {
                 optionQueue.setFont(optionLog.getFont().deriveFont(Font.PLAIN));
+            }
+            optionActive.setFont(optionLog.getFont().deriveFont(Font.PLAIN));
+            optionConfiguration.setFont(optionLog.getFont().deriveFont(Font.PLAIN));
+            pack();
+        });
+
+        optionActive.addActionListener(event -> {
+            logPanel.setVisible(false);
+            historyPanel.setVisible(false);
+            queuePanel.setVisible(false);
+            activePanel.setVisible(!activePanel.isVisible());
+            emptyPanel.setVisible(!activePanel.isVisible());
+            configurationPanel.setVisible(false);
+            optionLog.setFont(optionLog.getFont().deriveFont(Font.PLAIN));
+            optionHistory.setFont(optionLog.getFont().deriveFont(Font.PLAIN));
+            optionQueue.setFont(optionLog.getFont().deriveFont(Font.PLAIN));
+            if (activePanel.isVisible()) {
+                optionActive.setFont(optionLog.getFont().deriveFont(Font.BOLD));
+            } else {
+                optionActive.setFont(optionLog.getFont().deriveFont(Font.PLAIN));
             }
             optionConfiguration.setFont(optionLog.getFont().deriveFont(Font.PLAIN));
             pack();
@@ -1026,11 +1130,13 @@ public final class MainWindow implements Runnable, RipStatusHandler {
             logPanel.setVisible(false);
             historyPanel.setVisible(false);
             queuePanel.setVisible(false);
+            activePanel.setVisible(false);
             configurationPanel.setVisible(!configurationPanel.isVisible());
             emptyPanel.setVisible(!configurationPanel.isVisible());
             optionLog.setFont(optionLog.getFont().deriveFont(Font.PLAIN));
             optionHistory.setFont(optionLog.getFont().deriveFont(Font.PLAIN));
             optionQueue.setFont(optionLog.getFont().deriveFont(Font.PLAIN));
+            optionActive.setFont(optionLog.getFont().deriveFont(Font.PLAIN));
             if (configurationPanel.isVisible()) {
                 configCardLayout.show(configCards, "main");
                 configBackButton.setEnabled(false);
@@ -1523,6 +1629,7 @@ public final class MainWindow implements Runnable, RipStatusHandler {
         stopButton.setEnabled(true);
         activeDomains.add(domain);
         activeRippers.put(ripperRun.ripper, domain);
+        refreshActivePanel();
 
         ripExecutor.submit(() -> {
             try {
@@ -1631,6 +1738,8 @@ public final class MainWindow implements Runnable, RipStatusHandler {
         if (domain != null) {
             activeDomains.remove(domain);
         }
+
+        refreshActivePanel();
 
         SwingUtilities.invokeLater(() -> {
             if (activeDomains.isEmpty()) {
