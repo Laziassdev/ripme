@@ -193,7 +193,7 @@ public abstract class AbstractJSONRipper extends AbstractRipper {
             if (cookies != null) {
                 dft.setCookies(cookies);
             }
-            threadPool.addThread(dft);
+            threadPool.addThread(url, dft);
         }
 
         return true;
