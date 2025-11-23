@@ -32,7 +32,9 @@ import java.util.stream.Stream;
 
 import javax.imageio.ImageIO;
 import javax.swing.*;
+import javax.swing.border.CompoundBorder;
 import javax.swing.border.EmptyBorder;
+import javax.swing.border.MatteBorder;
 import javax.swing.event.DocumentEvent;
 import javax.swing.event.DocumentListener;
 import javax.swing.event.ListDataEvent;
@@ -68,7 +70,7 @@ public final class MainWindow implements Runnable, RipStatusHandler {
 
     /* not static! */
     private boolean isRipping = false; // Flag to indicate if we're ripping something
-    private final Map<AbstractRipper, String> activeRippers = new ConcurrentHashMap<>();
+    private final Map<AbstractRipper, ActiveDownloadEntry> activeRippers = new ConcurrentHashMap<>();
     private final Set<String> activeDomains = Collections.newSetFromMap(new ConcurrentHashMap<>());
     private final ExecutorService ripExecutor = Executors.newCachedThreadPool();
     private BiConsumer<String, String> ripperLauncher = this::launchRipper;
@@ -188,9 +190,12 @@ public final class MainWindow implements Runnable, RipStatusHandler {
                 emptyLabel.setBorder(new EmptyBorder(5, 5, 5, 5));
                 activeListPanel.add(emptyLabel);
             } else {
-                activeRippers.forEach((ripperEntry, domain) -> {
+                activeRippers.forEach((ripperEntry, entry) -> {
                     JPanel rowPanel = new JPanel(new GridBagLayout());
-                    rowPanel.setBorder(new EmptyBorder(5, 5, 5, 5));
+                    rowPanel.setBorder(new CompoundBorder(
+                            new MatteBorder(0, 0, 1, 0, new Color(220, 220, 220)),
+                            new EmptyBorder(4, 6, 4, 6)));
+                    rowPanel.setAlignmentX(Component.LEFT_ALIGNMENT);
                     GridBagConstraints rowGbc = new GridBagConstraints();
                     rowGbc.gridy = 0;
                     rowGbc.insets = new Insets(0, 0, 0, 5);
@@ -203,13 +208,27 @@ public final class MainWindow implements Runnable, RipStatusHandler {
                     rowGbc.gridx = 1;
                     rowGbc.weightx = 0;
                     JLabel domainLabel = new JLabel(
-                            String.format("%s: %s", Utils.getLocalizedString("active.domain"), domain));
+                            String.format("%s: %s", Utils.getLocalizedString("active.domain"), entry.domain));
                     rowPanel.add(domainLabel, rowGbc);
 
                     rowGbc.gridx = 2;
                     JButton cancelButton = new JButton(Utils.getLocalizedString("cancel"));
                     cancelButton.addActionListener(e -> cancelRipper(ripperEntry));
                     rowPanel.add(cancelButton, rowGbc);
+
+                    if (entry.currentItem != null && !entry.currentItem.isEmpty()) {
+                        rowGbc.gridx = 0;
+                        rowGbc.gridy = 1;
+                        rowGbc.gridwidth = 3;
+                        rowGbc.insets = new Insets(4, 0, 0, 0);
+                        JLabel currentItemLabel = new JLabel(
+                                String.format("%s %s", Utils.getLocalizedString("active.current_file"),
+                                        entry.currentItem));
+                        currentItemLabel
+                                .setFont(currentItemLabel.getFont().deriveFont(Font.ITALIC,
+                                        currentItemLabel.getFont().getSize2D() - 1f));
+                        rowPanel.add(currentItemLabel, rowGbc);
+                    }
 
                     activeListPanel.add(rowPanel);
                 });
@@ -221,12 +240,23 @@ public final class MainWindow implements Runnable, RipStatusHandler {
     }
 
     private void cancelRipper(AbstractRipper ripper) {
-        String domain = activeRippers.get(ripper);
-        if (domain != null) {
+        ActiveDownloadEntry entry = activeRippers.get(ripper);
+        if (entry != null) {
             ripper.stop();
-            onRipperFinished(domain, ripper);
+            onRipperFinished(entry.domain, ripper);
         }
         refreshActivePanel();
+    }
+
+    private void setActiveRipperCurrentItem(AbstractRipper ripper, Object item) {
+        if (ripper == null || item == null) {
+            return;
+        }
+        ActiveDownloadEntry entry = activeRippers.get(ripper);
+        if (entry != null) {
+            entry.currentItem = item.toString();
+            refreshActivePanel();
+        }
     }
 
     private static void addCheckboxListener(JCheckBox checkBox, String configString) {
@@ -1648,7 +1678,7 @@ public final class MainWindow implements Runnable, RipStatusHandler {
 
         stopButton.setEnabled(true);
         activeDomains.add(domain);
-        activeRippers.put(ripperRun.ripper, domain);
+        activeRippers.put(ripperRun.ripper, new ActiveDownloadEntry(domain));
         refreshActivePanel();
 
         ripExecutor.submit(() -> {
@@ -1792,6 +1822,15 @@ public final class MainWindow implements Runnable, RipStatusHandler {
         }
     }
 
+    private static final class ActiveDownloadEntry {
+        private final String domain;
+        private String currentItem;
+
+        private ActiveDownloadEntry(String domain) {
+            this.domain = domain;
+        }
+    }
+
     private boolean canRip(String urlString) {
         try {
             String urlText = urlString.trim();
@@ -1896,11 +1935,13 @@ public final class MainWindow implements Runnable, RipStatusHandler {
             if (LOGGER.isEnabled(Level.INFO)) {
                 appendLog("Downloading " + msg.getObject(), Color.BLACK);
             }
+            setActiveRipperCurrentItem(evt.ripper, msg.getObject());
             break;
         case DOWNLOAD_COMPLETE:
             if (LOGGER.isEnabled(Level.INFO)) {
                 appendLog("Downloaded " + msg.getObject(), Color.GREEN);
             }
+            setActiveRipperCurrentItem(evt.ripper, msg.getObject());
             break;
         case DOWNLOAD_COMPLETE_HISTORY:
             if (LOGGER.isEnabled(Level.INFO)) {
