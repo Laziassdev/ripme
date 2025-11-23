@@ -2,11 +2,10 @@ package com.rarchives.ripme.ripper;
 
 import java.net.URL;
 import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.ConcurrentLinkedQueue;
 import java.util.concurrent.ConcurrentMap;
+import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Semaphore;
-import java.util.concurrent.ThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
 
 import com.rarchives.ripme.utils.Utils;
@@ -14,13 +13,13 @@ import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 /**
- * Simple wrapper around a FixedThreadPool.
+ * Simple wrapper around a cached thread pool with per-domain throttling.
  */
 public class DownloadThreadPool {
 
     private static final Logger logger = LogManager.getLogger(DownloadThreadPool.class);
-    private ThreadPoolExecutor threadPool = null;
-    private final ConcurrentMap<String, DomainState> domainStates = new ConcurrentHashMap<>();
+    private ExecutorService threadPool = null;
+    private final ConcurrentMap<String, Semaphore> domainPermits = new ConcurrentHashMap<>();
     private int maxPerDomain;
 
     public DownloadThreadPool() {
@@ -39,7 +38,7 @@ public class DownloadThreadPool {
         maxPerDomain = Utils.getConfigInteger("threads.size", 10);
         logger.debug("Initializing " + threadPoolName + " thread pool with up to " + maxPerDomain
                 + " threads per domain");
-        threadPool = (ThreadPoolExecutor) Executors.newFixedThreadPool(maxPerDomain);
+        threadPool = Executors.newCachedThreadPool();
     }
     /**
      * For adding threads to execution pool.
@@ -62,59 +61,23 @@ public class DownloadThreadPool {
         if (host == null || host.isEmpty()) {
             return task;
         }
-        String domainKey = host.toLowerCase();
-        DomainState domainState = domainStates.computeIfAbsent(domainKey, ignored -> new DomainState());
-        return () -> scheduleDomainTask(domainState, task);
-    }
-
-    private void scheduleDomainTask(DomainState state, Runnable task) {
-        state.enqueue(task);
-        drainDomainQueue(state);
-    }
-
-    private void drainDomainQueue(DomainState state) {
-        synchronized (state) {
-            while (state.running < maxPerDomain) {
-                Runnable next = state.poll();
-                if (next == null) {
-                    return;
+        final Semaphore semaphore = domainPermits.computeIfAbsent(host.toLowerCase(),
+                ignored -> new Semaphore(maxPerDomain));
+        return () -> {
+            boolean acquired = false;
+            try {
+                semaphore.acquire();
+                acquired = true;
+                task.run();
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+                logger.warn("Interrupted while waiting for permit for domain {}", host, e);
+            } finally {
+                if (acquired) {
+                    semaphore.release();
                 }
-                state.running += 1;
-                threadPool.execute(() -> {
-                    try {
-                        next.run();
-                    } finally {
-                        stateFinished(state);
-                    }
-                });
             }
-        }
-    }
-
-    private void stateFinished(DomainState state) {
-        synchronized (state) {
-            state.running -= 1;
-            if (!state.isEmpty()) {
-                drainDomainQueue(state);
-            }
-        }
-    }
-
-    private static class DomainState {
-        private final ConcurrentLinkedQueue<Runnable> queue = new ConcurrentLinkedQueue<>();
-        private int running = 0;
-
-        void enqueue(Runnable task) {
-            queue.add(task);
-        }
-
-        Runnable poll() {
-            return queue.poll();
-        }
-
-        boolean isEmpty() {
-            return queue.isEmpty();
-        }
+        };
     }
 
     /**
