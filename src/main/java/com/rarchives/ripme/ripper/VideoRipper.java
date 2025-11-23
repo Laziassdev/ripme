@@ -77,7 +77,7 @@ public abstract class VideoRipper extends AbstractRipper {
                 sendUpdate(STATUS.DOWNLOAD_SKIP, "Skipping " + url.toExternalForm() + " - ignored extension");
                 return false;
             }
-            threadPool.addThread(new DownloadVideoThread(url, saveAs, this));
+            threadPool.addThread(url, new DownloadVideoThread(url, saveAs, this));
         }
         return true;
     }

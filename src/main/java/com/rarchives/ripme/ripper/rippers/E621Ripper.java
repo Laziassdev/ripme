@@ -136,7 +136,7 @@ public class E621Ripper extends AbstractHTMLRipper {
         // rate limit
         sleep(3000);
         // addURLToDownload(url, getPrefix(index));
-        e621ThreadPool.addThread(new E621FileThread(url, getPrefix(index)));
+        e621ThreadPool.addThread(url, new E621FileThread(url, getPrefix(index)));
     }
 
     private String getTerm(URL url) throws MalformedURLException {

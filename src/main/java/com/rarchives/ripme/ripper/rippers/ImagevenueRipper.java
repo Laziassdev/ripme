@@ -72,7 +72,7 @@ public class ImagevenueRipper extends AbstractHTMLRipper {
 
     public void downloadURL(URL url, int index) {
         ImagevenueImageThread t = new ImagevenueImageThread(url, index);
-        imagevenueThreadPool.addThread(t);
+        imagevenueThreadPool.addThread(url, t);
     }
 
     /**
