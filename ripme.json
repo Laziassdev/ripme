@@ -1,7 +1,7 @@
 {
-  "latestVersion": "2.1.151-1-deb3d59",
-  "currentHash": "4a5114c4643c7c5cf937c631902baf75b1f60a0e7e9d737c223dae55b2f4c259",
+  "latestVersion": "2.1.155-1-3360dd3",
+  "currentHash": "f67f3427c8a0c4afd264181820182c729b3cdcdce16f8c8179f8c00c1abba85d",
   "changeList": [
-    "2.1.151-1-deb3d59: Merge pull request #68 from Laziassdev/codex/handle-json-parsing-errors-in-tumblr-api", "2.1.151-1-deb3d59: Built at 2025-10-28T21:08:30Z"
+    "2.1.155-1-3360dd3: Merge pull request #72 from Laziassdev/codex/update-code-for-concurrent-domain-downloads-k1grrk", "2.1.155-1-3360dd3: Built at 2025-11-23T16:59:31Z"
   ]
 }
