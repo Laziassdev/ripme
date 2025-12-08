@@ -137,9 +137,11 @@ public class CoomerPartyRipper extends AbstractJSONRipper {
             String jsonArrayString = null;
             try {
                 Map<String, String> headers = new HashMap<>();
-                headers.put("Accept", "application/json, text/plain, */*");
-                headers.put("Accept-Language", "en-US,en;q=0.9");
-                headers.put("Referer", String.format("https://%s/", dom));
+                // Mirror the lightweight header set used by the reference Python client that
+                // successfully bypasses 403s: Googlebot UA plus a CSS accept header and a
+                // fixed coomer.st referer.
+                headers.put("Accept", "text/css");
+                headers.put("Referer", "https://coomer.st/");
                 if (coomerCookies != null) {
                     headers.put("Cookie", coomerCookies);
                 }
@@ -418,8 +420,7 @@ public class CoomerPartyRipper extends AbstractJSONRipper {
         try {
             Map<String,String> headers = new HashMap<>();
             headers.put("Accept", "text/css");
-            headers.put("Accept-Language", "en-US,en;q=0.9");
-            headers.put("Referer", String.format("https://%s/%s/user/%s", domain, service, user));
+            headers.put("Referer", "https://coomer.st/");
             if (coomerCookies != null) {
                 headers.put("Cookie", coomerCookies);
             }
