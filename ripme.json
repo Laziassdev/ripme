@@ -1,7 +1,7 @@
 {
-  "latestVersion": "2.1.159-1-1d1f893",
-  "currentHash": "a09ab00f4f304b7e787db63c76c0f9424d48a14c2a19f100cff3b5357b65f0a2",
+  "latestVersion": "2.1.160-1-6f8873b",
+  "currentHash": "d472a44f607503743a9b7083370035c66d4f34958ffe6720b821869c6ea83438",
   "changeList": [
-    "2.1.159-1-1d1f893: Merge pull request #76 from Laziassdev/codex/improve-layout-of-download-pane", "2.1.159-1-1d1f893: Built at 2025-11-23T18:30:38Z"
+    "2.1.160-1-6f8873b: Merge pull request #82 from Laziassdev/codex/revert-code-to-commit-33b72732", "2.1.160-1-6f8873b: Built at 2025-12-08T18:08:41Z"
   ]
 }
