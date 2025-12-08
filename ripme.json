@@ -1,7 +1,7 @@
 {
-  "latestVersion": "2.1.163-1-3ea5085",
-  "currentHash": "33d3ec996042a75c69c5f6db7f60f147aec1e4b35dfa79b49ebae59359779d50",
+  "latestVersion": "2.1.164-1-97e15c3",
+  "currentHash": "ce02a2684da049f359557f9271588f329225dd18bbad71fd8d8dd4700d30c9ec",
   "changeList": [
-    "2.1.163-1-3ea5085: Merge pull request #80 from Laziassdev/codex/fix-http-403-error-on-ripper", "2.1.163-1-3ea5085: Built at 2025-12-08T17:49:18Z"
+    "2.1.164-1-97e15c3: Merge pull request #81 from Laziassdev/codex/handle-http-403-errors-in-ripper", "2.1.164-1-97e15c3: Built at 2025-12-08T17:58:54Z"
   ]
 }
