@@ -192,6 +192,11 @@ public class CoomerPartyRipper extends AbstractJSONRipper {
             trimmed = trimmed.substring(1).trim();
         }
 
+        String arrayPayload = extractFirstJsonArray(trimmed);
+        if (arrayPayload != null) {
+            return new JSONArray(arrayPayload);
+        }
+
         int jsonStart = -1;
         for (int i = 0; i < trimmed.length(); i++) {
             char c = trimmed.charAt(i);
@@ -213,15 +218,38 @@ public class CoomerPartyRipper extends AbstractJSONRipper {
             return new JSONArray(trimmed);
         }
 
-        JSONObject obj = new JSONObject(trimmed);
-        if (obj.has("posts")) {
-            return obj.getJSONArray("posts");
-        }
-        if (obj.has("items")) {
-            return obj.getJSONArray("items");
+        try {
+            JSONObject obj = new JSONObject(trimmed);
+            if (obj.has("posts")) {
+                return obj.getJSONArray("posts");
+            }
+            if (obj.has("items")) {
+                return obj.getJSONArray("items");
+            }
+            if (obj.has("data")) {
+                Object data = obj.get("data");
+                if (data instanceof JSONArray) {
+                    return (JSONArray) data;
+                }
+            }
+        } catch (JSONException ex) {
+            throw ex;
         }
 
         throw new JSONException("No posts array in JSON object");
+    }
+
+    /**
+     * Attempts to salvage an embedded JSON array from a response body that contains extra
+     * HTML/garbage by locating the first balanced '[' ... ']' block.
+     */
+    private String extractFirstJsonArray(String body) {
+        int start = body.indexOf('[');
+        int end = body.lastIndexOf(']');
+        if (start >= 0 && end > start) {
+            return body.substring(start, end + 1);
+        }
+        return null;
     }
 
     @Override

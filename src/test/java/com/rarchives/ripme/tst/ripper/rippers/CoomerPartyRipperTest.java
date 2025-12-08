@@ -157,4 +157,16 @@ public class CoomerPartyRipperTest extends RippersTest {
         assertEquals(1, parsed.getJSONObject(0).getInt("id"));
         assertEquals(2, parsed.getJSONObject(1).getInt("id"));
     }
+
+    @Test
+    public void testParsePostsArrayEmbeddedInHtml() throws Exception {
+        URL base = new URI("https://coomer.st/onlyfans/user/soogsx").toURL();
+        TestableCoomerRipper ripper = new TestableCoomerRipper(base);
+
+        JSONArray array = new JSONArray().put(new JSONObject().put("id", 5));
+        String payload = "<html><body>Noise before array<script>var data = " + array.toString() + "</script></body></html>";
+        JSONArray parsed = ripper.publicParsePostsArray(payload);
+        assertEquals(1, parsed.length());
+        assertEquals(5, parsed.getJSONObject(0).getInt("id"));
+    }
 }
