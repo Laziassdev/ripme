@@ -55,7 +55,7 @@ public class CoomerPartyRipper extends AbstractJSONRipper {
 
     // Posts Request Endpoint templates
     // Primary endpoint: /api/v1/{service}/user/{username}/posts
-    private static final String POSTS_ENDPOINT = "https://%s/api/v1/%s/user/%s/posts?o=%d&q=0";
+    private static final String POSTS_ENDPOINT = "https://%s/api/v1/%s/user/%s/posts?o=%d";
 
     // Pagination is strictly 50 posts per page, per API schema.
     private Integer pageCount = 0;
@@ -125,27 +125,19 @@ public class CoomerPartyRipper extends AbstractJSONRipper {
     private JSONObject getJsonPostsForOffset(Integer offset) throws IOException {
         LinkedHashSet<String> domainsToTry = new LinkedHashSet<>();
         domainsToTry.add(domain);
+        domainsToTry.add("coomer.st");
         domainsToTry.add("coomer.party");
         domainsToTry.add("coomer.su");
-        domainsToTry.add("coomer.st");
-        // Try CDN subdomains that sometimes avoid 403s
-        LinkedHashSet<String> expandedDomains = new LinkedHashSet<>();
-        for (String base : domainsToTry) {
-            expandedDomains.add(base);
-            expandedDomains.addAll(buildSubdomainCandidates(base));
-        }
 
         IOException lastException = null;
-        for (String dom : expandedDomains) {
+        for (String dom : domainsToTry) {
             setDomain(dom);
             String apiUrl = String.format(POSTS_ENDPOINT, dom, service, user, offset);
             String jsonArrayString = null;
             try {
                 Map<String, String> headers = new HashMap<>();
-                headers.put("Accept", "application/json, text/plain, */*");
-                headers.put("Accept-Language", "en-US,en;q=0.9");
-                headers.put("Origin", String.format("https://%s", dom));
-                headers.put("Referer", String.format("https://%s/%s/user/%s", dom, service, user));
+                headers.put("Accept", "text/css");
+                headers.put("Referer", String.format("https://%s/", dom));
                 if (coomerCookies != null) {
                     headers.put("Cookie", coomerCookies);
                 }
@@ -536,18 +528,21 @@ public class CoomerPartyRipper extends AbstractJSONRipper {
             return candidates;
         }
 
-        String normalizedBase = base;
-        if (base.startsWith("n") && base.contains(".")) {
-            normalizedBase = base.substring(base.indexOf('.') + 1);
+        String lower = base.toLowerCase();
+        List<String> seedBases = new ArrayList<>();
+        if (lower.contains("coomer")) {
+            seedBases.add("coomer.st");
+        } else if (lower.contains("kemono")) {
+            seedBases.add("kemono.cr");
+            seedBases.add("kemono.su");
         }
 
-        if (!normalizedBase.contains("coomer") && !normalizedBase.contains("kemono")) {
-            return candidates;
+        for (String seed : seedBases) {
+            for (int i = 1; i <= 10; i++) {
+                candidates.add(String.format("n%d.%s", i, seed));
+            }
         }
 
-        for (int i = 1; i <= 10; i++) {
-            candidates.add(String.format("n%d.%s", i, normalizedBase));
-        }
         return candidates;
     }
 

@@ -664,7 +664,7 @@ public class Utils {
             RollingFileAppender rolling = RollingFileAppender.newBuilder()
                     .setName("ripmelog")
                     .withFileName("ripme.log")
-                    .withFilePattern("%d{yyyy-MM-dd HH:mm:ss} %p %m%n")
+                    .withFilePattern("%d{yyyy-MM-dd HH:mm:ss} %-5level %msg%n")
                     .withPolicy(tp)
                     .withStrategy(rs)
                     .build();
