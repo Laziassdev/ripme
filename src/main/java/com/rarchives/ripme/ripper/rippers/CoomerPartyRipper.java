@@ -145,26 +145,7 @@ public class CoomerPartyRipper extends AbstractJSONRipper {
 
                 logger.debug("Raw JSON from API for offset " + offset + ": " + jsonArrayString);
 
-                JSONArray jsonArray;
-                String trimmed = jsonArrayString.trim();
-                if (!trimmed.isEmpty() && trimmed.charAt(0) == '\uFEFF') {
-                    trimmed = trimmed.substring(1);
-                }
-                if (trimmed.isEmpty() || trimmed.startsWith("<")) {
-                    throw new JSONException("Non-JSON response body");
-                }
-                if (trimmed.startsWith("[")) {
-                    jsonArray = new JSONArray(trimmed);
-                } else {
-                    JSONObject obj = new JSONObject(trimmed);
-                    if (obj.has("posts")) {
-                        jsonArray = obj.getJSONArray("posts");
-                    } else if (obj.has("items")) {
-                        jsonArray = obj.getJSONArray("items");
-                    } else {
-                        throw new JSONException("No posts array in JSON object");
-                    }
-                }
+                JSONArray jsonArray = parsePostsArray(jsonArrayString);
 
                 if (jsonArray.length() == 0) {
                     logger.warn("No posts found at offset " + offset + " for user: " + user);
@@ -199,6 +180,48 @@ public class CoomerPartyRipper extends AbstractJSONRipper {
             }
         }
         throw lastException;
+    }
+
+    protected JSONArray parsePostsArray(String rawJson) throws JSONException {
+        if (rawJson == null) {
+            throw new JSONException("Empty response body");
+        }
+
+        String trimmed = rawJson.trim();
+        if (!trimmed.isEmpty() && trimmed.charAt(0) == '\uFEFF') {
+            trimmed = trimmed.substring(1).trim();
+        }
+
+        int jsonStart = -1;
+        for (int i = 0; i < trimmed.length(); i++) {
+            char c = trimmed.charAt(i);
+            if (c == '{' || c == '[') {
+                jsonStart = i;
+                break;
+            }
+        }
+
+        if (jsonStart > 0) {
+            trimmed = trimmed.substring(jsonStart);
+        }
+
+        if (trimmed.isEmpty() || jsonStart == -1) {
+            throw new JSONException("Non-JSON response body");
+        }
+
+        if (trimmed.startsWith("[")) {
+            return new JSONArray(trimmed);
+        }
+
+        JSONObject obj = new JSONObject(trimmed);
+        if (obj.has("posts")) {
+            return obj.getJSONArray("posts");
+        }
+        if (obj.has("items")) {
+            return obj.getJSONArray("items");
+        }
+
+        throw new JSONException("No posts array in JSON object");
     }
 
     @Override

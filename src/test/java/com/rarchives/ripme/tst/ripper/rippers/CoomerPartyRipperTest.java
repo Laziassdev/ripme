@@ -34,6 +34,10 @@ public class CoomerPartyRipperTest extends RippersTest {
         public URL publicRebuildUrlWithHost(URL url, String host) throws Exception {
             return super.rebuildUrlWithHost(url, host);
         }
+
+        public JSONArray publicParsePostsArray(String raw) {
+            return super.parsePostsArray(raw);
+        }
     }
     @Test
     @Tag("flaky")
@@ -140,5 +144,17 @@ public class CoomerPartyRipperTest extends RippersTest {
 
         URL rebuiltNoData = ripper.publicRebuildUrlWithHost(new URL("https://coomer.st/ab/cd/file.jpg"), "n4.coomer.st");
         assertEquals("https://n4.coomer.st/data/ab/cd/file.jpg", rebuiltNoData.toString());
+    }
+
+    @Test
+    public void testParsePostsArraySkipsLeadingGarbage() throws Exception {
+        URL base = new URI("https://coomer.st/onlyfans/user/soogsx").toURL();
+        TestableCoomerRipper ripper = new TestableCoomerRipper(base);
+
+        String payload = "\n<!-- cached -->\n   [ {\"id\":1}, {\"id\":2} ]";
+        JSONArray parsed = ripper.publicParsePostsArray(payload);
+        assertEquals(2, parsed.length());
+        assertEquals(1, parsed.getJSONObject(0).getInt("id"));
+        assertEquals(2, parsed.getJSONObject(1).getInt("id"));
     }
 }
