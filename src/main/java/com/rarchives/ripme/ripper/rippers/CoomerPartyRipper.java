@@ -147,6 +147,7 @@ public class CoomerPartyRipper extends AbstractJSONRipper {
                 Map<String, String> headers = new HashMap<>();
                 headers.put("Accept", "application/json, text/plain, */*");
                 headers.put("Accept-Language", "en-US,en;q=0.9");
+                headers.put("Origin", "https://" + dom);
                 headers.put("Referer", buildPageUrl(dom));
                 headers.put("X-Requested-With", "XMLHttpRequest");
                 if (coomerCookies != null) {
@@ -189,7 +190,13 @@ public class CoomerPartyRipper extends AbstractJSONRipper {
                     return wrapperObject;
                 }
                 lastException = e;
-                logger.warn("Failed to fetch posts from {}: {}", apiUrl, e.getMessage());
+                if (e.getStatusCode() == 403) {
+                    logger.warn(
+                            "Failed to fetch posts from {}: {}. If the site is behind a challenge, try providing updated cookies via coomer.cookies or log in through Firefox.",
+                            apiUrl, e.getMessage());
+                } else {
+                    logger.warn("Failed to fetch posts from {}: {}", apiUrl, e.getMessage());
+                }
             } catch (JSONException e) {
                 lastException = new IOException("Invalid JSON response", e);
                 logger.warn("Invalid JSON from {}: {}", apiUrl, e.getMessage());
