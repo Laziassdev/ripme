@@ -136,7 +136,7 @@ public class CoomerPartyRipper extends AbstractJSONRipper {
             String jsonArrayString = null;
             try {
                 Map<String, String> headers = new HashMap<>();
-                headers.put("Accept", "text/css");
+                headers.put("Accept", "application/json, text/plain, */*");
                 headers.put("Referer", String.format("https://%s/", dom));
                 if (coomerCookies != null) {
                     headers.put("Cookie", coomerCookies);
@@ -149,6 +149,9 @@ public class CoomerPartyRipper extends AbstractJSONRipper {
                 String trimmed = jsonArrayString.trim();
                 if (!trimmed.isEmpty() && trimmed.charAt(0) == '\uFEFF') {
                     trimmed = trimmed.substring(1);
+                }
+                if (trimmed.isEmpty() || trimmed.startsWith("<")) {
+                    throw new JSONException("Non-JSON response body");
                 }
                 if (trimmed.startsWith("[")) {
                     jsonArray = new JSONArray(trimmed);
@@ -186,7 +189,7 @@ public class CoomerPartyRipper extends AbstractJSONRipper {
                     String snippet = jsonArrayString.length() > 200
                             ? jsonArrayString.substring(0, 200) + "..."
                             : jsonArrayString;
-                    logger.debug("Response body (truncated to 200 chars): {}", snippet);
+                    logger.debug("Response body (truncated to 200 chars): {}", snippet.replaceAll("\n", "\\n"));
                 }
             } catch (IOException e) {
                 lastException = e;
@@ -388,45 +391,48 @@ public class CoomerPartyRipper extends AbstractJSONRipper {
         try {
             JSONObject file = post.getJSONObject(KEY_FILE);
             List<String> paths = extractMediaPaths(file);
-
-            if (paths.isEmpty()) {
-                logger.debug("File object contained no usable media paths");
-                return;
-            }
-
-            for (String path : paths) {
-                if (path == null) {
-                    continue;
-                }
-
-                String trimmedPath = path.trim();
-                if (trimmedPath.isEmpty()) {
-                    continue;
-                }
-
-                String url;
-                if (trimmedPath.startsWith("http")) {
-                    url = trimmedPath;
-                    if (!isImage(url) && !isVideo(url)) {
-                        logger.warn("Unsupported media extension in path: " + trimmedPath);
-                        continue;
-                    }
-                } else if (isImage(trimmedPath)) {
-                    url = buildMediaUrl(IMG_URL_BASE, trimmedPath, false);
-                } else if (isVideo(trimmedPath)) {
-                    url = buildMediaUrl(VID_URL_BASE, trimmedPath, true);
-                } else {
-                    logger.warn("Unsupported media extension in path: " + trimmedPath);
-                    continue;
-                }
-
-                results.add(url);
-            }
+            addPathsToResults(paths, results);
 
         } catch (JSONException e) {
             logger.error("Error parsing 'file' object from post: " + e.getMessage());
         } catch (Exception e) {
             logger.error("Unexpected error in pullFileUrl: " + e.getMessage(), e);
+        }
+    }
+
+    private void addPathsToResults(List<String> paths, ArrayList<String> results) {
+        if (paths.isEmpty()) {
+            logger.debug("No usable media paths supplied");
+            return;
+        }
+
+        for (String path : paths) {
+            if (path == null) {
+                continue;
+            }
+
+            String trimmedPath = path.trim();
+            if (trimmedPath.isEmpty()) {
+                continue;
+            }
+
+            String url;
+            if (trimmedPath.startsWith("http")) {
+                url = trimmedPath;
+                if (!isImage(url) && !isVideo(url)) {
+                    logger.warn("Unsupported media extension in path: " + trimmedPath);
+                    continue;
+                }
+            } else if (isImage(trimmedPath)) {
+                url = buildMediaUrl(IMG_URL_BASE, trimmedPath, false);
+            } else if (isVideo(trimmedPath)) {
+                url = buildMediaUrl(VID_URL_BASE, trimmedPath, true);
+            } else {
+                logger.warn("Unsupported media extension in path: " + trimmedPath);
+                continue;
+            }
+
+            results.add(url);
         }
     }
 
@@ -499,8 +505,14 @@ public class CoomerPartyRipper extends AbstractJSONRipper {
                 JSONObject attachment = attachments.optJSONObject(i);
                 if (attachment != null) {
                     pullFileUrl(attachment, results);
+                    LinkedHashSet<String> collected = new LinkedHashSet<>();
+                    collectPathsFromValue(attachment, collected);
+                    addPathsToResults(new ArrayList<>(collected), results);
                 } else {
-                    logger.debug("Attachment at index " + i + " is not a valid JSONObject");
+                    Object attachmentValue = attachments.get(i);
+                    LinkedHashSet<String> collected = new LinkedHashSet<>();
+                    collectPathsFromValue(attachmentValue, collected);
+                    addPathsToResults(new ArrayList<>(collected), results);
                 }
             }
 
