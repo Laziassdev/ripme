@@ -37,11 +37,9 @@ import com.rarchives.ripme.ripper.AbstractRipper;
 public class CoomerPartyRipper extends AbstractJSONRipper {
 
     private static final Logger logger = LogManager.getLogger(CoomerPartyRipper.class);
-    private static final String coomerCookies = Utils.getConfigString("coomer.cookies", null) != null
-            ? Utils.getConfigString("coomer.cookies", null)
-            : getCoomerCookiesFromFirefox();
-    private static final String COOMER_USER_AGENT = Utils.getConfigString("coomer.useragent",
-            "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:132.0) Gecko/20100101 Firefox/132.0");
+    private static final String coomerCookies = getCoomerCookiesFromFirefox();
+    private static final String COOMER_USER_AGENT =
+            "Mozilla/5.0 (compatible; Googlebot/2.1; +http://www.google.com/bot.html)";
 
     private String IMG_URL_BASE = "https://img.coomer.st";
     private String VID_URL_BASE = "https://c1.coomer.st";
@@ -124,19 +122,12 @@ public class CoomerPartyRipper extends AbstractJSONRipper {
         VID_URL_BASE = "https://" + newDomain;
     }
 
-    private String buildPageUrl(String dom) {
-        return String.format("https://%s/%s/user/%s", dom, service, user);
-    }
-
     private JSONObject getJsonPostsForOffset(Integer offset) throws IOException {
         Set<String> domainsToTry = new LinkedHashSet<>();
         domainsToTry.add(domain);
-
-        String configuredDomains = Utils.getConfigString("coomer.domains", "coomer.party,coomer.su,coomer.st");
-        Arrays.stream(configuredDomains.split(","))
-                .map(String::trim)
-                .filter(s -> !s.isEmpty())
-                .forEach(domainsToTry::add);
+        domainsToTry.add("coomer.party");
+        domainsToTry.add("coomer.su");
+        domainsToTry.add("coomer.st");
 
         IOException lastException = null;
         for (String dom : domainsToTry) {
@@ -145,11 +136,8 @@ public class CoomerPartyRipper extends AbstractJSONRipper {
             String jsonArrayString = null;
             try {
                 Map<String, String> headers = new HashMap<>();
-                headers.put("Accept", "application/json, text/plain, */*");
-                headers.put("Accept-Language", "en-US,en;q=0.9");
-                headers.put("Origin", "https://" + dom);
-                headers.put("Referer", buildPageUrl(dom));
-                headers.put("X-Requested-With", "XMLHttpRequest");
+                headers.put("Accept", "text/css");
+                headers.put("Referer", String.format("https://%s/", dom));
                 if (coomerCookies != null) {
                     headers.put("Cookie", coomerCookies);
                 }
@@ -190,13 +178,7 @@ public class CoomerPartyRipper extends AbstractJSONRipper {
                     return wrapperObject;
                 }
                 lastException = e;
-                if (e.getStatusCode() == 403) {
-                    logger.warn(
-                            "Failed to fetch posts from {}: {}. If the site is behind a challenge, try providing updated cookies via coomer.cookies or log in through Firefox.",
-                            apiUrl, e.getMessage());
-                } else {
-                    logger.warn("Failed to fetch posts from {}: {}", apiUrl, e.getMessage());
-                }
+                logger.warn("Failed to fetch posts from {}: {}", apiUrl, e.getMessage());
             } catch (JSONException e) {
                 lastException = new IOException("Invalid JSON response", e);
                 logger.warn("Invalid JSON from {}: {}", apiUrl, e.getMessage());
@@ -297,9 +279,8 @@ public class CoomerPartyRipper extends AbstractJSONRipper {
     protected void downloadURL(URL url, int index) {
         try {
             Map<String,String> headers = new HashMap<>();
-            headers.put("Accept", "*/*");
-            headers.put("Accept-Language", "en-US,en;q=0.9");
-            headers.put("Referer", buildPageUrl(domain));
+            headers.put("Accept", "text/css");
+            headers.put("Referer", String.format("https://%s/", domain));
             if (coomerCookies != null) {
                 headers.put("Cookie", coomerCookies);
             }
