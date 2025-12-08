@@ -7,12 +7,16 @@ import java.io.IOException;
 import java.net.URI;
 import java.net.URISyntaxException;
 import java.net.URL;
+import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 
 import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 import org.json.JSONArray;
 import org.json.JSONObject;
+import org.jsoup.HttpStatusException;
 
 import com.rarchives.ripme.ripper.rippers.CoomerPartyRipper;
 
@@ -25,6 +29,10 @@ public class CoomerPartyRipperTest extends RippersTest {
 
         public List<String> publicGetURLsFromJSON(JSONObject json) {
             return super.getURLsFromJSON(json);
+        }
+
+        public JSONObject publicGetJsonPostsForOffset(int offset) throws IOException {
+            return super.getJsonPostsForOffset(offset);
         }
 
         public List<String> publicBuildSubdomainCandidates(String base) {
@@ -181,5 +189,43 @@ public class CoomerPartyRipperTest extends RippersTest {
         assertEquals(2, parsed.length());
         assertEquals(9, parsed.getJSONObject(0).getInt("id"));
         assertEquals(10, parsed.getJSONObject(1).getInt("id"));
+    }
+
+    @Test
+    public void testHeaderVariantFallbackSkipsCookieFailure() throws Exception {
+        URL base = new URI("https://coomer.st/fansly/user/1234").toURL();
+
+        class FallbackRipper extends TestableCoomerRipper {
+            public FallbackRipper(URL url) throws IOException {
+                super(url);
+            }
+
+            @Override
+            protected List<Map<String, String>> buildApiHeaderVariants() {
+                List<Map<String, String>> variants = new ArrayList<>();
+
+                Map<String, String> withCookie = new HashMap<>();
+                withCookie.put("Cookie", "bad_cookie");
+                variants.add(withCookie);
+
+                variants.add(new HashMap<>());
+                return variants;
+            }
+
+            @Override
+            protected String fetchRawPosts(String apiUrl, Map<String, String> headers) throws IOException {
+                if (headers.containsKey("Cookie")) {
+                    throw new HttpStatusException("Forbidden", 403, apiUrl);
+                }
+                return "[{\"id\":42}]";
+            }
+        }
+
+        FallbackRipper ripper = new FallbackRipper(base);
+        JSONObject result = ripper.publicGetJsonPostsForOffset(0);
+        JSONArray parsed = result.getJSONArray("array");
+
+        assertEquals(1, parsed.length());
+        assertEquals(42, parsed.getJSONObject(0).getInt("id"));
     }
 }

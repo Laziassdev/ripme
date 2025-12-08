@@ -123,7 +123,7 @@ public class CoomerPartyRipper extends AbstractJSONRipper {
         VID_URL_BASE = "https://" + newDomain;
     }
 
-    private JSONObject getJsonPostsForOffset(Integer offset) throws IOException {
+    protected JSONObject getJsonPostsForOffset(Integer offset) throws IOException {
         LinkedHashSet<String> domainsToTry = new LinkedHashSet<>();
         domainsToTry.add(domain);
         domainsToTry.add("coomer.st");
@@ -134,56 +134,73 @@ public class CoomerPartyRipper extends AbstractJSONRipper {
         for (String dom : domainsToTry) {
             setDomain(dom);
             String apiUrl = String.format(POSTS_ENDPOINT, dom, service, user, offset);
-            String jsonArrayString = null;
-            try {
-                Map<String, String> headers = new HashMap<>();
-                // Mirror the lightweight header set used by the reference Python client that
-                // successfully bypasses 403s: Googlebot UA plus a CSS accept header and a
-                // fixed coomer.st referer.
-                headers.put("Accept", "text/css");
-                headers.put("Referer", "https://coomer.st/");
-                if (coomerCookies != null) {
-                    headers.put("Cookie", coomerCookies);
-                }
-                jsonArrayString = Http.getWith429Retry(new URL(apiUrl), 5, 5, COOMER_USER_AGENT, headers);
 
-                logger.debug("Raw JSON from API for offset " + offset + ": " + jsonArrayString);
+            for (Map<String, String> headers : buildApiHeaderVariants()) {
+                String jsonArrayString = null;
+                try {
+                    jsonArrayString = fetchRawPosts(apiUrl, headers);
 
-                JSONArray jsonArray = parsePostsArray(jsonArrayString);
+                    logger.debug("Raw JSON from API for offset " + offset + ": " + jsonArrayString);
 
-                if (jsonArray.length() == 0) {
-                    logger.warn("No posts found at offset " + offset + " for user: " + user);
-                }
+                    JSONArray jsonArray = parsePostsArray(jsonArrayString);
 
-                JSONObject wrapperObject = new JSONObject();
-                wrapperObject.put(KEY_WRAPPER_JSON_ARRAY, jsonArray);
-                return wrapperObject;
-            } catch (HttpStatusException e) {
-                if (e.getStatusCode() == 400) {
-                    logger.info("Offset {} out of range for user {}, treating as no more posts", offset, user);
+                    if (jsonArray.length() == 0) {
+                        logger.warn("No posts found at offset " + offset + " for user: " + user);
+                    }
+
                     JSONObject wrapperObject = new JSONObject();
-                    wrapperObject.put(KEY_WRAPPER_JSON_ARRAY, new JSONArray());
+                    wrapperObject.put(KEY_WRAPPER_JSON_ARRAY, jsonArray);
                     return wrapperObject;
+                } catch (HttpStatusException e) {
+                    if (e.getStatusCode() == 400) {
+                        logger.info("Offset {} out of range for user {}, treating as no more posts", offset, user);
+                        JSONObject wrapperObject = new JSONObject();
+                        wrapperObject.put(KEY_WRAPPER_JSON_ARRAY, new JSONArray());
+                        return wrapperObject;
+                    }
+                    lastException = e;
+                    logger.warn("Failed to fetch posts from {} with headers {}: {}", apiUrl, headers.keySet(), e.getMessage());
+                    // Try next header variant or domain on 403/404/429 instead of bailing immediately
+                    continue;
+                } catch (JSONException e) {
+                    lastException = new IOException("Invalid JSON response", e);
+                    logger.warn("Invalid JSON from {} with headers {}: {}", apiUrl, headers.keySet(), e.getMessage());
+                    if (jsonArrayString != null) {
+                        String snippet = jsonArrayString.length() > 200
+                                ? jsonArrayString.substring(0, 200) + "..."
+                                : jsonArrayString;
+                        logger.debug("Response body (truncated to 200 chars): {}", snippet.replaceAll("\n", "\\n"));
+                    }
+                    // Move on to the next header set or domain to mirror the working Python client's tolerance
+                    continue;
+                } catch (IOException e) {
+                    lastException = e;
+                    logger.warn("Failed to fetch posts from {} with headers {}: {}", apiUrl, headers.keySet(), e.getMessage());
                 }
-                lastException = e;
-                logger.warn("Failed to fetch posts from {}: {}", apiUrl, e.getMessage());
-                // Try next domain (including CDN fallbacks) on 403/404/429 instead of bailing immediately
-                continue;
-            } catch (JSONException e) {
-                lastException = new IOException("Invalid JSON response", e);
-                logger.warn("Invalid JSON from {}: {}", apiUrl, e.getMessage());
-                if (jsonArrayString != null) {
-                    String snippet = jsonArrayString.length() > 200
-                            ? jsonArrayString.substring(0, 200) + "..."
-                            : jsonArrayString;
-                    logger.debug("Response body (truncated to 200 chars): {}", snippet.replaceAll("\n", "\\n"));
-                }
-            } catch (IOException e) {
-                lastException = e;
-                logger.warn("Failed to fetch posts from {}: {}", apiUrl, e.getMessage());
             }
         }
         throw lastException;
+    }
+
+    protected List<Map<String, String>> buildApiHeaderVariants() {
+        List<Map<String, String>> variants = new ArrayList<>();
+
+        Map<String, String> base = new HashMap<>();
+        base.put("Accept", "text/css");
+        base.put("Referer", "https://coomer.st/");
+
+        if (coomerCookies != null) {
+            Map<String, String> withCookies = new HashMap<>(base);
+            withCookies.put("Cookie", coomerCookies);
+            variants.add(withCookies);
+        }
+
+        variants.add(base);
+        return variants;
+    }
+
+    protected String fetchRawPosts(String apiUrl, Map<String, String> headers) throws IOException {
+        return Http.getWith429Retry(new URL(apiUrl), 5, 5, COOMER_USER_AGENT, headers);
     }
 
     protected JSONArray parsePostsArray(String rawJson) throws JSONException {
