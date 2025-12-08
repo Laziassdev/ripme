@@ -124,6 +124,10 @@ public class CoomerPartyRipper extends AbstractJSONRipper {
         VID_URL_BASE = "https://" + newDomain;
     }
 
+    private String buildPageUrl(String dom) {
+        return String.format("https://%s/%s/user/%s", dom, service, user);
+    }
+
     private JSONObject getJsonPostsForOffset(Integer offset) throws IOException {
         Set<String> domainsToTry = new LinkedHashSet<>();
         domainsToTry.add(domain);
@@ -143,7 +147,7 @@ public class CoomerPartyRipper extends AbstractJSONRipper {
                 Map<String, String> headers = new HashMap<>();
                 headers.put("Accept", "application/json, text/plain, */*");
                 headers.put("Accept-Language", "en-US,en;q=0.9");
-                headers.put("Referer", String.format("https://%s/", dom));
+                headers.put("Referer", buildPageUrl(dom));
                 headers.put("X-Requested-With", "XMLHttpRequest");
                 if (coomerCookies != null) {
                     headers.put("Cookie", coomerCookies);
@@ -288,7 +292,7 @@ public class CoomerPartyRipper extends AbstractJSONRipper {
             Map<String,String> headers = new HashMap<>();
             headers.put("Accept", "*/*");
             headers.put("Accept-Language", "en-US,en;q=0.9");
-            headers.put("Referer", String.format("https://%s/", domain));
+            headers.put("Referer", buildPageUrl(domain));
             if (coomerCookies != null) {
                 headers.put("Cookie", coomerCookies);
             }
