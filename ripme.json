@@ -1,7 +1,7 @@
 {
-  "latestVersion": "2.1.161-1-da02cc0",
-  "currentHash": "278f755def1f27dc31155cf0347cf7228211346e4ca54bc1e9922852bb3a764d",
+  "latestVersion": "2.1.162-1-25ff1d5",
+  "currentHash": "f38580e629409f4ca83a5b93b30920528008957d53793c393f9e00b5783bf1e9",
   "changeList": [
-    "2.1.161-1-da02cc0: Merge pull request #78 from Laziassdev/codex/fix-403-error-fetching-posts-c25fx8", "2.1.161-1-da02cc0: Built at 2025-12-08T17:24:18Z"
+    "2.1.162-1-25ff1d5: Merge pull request #79 from Laziassdev/codex/fix-download-failures-from-coomer", "2.1.162-1-25ff1d5: Built at 2025-12-08T17:37:16Z"
   ]
 }
