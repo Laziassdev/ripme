@@ -192,9 +192,9 @@ public class CoomerPartyRipper extends AbstractJSONRipper {
             trimmed = trimmed.substring(1).trim();
         }
 
-        String arrayPayload = extractFirstJsonArray(trimmed);
-        if (arrayPayload != null) {
-            return new JSONArray(arrayPayload);
+        JSONArray recovered = extractFirstParsableArray(trimmed);
+        if (recovered != null) {
+            return recovered;
         }
 
         int jsonStart = -1;
@@ -243,13 +243,80 @@ public class CoomerPartyRipper extends AbstractJSONRipper {
      * Attempts to salvage an embedded JSON array from a response body that contains extra
      * HTML/garbage by locating the first balanced '[' ... ']' block.
      */
-    private String extractFirstJsonArray(String body) {
-        int start = body.indexOf('[');
-        int end = body.lastIndexOf(']');
-        if (start >= 0 && end > start) {
-            return body.substring(start, end + 1);
+    private JSONArray extractFirstParsableArray(String body) {
+        if (body == null || body.isEmpty()) {
+            return null;
         }
+
+        for (int i = 0; i < body.length(); i++) {
+            if (body.charAt(i) != '[') {
+                continue;
+            }
+
+            int end = findMatchingBracket(body, i);
+            if (end <= i) {
+                continue;
+            }
+
+            String candidate = body.substring(i, end + 1);
+            try {
+                JSONArray parsed = new JSONArray(candidate);
+                if (parsed.length() == 0) {
+                    continue;
+                }
+
+                Object first = parsed.get(0);
+                if (first instanceof JSONObject) {
+                    return parsed;
+                }
+            } catch (JSONException parseError) {
+                // Try the next candidate
+            }
+        }
+
         return null;
+    }
+
+    private int findMatchingBracket(String body, int start) {
+        int depth = 0;
+        boolean inString = false;
+        boolean escaping = false;
+
+        for (int i = start; i < body.length(); i++) {
+            char c = body.charAt(i);
+
+            if (escaping) {
+                escaping = false;
+                continue;
+            }
+
+            if (c == '\\') {
+                escaping = true;
+                continue;
+            }
+
+            if (c == '"') {
+                inString = !inString;
+                continue;
+            }
+
+            if (inString) {
+                continue;
+            }
+
+            if (c == '[') {
+                depth++;
+            } else if (c == ']') {
+                depth--;
+                if (depth == 0) {
+                    return i;
+                } else if (depth < 0) {
+                    return -1;
+                }
+            }
+        }
+
+        return -1;
     }
 
     @Override
