@@ -39,7 +39,7 @@ public class CoomerPartyRipper extends AbstractJSONRipper {
     private static final Logger logger = LogManager.getLogger(CoomerPartyRipper.class);
     private static final String coomerCookies = getCoomerCookiesFromFirefox();
     private static final String COOMER_USER_AGENT =
-            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36";
+            "Mozilla/5.0 (compatible; Googlebot/2.1; +http://www.google.com/bot.html)";
 
     private String IMG_URL_BASE = "https://img.coomer.st";
     private String VID_URL_BASE = "https://c1.coomer.st";
@@ -123,14 +123,20 @@ public class CoomerPartyRipper extends AbstractJSONRipper {
     }
 
     private JSONObject getJsonPostsForOffset(Integer offset) throws IOException {
-        Set<String> domainsToTry = new LinkedHashSet<>();
+        LinkedHashSet<String> domainsToTry = new LinkedHashSet<>();
         domainsToTry.add(domain);
         domainsToTry.add("coomer.party");
         domainsToTry.add("coomer.su");
         domainsToTry.add("coomer.st");
+        // Try CDN subdomains that sometimes avoid 403s
+        LinkedHashSet<String> expandedDomains = new LinkedHashSet<>();
+        for (String base : domainsToTry) {
+            expandedDomains.add(base);
+            expandedDomains.addAll(buildSubdomainCandidates(base));
+        }
 
         IOException lastException = null;
-        for (String dom : domainsToTry) {
+        for (String dom : expandedDomains) {
             setDomain(dom);
             String apiUrl = String.format(POSTS_ENDPOINT, dom, service, user, offset);
             String jsonArrayString = null;
@@ -184,6 +190,8 @@ public class CoomerPartyRipper extends AbstractJSONRipper {
                 }
                 lastException = e;
                 logger.warn("Failed to fetch posts from {}: {}", apiUrl, e.getMessage());
+                // Try next domain (including CDN fallbacks) on 403/404/429 instead of bailing immediately
+                continue;
             } catch (JSONException e) {
                 lastException = new IOException("Invalid JSON response", e);
                 logger.warn("Invalid JSON from {}: {}", apiUrl, e.getMessage());
@@ -286,12 +294,11 @@ public class CoomerPartyRipper extends AbstractJSONRipper {
             Map<String,String> headers = new HashMap<>();
             headers.put("Accept", "text/css");
             headers.put("Accept-Language", "en-US,en;q=0.9");
-            headers.put("Origin", String.format("https://%s", domain));
             headers.put("Referer", String.format("https://%s/%s/user/%s", domain, service, user));
             if (coomerCookies != null) {
                 headers.put("Cookie", coomerCookies);
             }
-            URL resolvedUrl = Http.followRedirectsWithRetry(url, 5, 5, COOMER_USER_AGENT, headers);
+            URL resolvedUrl = resolveWithFallback(url, headers);
 
             boolean countTowardsLimit = true;
             if (downloadLimitTracker.isEnabled()) {
@@ -495,6 +502,70 @@ public class CoomerPartyRipper extends AbstractJSONRipper {
         if (!path.isBlank()) {
             paths.add(path);
         }
+    }
+
+    protected URL resolveWithFallback(URL url, Map<String, String> headers) throws IOException {
+        try {
+            return Http.followRedirectsWithRetry(url, 5, 5, COOMER_USER_AGENT, headers);
+        } catch (HttpStatusException e) {
+            if (e.getStatusCode() != 403 && e.getStatusCode() != 404) {
+                throw e;
+            }
+        }
+
+        String host = url.getHost();
+        List<String> candidates = buildSubdomainCandidates(host);
+        for (String candidate : candidates) {
+            URL altUrl = rebuildUrlWithHost(url, candidate);
+            try {
+                return Http.followRedirectsWithRetry(altUrl, 5, 5, COOMER_USER_AGENT, headers);
+            } catch (HttpStatusException e) {
+                if (e.getStatusCode() != 403 && e.getStatusCode() != 404) {
+                    throw e;
+                }
+            }
+        }
+
+        // Nothing worked; try original exception again
+        return Http.followRedirectsWithRetry(url, 1, 1, COOMER_USER_AGENT, headers);
+    }
+
+    protected List<String> buildSubdomainCandidates(String base) {
+        ArrayList<String> candidates = new ArrayList<>();
+        if (base == null || base.isBlank()) {
+            return candidates;
+        }
+
+        String normalizedBase = base;
+        if (base.startsWith("n") && base.contains(".")) {
+            normalizedBase = base.substring(base.indexOf('.') + 1);
+        }
+
+        if (!normalizedBase.contains("coomer") && !normalizedBase.contains("kemono")) {
+            return candidates;
+        }
+
+        for (int i = 1; i <= 10; i++) {
+            candidates.add(String.format("n%d.%s", i, normalizedBase));
+        }
+        return candidates;
+    }
+
+    protected URL rebuildUrlWithHost(URL original, String newHost) throws MalformedURLException {
+        String path = original.getPath();
+        if (!path.startsWith("/data")) {
+            if (path.startsWith("/")) {
+                path = "/data" + path;
+            } else {
+                path = "/data/" + path;
+            }
+        }
+        String query = original.getQuery();
+        String rebuilt = String.format("%s://%s%s", original.getProtocol(), newHost, path);
+        if (query != null && !query.isBlank()) {
+            rebuilt += "?" + query;
+        }
+        return new URL(rebuilt);
     }
 
     private void pullAttachmentUrls(JSONObject post, ArrayList<String> results) {

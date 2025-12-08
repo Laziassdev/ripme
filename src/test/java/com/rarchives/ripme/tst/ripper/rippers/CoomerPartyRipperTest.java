@@ -26,6 +26,14 @@ public class CoomerPartyRipperTest extends RippersTest {
         public List<String> publicGetURLsFromJSON(JSONObject json) {
             return super.getURLsFromJSON(json);
         }
+
+        public List<String> publicBuildSubdomainCandidates(String base) {
+            return super.buildSubdomainCandidates(base);
+        }
+
+        public URL publicRebuildUrlWithHost(URL url, String host) throws Exception {
+            return super.rebuildUrlWithHost(url, host);
+        }
     }
     @Test
     @Tag("flaky")
@@ -115,5 +123,22 @@ public class CoomerPartyRipperTest extends RippersTest {
         assertEquals(2, urls.size(), urls.toString());
         assertTrue(urls.contains("https://coomer.st/data/ff/aa/file1.jpg"), urls.toString());
         assertTrue(urls.contains("https://coomer.st/data/ff/aa/file2.mp4"), urls.toString());
+    }
+
+    @Test
+    public void testSubdomainCandidates() throws Exception {
+        URL base = new URI("https://coomer.st/onlyfans/user/soogsx").toURL();
+        TestableCoomerRipper ripper = new TestableCoomerRipper(base);
+
+        List<String> hosts = ripper.publicBuildSubdomainCandidates("coomer.st");
+        assertEquals(10, hosts.size());
+        assertEquals("n1.coomer.st", hosts.get(0));
+        assertEquals("n10.coomer.st", hosts.get(9));
+
+        URL rebuilt = ripper.publicRebuildUrlWithHost(new URL("https://coomer.st/data/ab/cd/file.jpg"), "n3.coomer.st");
+        assertEquals("https://n3.coomer.st/data/ab/cd/file.jpg", rebuilt.toString());
+
+        URL rebuiltNoData = ripper.publicRebuildUrlWithHost(new URL("https://coomer.st/ab/cd/file.jpg"), "n4.coomer.st");
+        assertEquals("https://n4.coomer.st/data/ab/cd/file.jpg", rebuiltNoData.toString());
     }
 }
