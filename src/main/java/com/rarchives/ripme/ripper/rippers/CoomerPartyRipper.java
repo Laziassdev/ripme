@@ -23,6 +23,7 @@ import org.json.JSONArray;
 import org.json.JSONException;
 import org.json.JSONObject;
 import org.jsoup.HttpStatusException;
+import org.jsoup.Jsoup;
 
 import com.rarchives.ripme.ripper.AbstractJSONRipper;
 import com.rarchives.ripme.utils.DownloadLimitTracker;
@@ -136,7 +137,8 @@ public class CoomerPartyRipper extends AbstractJSONRipper {
             String jsonArrayString = null;
             try {
                 Map<String, String> headers = new HashMap<>();
-                headers.put("Accept", "text/css");
+                headers.put("Accept", "application/json, text/plain, */*");
+                headers.put("Accept-Language", "en-US,en;q=0.9");
                 headers.put("Referer", String.format("https://%s/", dom));
                 if (coomerCookies != null) {
                     headers.put("Cookie", coomerCookies);
@@ -183,6 +185,10 @@ public class CoomerPartyRipper extends AbstractJSONRipper {
     }
 
     protected JSONArray parsePostsArray(String rawJson) throws JSONException {
+        return parsePostsArrayInternal(rawJson, false);
+    }
+
+    private JSONArray parsePostsArrayInternal(String rawJson, boolean alreadySanitized) throws JSONException {
         if (rawJson == null) {
             throw new JSONException("Empty response body");
         }
@@ -191,6 +197,9 @@ public class CoomerPartyRipper extends AbstractJSONRipper {
         if (!trimmed.isEmpty() && trimmed.charAt(0) == '\uFEFF') {
             trimmed = trimmed.substring(1).trim();
         }
+
+        // Drop obvious trailing commas which can appear in some error-wrapped bodies
+        trimmed = trimmed.replaceAll(",\\s*([}\\]])", "$1");
 
         JSONArray recovered = extractFirstParsableArray(trimmed);
         if (recovered != null) {
@@ -233,6 +242,12 @@ public class CoomerPartyRipper extends AbstractJSONRipper {
                 }
             }
         } catch (JSONException ex) {
+            if (!alreadySanitized) {
+                String textOnly = Jsoup.parse(trimmed).text();
+                if (textOnly != null && !textOnly.isEmpty() && !textOnly.equals(trimmed)) {
+                    return parsePostsArrayInternal(textOnly, true);
+                }
+            }
             throw ex;
         }
 
