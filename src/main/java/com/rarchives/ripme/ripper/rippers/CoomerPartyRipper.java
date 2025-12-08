@@ -137,7 +137,9 @@ public class CoomerPartyRipper extends AbstractJSONRipper {
             try {
                 Map<String, String> headers = new HashMap<>();
                 headers.put("Accept", "application/json, text/plain, */*");
-                headers.put("Referer", String.format("https://%s/", dom));
+                headers.put("Accept-Language", "en-US,en;q=0.9");
+                headers.put("Origin", String.format("https://%s", dom));
+                headers.put("Referer", String.format("https://%s/%s/user/%s", dom, service, user));
                 if (coomerCookies != null) {
                     headers.put("Cookie", coomerCookies);
                 }
@@ -283,7 +285,9 @@ public class CoomerPartyRipper extends AbstractJSONRipper {
         try {
             Map<String,String> headers = new HashMap<>();
             headers.put("Accept", "text/css");
-            headers.put("Referer", String.format("https://%s/", domain));
+            headers.put("Accept-Language", "en-US,en;q=0.9");
+            headers.put("Origin", String.format("https://%s", domain));
+            headers.put("Referer", String.format("https://%s/%s/user/%s", domain, service, user));
             if (coomerCookies != null) {
                 headers.put("Cookie", coomerCookies);
             }
