@@ -39,7 +39,7 @@ public class CoomerPartyRipper extends AbstractJSONRipper {
     private static final Logger logger = LogManager.getLogger(CoomerPartyRipper.class);
     private static final String coomerCookies = getCoomerCookiesFromFirefox();
     private static final String COOMER_USER_AGENT =
-            "Mozilla/5.0 (compatible; Googlebot/2.1; +http://www.google.com/bot.html)";
+            "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:132.0) Gecko/20100101 Firefox/132.0";
 
     private String IMG_URL_BASE = "https://img.coomer.st";
     private String VID_URL_BASE = "https://c1.coomer.st";
@@ -137,6 +137,7 @@ public class CoomerPartyRipper extends AbstractJSONRipper {
             try {
                 Map<String, String> headers = new HashMap<>();
                 headers.put("Accept", "application/json, text/plain, */*");
+                headers.put("Accept-Language", "en-US,en;q=0.9");
                 headers.put("Referer", String.format("https://%s/", dom));
                 headers.put("X-Requested-With", "XMLHttpRequest");
                 if (coomerCookies != null) {
@@ -281,6 +282,7 @@ public class CoomerPartyRipper extends AbstractJSONRipper {
         try {
             Map<String,String> headers = new HashMap<>();
             headers.put("Accept", "*/*");
+            headers.put("Accept-Language", "en-US,en;q=0.9");
             headers.put("Referer", String.format("https://%s/", domain));
             if (coomerCookies != null) {
                 headers.put("Cookie", coomerCookies);
