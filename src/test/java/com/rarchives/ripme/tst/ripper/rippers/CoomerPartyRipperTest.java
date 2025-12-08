@@ -82,4 +82,20 @@ public class CoomerPartyRipperTest extends RippersTest {
         // generated URL reflects this behavior.
         assertEquals("https://coomer.st/thumbnail/data/ab/cd/test.jpg", urls.get(0));
     }
+
+    @Test
+    public void testLocationsFallback() throws Exception {
+        URL base = new URI("https://coomer.st/fansly/user/1234").toURL();
+        TestableCoomerRipper ripper = new TestableCoomerRipper(base);
+
+        JSONObject fileObj = new JSONObject()
+                .put("locations", new JSONArray().put(new JSONObject().put("location", "https://c1.coomer.st/data/ab/cd/test.png")));
+        JSONObject postObj = new JSONObject().put("file", fileObj);
+        JSONArray posts = new JSONArray().put(postObj);
+        JSONObject wrapper = new JSONObject().put("array", posts);
+
+        List<String> urls = ripper.publicGetURLsFromJSON(wrapper);
+        assertEquals(1, urls.size());
+        assertEquals("https://c1.coomer.st/data/ab/cd/test.png", urls.get(0));
+    }
 }

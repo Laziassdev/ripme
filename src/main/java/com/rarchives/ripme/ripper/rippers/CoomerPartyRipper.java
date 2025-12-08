@@ -387,41 +387,103 @@ public class CoomerPartyRipper extends AbstractJSONRipper {
 
         try {
             JSONObject file = post.getJSONObject(KEY_FILE);
+            List<String> paths = extractMediaPaths(file);
 
-            if (!file.has(KEY_PATH)) {
-                logger.debug("File object missing 'path', skipping.");
+            if (paths.isEmpty()) {
+                logger.debug("File object contained no usable media paths");
                 return;
             }
 
-            String path = file.getString(KEY_PATH).trim();
-
-            if (path.isEmpty()) {
-                logger.debug("File path is empty, skipping.");
-                return;
-            }
-
-            String url;
-            if (path.startsWith("http")) {
-                url = path;
-                if (!isImage(url) && !isVideo(url)) {
-                    logger.warn("Unsupported media extension in path: " + path);
-                    return;
+            for (String path : paths) {
+                if (path == null) {
+                    continue;
                 }
-            } else if (isImage(path)) {
-                url = buildMediaUrl(IMG_URL_BASE, path, false);
-            } else if (isVideo(path)) {
-                url = buildMediaUrl(VID_URL_BASE, path, true);
-            } else {
-                logger.warn("Unsupported media extension in path: " + path);
-                return;
-            }
 
-            results.add(url);
+                String trimmedPath = path.trim();
+                if (trimmedPath.isEmpty()) {
+                    continue;
+                }
+
+                String url;
+                if (trimmedPath.startsWith("http")) {
+                    url = trimmedPath;
+                    if (!isImage(url) && !isVideo(url)) {
+                        logger.warn("Unsupported media extension in path: " + trimmedPath);
+                        continue;
+                    }
+                } else if (isImage(trimmedPath)) {
+                    url = buildMediaUrl(IMG_URL_BASE, trimmedPath, false);
+                } else if (isVideo(trimmedPath)) {
+                    url = buildMediaUrl(VID_URL_BASE, trimmedPath, true);
+                } else {
+                    logger.warn("Unsupported media extension in path: " + trimmedPath);
+                    continue;
+                }
+
+                results.add(url);
+            }
 
         } catch (JSONException e) {
             logger.error("Error parsing 'file' object from post: " + e.getMessage());
         } catch (Exception e) {
             logger.error("Unexpected error in pullFileUrl: " + e.getMessage(), e);
+        }
+    }
+
+    private List<String> extractMediaPaths(JSONObject file) {
+        LinkedHashSet<String> paths = new LinkedHashSet<>();
+
+        if (file.has(KEY_PATH) && !file.isNull(KEY_PATH)) {
+            String path = file.optString(KEY_PATH, "");
+            if (!path.isBlank()) {
+                paths.add(path);
+            }
+        }
+
+        collectPathsFromValue(file.opt("locations"), paths);
+
+        if (file.has("alternates")) {
+            Object alternates = file.opt("alternates");
+            if (alternates instanceof JSONObject) {
+                JSONObject altObj = (JSONObject) alternates;
+                for (String key : altObj.keySet()) {
+                    collectPathsFromValue(altObj.opt(key), paths);
+                }
+            }
+        }
+
+        return new ArrayList<>(paths);
+    }
+
+    private void collectPathsFromValue(Object value, LinkedHashSet<String> paths) {
+        if (value == null) {
+            return;
+        }
+
+        if (value instanceof JSONArray) {
+            JSONArray array = (JSONArray) value;
+            for (int i = 0; i < array.length(); i++) {
+                collectPathsFromValue(array.opt(i), paths);
+            }
+            return;
+        }
+
+        if (value instanceof JSONObject) {
+            JSONObject obj = (JSONObject) value;
+            if (obj.has("location")) {
+                String location = obj.optString("location", "");
+                if (!location.isBlank()) {
+                    paths.add(location);
+                }
+            }
+            collectPathsFromValue(obj.opt(KEY_PATH), paths);
+            collectPathsFromValue(obj.opt("locations"), paths);
+            return;
+        }
+
+        String path = value.toString();
+        if (!path.isBlank()) {
+            paths.add(path);
         }
     }
 
