@@ -1,7 +1,7 @@
 {
-  "latestVersion": "2.1.162-1-25ff1d5",
-  "currentHash": "f38580e629409f4ca83a5b93b30920528008957d53793c393f9e00b5783bf1e9",
+  "latestVersion": "2.1.163-1-3ea5085",
+  "currentHash": "33d3ec996042a75c69c5f6db7f60f147aec1e4b35dfa79b49ebae59359779d50",
   "changeList": [
-    "2.1.162-1-25ff1d5: Merge pull request #79 from Laziassdev/codex/fix-download-failures-from-coomer", "2.1.162-1-25ff1d5: Built at 2025-12-08T17:37:16Z"
+    "2.1.163-1-3ea5085: Merge pull request #80 from Laziassdev/codex/fix-http-403-error-on-ripper", "2.1.163-1-3ea5085: Built at 2025-12-08T17:49:18Z"
   ]
 }
