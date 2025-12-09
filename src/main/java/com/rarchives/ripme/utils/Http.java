@@ -29,6 +29,8 @@ import java.io.InputStream;
 import java.io.InputStreamReader;
 import java.net.HttpURLConnection;
 import java.util.Random;
+import java.util.zip.GZIPInputStream;
+import java.util.zip.InflaterInputStream;
 
 /**
  * Wrapper around the Jsoup connection methods.
@@ -218,6 +220,10 @@ public class Http {
         try {
             connection = (HttpURLConnection) url.openConnection();
             connection.setRequestProperty("User-Agent", userAgent);
+            // Match the Python client's behavior by accepting compressed responses and
+            // decompressing them manually below.
+            connection.setRequestProperty("Accept-Encoding", "gzip, deflate");
+
             boolean acceptSet = false;
             if (headers != null) {
                 for (Map.Entry<String,String> entry : headers.entrySet()) {
@@ -271,8 +277,18 @@ public class Http {
                 throw new HttpStatusException("HTTP error fetching URL", responseCode, url.toString());
             }
 
-            try (InputStream inputStream = connection.getInputStream();
-                 BufferedReader reader = new BufferedReader(new InputStreamReader(inputStream))) {
+            InputStream inputStream = connection.getInputStream();
+            String encoding = connection.getContentEncoding();
+            if (encoding != null) {
+                if (encoding.equalsIgnoreCase("gzip")) {
+                    inputStream = new GZIPInputStream(inputStream);
+                } else if (encoding.equalsIgnoreCase("deflate")) {
+                    inputStream = new InflaterInputStream(inputStream);
+                }
+            }
+
+            try (InputStream decodedStream = inputStream;
+                 BufferedReader reader = new BufferedReader(new InputStreamReader(decodedStream))) {
                 StringBuilder response = new StringBuilder();
                 String line;
                 while ((line = reader.readLine()) != null) {
