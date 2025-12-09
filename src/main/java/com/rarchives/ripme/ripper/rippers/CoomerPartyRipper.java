@@ -23,6 +23,7 @@ import org.json.JSONArray;
 import org.json.JSONException;
 import org.json.JSONObject;
 import org.jsoup.HttpStatusException;
+import org.jsoup.Jsoup;
 
 import com.rarchives.ripme.ripper.AbstractJSONRipper;
 import com.rarchives.ripme.utils.DownloadLimitTracker;
@@ -55,7 +56,7 @@ public class CoomerPartyRipper extends AbstractJSONRipper {
 
     // Posts Request Endpoint templates
     // Primary endpoint: /api/v1/{service}/user/{username}/posts
-    private static final String POSTS_ENDPOINT = "https://%s/api/v1/%s/user/%s/posts?o=%d&q=0";
+    private static final String POSTS_ENDPOINT = "https://%s/api/v1/%s/user/%s/posts?o=%d";
 
     // Pagination is strictly 50 posts per page, per API schema.
     private Integer pageCount = 0;
@@ -122,78 +123,234 @@ public class CoomerPartyRipper extends AbstractJSONRipper {
         VID_URL_BASE = "https://" + newDomain;
     }
 
-    private JSONObject getJsonPostsForOffset(Integer offset) throws IOException {
-        Set<String> domainsToTry = new LinkedHashSet<>();
+    protected JSONObject getJsonPostsForOffset(Integer offset) throws IOException {
+        LinkedHashSet<String> domainsToTry = new LinkedHashSet<>();
         domainsToTry.add(domain);
+        domainsToTry.add("coomer.st");
         domainsToTry.add("coomer.party");
         domainsToTry.add("coomer.su");
-        domainsToTry.add("coomer.st");
 
         IOException lastException = null;
         for (String dom : domainsToTry) {
             setDomain(dom);
             String apiUrl = String.format(POSTS_ENDPOINT, dom, service, user, offset);
-            String jsonArrayString = null;
-            try {
-                Map<String, String> headers = new HashMap<>();
-                headers.put("Accept", "text/css");
-                headers.put("Referer", String.format("https://%s/", dom));
-                if (coomerCookies != null) {
-                    headers.put("Cookie", coomerCookies);
-                }
-                jsonArrayString = Http.getWith429Retry(new URL(apiUrl), 5, 5, COOMER_USER_AGENT, headers);
 
-                logger.debug("Raw JSON from API for offset " + offset + ": " + jsonArrayString);
+            for (Map<String, String> headers : buildApiHeaderVariants()) {
+                String jsonArrayString = null;
+                try {
+                    jsonArrayString = fetchRawPosts(apiUrl, headers);
 
-                JSONArray jsonArray;
-                String trimmed = jsonArrayString.trim();
-                if (!trimmed.isEmpty() && trimmed.charAt(0) == '\uFEFF') {
-                    trimmed = trimmed.substring(1);
-                }
-                if (trimmed.startsWith("[")) {
-                    jsonArray = new JSONArray(trimmed);
-                } else {
-                    JSONObject obj = new JSONObject(trimmed);
-                    if (obj.has("posts")) {
-                        jsonArray = obj.getJSONArray("posts");
-                    } else if (obj.has("items")) {
-                        jsonArray = obj.getJSONArray("items");
-                    } else {
-                        throw new JSONException("No posts array in JSON object");
+                    logger.debug("Raw JSON from API for offset " + offset + ": " + jsonArrayString);
+
+                    JSONArray jsonArray = parsePostsArray(jsonArrayString);
+
+                    if (jsonArray.length() == 0) {
+                        logger.warn("No posts found at offset " + offset + " for user: " + user);
                     }
-                }
 
-                if (jsonArray.length() == 0) {
-                    logger.warn("No posts found at offset " + offset + " for user: " + user);
-                }
-
-                JSONObject wrapperObject = new JSONObject();
-                wrapperObject.put(KEY_WRAPPER_JSON_ARRAY, jsonArray);
-                return wrapperObject;
-            } catch (HttpStatusException e) {
-                if (e.getStatusCode() == 400) {
-                    logger.info("Offset {} out of range for user {}, treating as no more posts", offset, user);
                     JSONObject wrapperObject = new JSONObject();
-                    wrapperObject.put(KEY_WRAPPER_JSON_ARRAY, new JSONArray());
+                    wrapperObject.put(KEY_WRAPPER_JSON_ARRAY, jsonArray);
                     return wrapperObject;
+                } catch (HttpStatusException e) {
+                    if (e.getStatusCode() == 400) {
+                        logger.info("Offset {} out of range for user {}, treating as no more posts", offset, user);
+                        JSONObject wrapperObject = new JSONObject();
+                        wrapperObject.put(KEY_WRAPPER_JSON_ARRAY, new JSONArray());
+                        return wrapperObject;
+                    }
+                    lastException = e;
+                    logger.warn("Failed to fetch posts from {} with headers {}: {}", apiUrl, headers.keySet(), e.getMessage());
+                    // Try next header variant or domain on 403/404/429 instead of bailing immediately
+                    continue;
+                } catch (JSONException e) {
+                    lastException = new IOException("Invalid JSON response", e);
+                    logger.warn("Invalid JSON from {} with headers {}: {}", apiUrl, headers.keySet(), e.getMessage());
+                    if (jsonArrayString != null) {
+                        String snippet = jsonArrayString.length() > 200
+                                ? jsonArrayString.substring(0, 200) + "..."
+                                : jsonArrayString;
+                        logger.debug("Response body (truncated to 200 chars): {}", snippet.replaceAll("\n", "\\n"));
+                    }
+                    // Move on to the next header set or domain to mirror the working Python client's tolerance
+                    continue;
+                } catch (IOException e) {
+                    lastException = e;
+                    logger.warn("Failed to fetch posts from {} with headers {}: {}", apiUrl, headers.keySet(), e.getMessage());
                 }
-                lastException = e;
-                logger.warn("Failed to fetch posts from {}: {}", apiUrl, e.getMessage());
-            } catch (JSONException e) {
-                lastException = new IOException("Invalid JSON response", e);
-                logger.warn("Invalid JSON from {}: {}", apiUrl, e.getMessage());
-                if (jsonArrayString != null) {
-                    String snippet = jsonArrayString.length() > 200
-                            ? jsonArrayString.substring(0, 200) + "..."
-                            : jsonArrayString;
-                    logger.debug("Response body (truncated to 200 chars): {}", snippet);
-                }
-            } catch (IOException e) {
-                lastException = e;
-                logger.warn("Failed to fetch posts from {}: {}", apiUrl, e.getMessage());
             }
         }
         throw lastException;
+    }
+
+    protected List<Map<String, String>> buildApiHeaderVariants() {
+        List<Map<String, String>> variants = new ArrayList<>();
+
+        Map<String, String> base = new HashMap<>();
+        base.put("Accept", "text/css");
+        base.put("Referer", "https://coomer.st/");
+
+        if (coomerCookies != null) {
+            Map<String, String> withCookies = new HashMap<>(base);
+            withCookies.put("Cookie", coomerCookies);
+            variants.add(withCookies);
+        }
+
+        variants.add(base);
+        return variants;
+    }
+
+    protected String fetchRawPosts(String apiUrl, Map<String, String> headers) throws IOException {
+        return Http.getWith429Retry(new URL(apiUrl), 5, 5, COOMER_USER_AGENT, headers);
+    }
+
+    protected JSONArray parsePostsArray(String rawJson) throws JSONException {
+        return parsePostsArrayInternal(rawJson, false);
+    }
+
+    private JSONArray parsePostsArrayInternal(String rawJson, boolean alreadySanitized) throws JSONException {
+        if (rawJson == null) {
+            throw new JSONException("Empty response body");
+        }
+
+        String trimmed = rawJson.trim();
+        if (!trimmed.isEmpty() && trimmed.charAt(0) == '\uFEFF') {
+            trimmed = trimmed.substring(1).trim();
+        }
+
+        // Drop obvious trailing commas which can appear in some error-wrapped bodies
+        trimmed = trimmed.replaceAll(",\\s*([}\\]])", "$1");
+
+        JSONArray recovered = extractFirstParsableArray(trimmed);
+        if (recovered != null) {
+            return recovered;
+        }
+
+        int jsonStart = -1;
+        for (int i = 0; i < trimmed.length(); i++) {
+            char c = trimmed.charAt(i);
+            if (c == '{' || c == '[') {
+                jsonStart = i;
+                break;
+            }
+        }
+
+        if (jsonStart > 0) {
+            trimmed = trimmed.substring(jsonStart);
+        }
+
+        if (trimmed.isEmpty() || jsonStart == -1) {
+            throw new JSONException("Non-JSON response body");
+        }
+
+        if (trimmed.startsWith("[")) {
+            return new JSONArray(trimmed);
+        }
+
+        try {
+            JSONObject obj = new JSONObject(trimmed);
+            if (obj.has("posts")) {
+                return obj.getJSONArray("posts");
+            }
+            if (obj.has("items")) {
+                return obj.getJSONArray("items");
+            }
+            if (obj.has("data")) {
+                Object data = obj.get("data");
+                if (data instanceof JSONArray) {
+                    return (JSONArray) data;
+                }
+            }
+        } catch (JSONException ex) {
+            if (!alreadySanitized) {
+                String textOnly = Jsoup.parse(trimmed).text();
+                if (textOnly != null && !textOnly.isEmpty() && !textOnly.equals(trimmed)) {
+                    return parsePostsArrayInternal(textOnly, true);
+                }
+            }
+            throw ex;
+        }
+
+        throw new JSONException("No posts array in JSON object");
+    }
+
+    /**
+     * Attempts to salvage an embedded JSON array from a response body that contains extra
+     * HTML/garbage by locating the first balanced '[' ... ']' block.
+     */
+    private JSONArray extractFirstParsableArray(String body) {
+        if (body == null || body.isEmpty()) {
+            return null;
+        }
+
+        for (int i = 0; i < body.length(); i++) {
+            if (body.charAt(i) != '[') {
+                continue;
+            }
+
+            int end = findMatchingBracket(body, i);
+            if (end <= i) {
+                continue;
+            }
+
+            String candidate = body.substring(i, end + 1);
+            try {
+                JSONArray parsed = new JSONArray(candidate);
+                if (parsed.length() == 0) {
+                    continue;
+                }
+
+                Object first = parsed.get(0);
+                if (first instanceof JSONObject) {
+                    return parsed;
+                }
+            } catch (JSONException parseError) {
+                // Try the next candidate
+            }
+        }
+
+        return null;
+    }
+
+    private int findMatchingBracket(String body, int start) {
+        int depth = 0;
+        boolean inString = false;
+        boolean escaping = false;
+
+        for (int i = start; i < body.length(); i++) {
+            char c = body.charAt(i);
+
+            if (escaping) {
+                escaping = false;
+                continue;
+            }
+
+            if (c == '\\') {
+                escaping = true;
+                continue;
+            }
+
+            if (c == '"') {
+                inString = !inString;
+                continue;
+            }
+
+            if (inString) {
+                continue;
+            }
+
+            if (c == '[') {
+                depth++;
+            } else if (c == ']') {
+                depth--;
+                if (depth == 0) {
+                    return i;
+                } else if (depth < 0) {
+                    return -1;
+                }
+            }
+        }
+
+        return -1;
     }
 
     @Override
@@ -280,11 +437,11 @@ public class CoomerPartyRipper extends AbstractJSONRipper {
         try {
             Map<String,String> headers = new HashMap<>();
             headers.put("Accept", "text/css");
-            headers.put("Referer", String.format("https://%s/", domain));
+            headers.put("Referer", "https://coomer.st/");
             if (coomerCookies != null) {
                 headers.put("Cookie", coomerCookies);
             }
-            URL resolvedUrl = Http.followRedirectsWithRetry(url, 5, 5, COOMER_USER_AGENT, headers);
+            URL resolvedUrl = resolveWithFallback(url, headers);
 
             boolean countTowardsLimit = true;
             if (downloadLimitTracker.isEnabled()) {
@@ -387,42 +544,174 @@ public class CoomerPartyRipper extends AbstractJSONRipper {
 
         try {
             JSONObject file = post.getJSONObject(KEY_FILE);
-
-            if (!file.has(KEY_PATH)) {
-                logger.debug("File object missing 'path', skipping.");
-                return;
-            }
-
-            String path = file.getString(KEY_PATH).trim();
-
-            if (path.isEmpty()) {
-                logger.debug("File path is empty, skipping.");
-                return;
-            }
-
-            String url;
-            if (path.startsWith("http")) {
-                url = path;
-                if (!isImage(url) && !isVideo(url)) {
-                    logger.warn("Unsupported media extension in path: " + path);
-                    return;
-                }
-            } else if (isImage(path)) {
-                url = buildMediaUrl(IMG_URL_BASE, path, false);
-            } else if (isVideo(path)) {
-                url = buildMediaUrl(VID_URL_BASE, path, true);
-            } else {
-                logger.warn("Unsupported media extension in path: " + path);
-                return;
-            }
-
-            results.add(url);
+            List<String> paths = extractMediaPaths(file);
+            addPathsToResults(paths, results);
 
         } catch (JSONException e) {
             logger.error("Error parsing 'file' object from post: " + e.getMessage());
         } catch (Exception e) {
             logger.error("Unexpected error in pullFileUrl: " + e.getMessage(), e);
         }
+    }
+
+    private void addPathsToResults(List<String> paths, ArrayList<String> results) {
+        if (paths.isEmpty()) {
+            logger.debug("No usable media paths supplied");
+            return;
+        }
+
+        for (String path : paths) {
+            if (path == null) {
+                continue;
+            }
+
+            String trimmedPath = path.trim();
+            if (trimmedPath.isEmpty()) {
+                continue;
+            }
+
+            String url;
+            if (trimmedPath.startsWith("http")) {
+                url = trimmedPath;
+                if (!isImage(url) && !isVideo(url)) {
+                    logger.warn("Unsupported media extension in path: " + trimmedPath);
+                    continue;
+                }
+            } else if (isImage(trimmedPath)) {
+                url = buildMediaUrl(IMG_URL_BASE, trimmedPath, false);
+            } else if (isVideo(trimmedPath)) {
+                url = buildMediaUrl(VID_URL_BASE, trimmedPath, true);
+            } else {
+                logger.warn("Unsupported media extension in path: " + trimmedPath);
+                continue;
+            }
+
+            results.add(url);
+        }
+    }
+
+    private List<String> extractMediaPaths(JSONObject file) {
+        LinkedHashSet<String> paths = new LinkedHashSet<>();
+
+        if (file.has(KEY_PATH) && !file.isNull(KEY_PATH)) {
+            String path = file.optString(KEY_PATH, "");
+            if (!path.isBlank()) {
+                paths.add(path);
+            }
+        }
+
+        collectPathsFromValue(file.opt("locations"), paths);
+
+        if (file.has("alternates")) {
+            Object alternates = file.opt("alternates");
+            if (alternates instanceof JSONObject) {
+                JSONObject altObj = (JSONObject) alternates;
+                for (String key : altObj.keySet()) {
+                    collectPathsFromValue(altObj.opt(key), paths);
+                }
+            }
+        }
+
+        return new ArrayList<>(paths);
+    }
+
+    private void collectPathsFromValue(Object value, LinkedHashSet<String> paths) {
+        if (value == null) {
+            return;
+        }
+
+        if (value instanceof JSONArray) {
+            JSONArray array = (JSONArray) value;
+            for (int i = 0; i < array.length(); i++) {
+                collectPathsFromValue(array.opt(i), paths);
+            }
+            return;
+        }
+
+        if (value instanceof JSONObject) {
+            JSONObject obj = (JSONObject) value;
+            if (obj.has("location")) {
+                String location = obj.optString("location", "");
+                if (!location.isBlank()) {
+                    paths.add(location);
+                }
+            }
+            collectPathsFromValue(obj.opt(KEY_PATH), paths);
+            collectPathsFromValue(obj.opt("locations"), paths);
+            return;
+        }
+
+        String path = value.toString();
+        if (!path.isBlank()) {
+            paths.add(path);
+        }
+    }
+
+    protected URL resolveWithFallback(URL url, Map<String, String> headers) throws IOException {
+        try {
+            return Http.followRedirectsWithRetry(url, 5, 5, COOMER_USER_AGENT, headers);
+        } catch (HttpStatusException e) {
+            if (e.getStatusCode() != 403 && e.getStatusCode() != 404) {
+                throw e;
+            }
+        }
+
+        String host = url.getHost();
+        List<String> candidates = buildSubdomainCandidates(host);
+        for (String candidate : candidates) {
+            URL altUrl = rebuildUrlWithHost(url, candidate);
+            try {
+                return Http.followRedirectsWithRetry(altUrl, 5, 5, COOMER_USER_AGENT, headers);
+            } catch (HttpStatusException e) {
+                if (e.getStatusCode() != 403 && e.getStatusCode() != 404) {
+                    throw e;
+                }
+            }
+        }
+
+        // Nothing worked; try original exception again
+        return Http.followRedirectsWithRetry(url, 1, 1, COOMER_USER_AGENT, headers);
+    }
+
+    protected List<String> buildSubdomainCandidates(String base) {
+        ArrayList<String> candidates = new ArrayList<>();
+        if (base == null || base.isBlank()) {
+            return candidates;
+        }
+
+        String lower = base.toLowerCase();
+        List<String> seedBases = new ArrayList<>();
+        if (lower.contains("coomer")) {
+            seedBases.add("coomer.st");
+        } else if (lower.contains("kemono")) {
+            seedBases.add("kemono.cr");
+            seedBases.add("kemono.su");
+        }
+
+        for (String seed : seedBases) {
+            for (int i = 1; i <= 10; i++) {
+                candidates.add(String.format("n%d.%s", i, seed));
+            }
+        }
+
+        return candidates;
+    }
+
+    protected URL rebuildUrlWithHost(URL original, String newHost) throws MalformedURLException {
+        String path = original.getPath();
+        if (!path.startsWith("/data")) {
+            if (path.startsWith("/")) {
+                path = "/data" + path;
+            } else {
+                path = "/data/" + path;
+            }
+        }
+        String query = original.getQuery();
+        String rebuilt = String.format("%s://%s%s", original.getProtocol(), newHost, path);
+        if (query != null && !query.isBlank()) {
+            rebuilt += "?" + query;
+        }
+        return new URL(rebuilt);
     }
 
     private void pullAttachmentUrls(JSONObject post, ArrayList<String> results) {
@@ -437,8 +726,14 @@ public class CoomerPartyRipper extends AbstractJSONRipper {
                 JSONObject attachment = attachments.optJSONObject(i);
                 if (attachment != null) {
                     pullFileUrl(attachment, results);
+                    LinkedHashSet<String> collected = new LinkedHashSet<>();
+                    collectPathsFromValue(attachment, collected);
+                    addPathsToResults(new ArrayList<>(collected), results);
                 } else {
-                    logger.debug("Attachment at index " + i + " is not a valid JSONObject");
+                    Object attachmentValue = attachments.get(i);
+                    LinkedHashSet<String> collected = new LinkedHashSet<>();
+                    collectPathsFromValue(attachmentValue, collected);
+                    addPathsToResults(new ArrayList<>(collected), results);
                 }
             }
 
