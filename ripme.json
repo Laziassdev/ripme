@@ -1,7 +1,7 @@
 {
-  "latestVersion": "2.1.161-1-fc9e2b1",
-  "currentHash": "fb67c099ddbc95a6b6971a7c56f798ec51fe8f1c217ebd55a5b739937d9b4c1a",
+  "latestVersion": "2.1.162-1-b768566",
+  "currentHash": "34c170558a7db7e37f1fcf23b597d52f51b21bc0fa5623f6bfaeab23273253a9",
   "changeList": [
-    "2.1.161-1-fc9e2b1: Merge pull request #83 from Laziassdev/codex/fix-image-download-error-for-fansly", "2.1.161-1-fc9e2b1: Built at 2025-12-09T00:11:46Z"
+    "2.1.162-1-b768566: Merge pull request #84 from Laziassdev/codex/set-coomer-downloader-url-format", "2.1.162-1-b768566: Built at 2026-01-30T05:58:43Z"
   ]
 }
