@@ -79,7 +79,8 @@ public class CoomerPartyRipper extends AbstractJSONRipper {
 
     public CoomerPartyRipper(URL url) throws IOException {
         super(url);
-        List<String> pathElements = Arrays.stream(url.getPath().split("/"))
+        URL normalizedUrl = normalizeInputUrl(url);
+        List<String> pathElements = Arrays.stream(normalizedUrl.getPath().split("/"))
                 .filter(element -> !element.isBlank())
                 .collect(Collectors.toList());
 
@@ -90,9 +91,9 @@ public class CoomerPartyRipper extends AbstractJSONRipper {
             logger.warn("service=" + service + ", user=" + user);
             throw new MalformedURLException("Invalid coomer.party URL: " + url);
         }
-        logger.debug("Parsed service=" + service + " and user=" + user + " from " + url);
+        logger.debug("Parsed service=" + service + " and user=" + user + " from " + normalizedUrl);
 
-        domain = url.getHost();
+        domain = normalizedUrl.getHost();
         setDomain(domain);
     }
 
@@ -109,7 +110,33 @@ public class CoomerPartyRipper extends AbstractJSONRipper {
     @Override
     public boolean canRip(URL url) {
         String host = url.getHost();
-        return host.endsWith("coomer.party") || host.endsWith("coomer.su") || host.endsWith("coomer.st");
+        return host.endsWith("coomer.party") || host.endsWith("coomer.su") || host.endsWith("coomer.st")
+                || host.endsWith("onlyfans.com");
+    }
+
+    private URL normalizeInputUrl(URL url) throws MalformedURLException {
+        String host = url.getHost();
+        if (host == null) {
+            return url;
+        }
+
+        if (host.endsWith("onlyfans.com")) {
+            List<String> pathElements = Arrays.stream(url.getPath().split("/"))
+                    .filter(element -> !element.isBlank())
+                    .collect(Collectors.toList());
+            if (pathElements.isEmpty()) {
+                throw new MalformedURLException("Invalid onlyfans URL: " + url);
+            }
+            String username = pathElements.get(0);
+            if ("u".equalsIgnoreCase(username) && pathElements.size() > 1) {
+                username = pathElements.get(1);
+            }
+            if (username.isBlank()) {
+                throw new MalformedURLException("Invalid onlyfans URL: " + url);
+            }
+            return new URL("https://coomer.st/onlyfans/user/" + username);
+        }
+        return url;
     }
 
     @Override

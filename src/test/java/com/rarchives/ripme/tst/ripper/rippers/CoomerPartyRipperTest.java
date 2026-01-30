@@ -65,6 +65,7 @@ public class CoomerPartyRipperTest extends RippersTest {
                 "https://coomer.st/onlyfans/user/soogsx?whatever=abc", // with url params
                 "https://coomer.party/onlyfans/user/soogsx", // alternate domain
                 "https://coomer.su/onlyfans/user/soogsx", // legacy domain
+                "https://onlyfans.com/soogsx", // onlyfans profile URL
         };
         for (String stringUrl : urls) {
             URL url = new URI(stringUrl).toURL();
