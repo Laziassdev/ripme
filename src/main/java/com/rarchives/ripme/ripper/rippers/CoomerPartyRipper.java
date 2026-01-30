@@ -114,27 +114,36 @@ public class CoomerPartyRipper extends AbstractJSONRipper {
                 || host.endsWith("onlyfans.com");
     }
 
-    private URL normalizeInputUrl(URL url) throws MalformedURLException {
+    public static URL normalizeOnlyfansProfile(URL url) throws MalformedURLException {
         String host = url.getHost();
         if (host == null) {
-            return url;
+            return null;
         }
 
-        if (host.endsWith("onlyfans.com")) {
-            List<String> pathElements = Arrays.stream(url.getPath().split("/"))
-                    .filter(element -> !element.isBlank())
-                    .collect(Collectors.toList());
-            if (pathElements.isEmpty()) {
-                throw new MalformedURLException("Invalid onlyfans URL: " + url);
-            }
-            String username = pathElements.get(0);
-            if ("u".equalsIgnoreCase(username) && pathElements.size() > 1) {
-                username = pathElements.get(1);
-            }
-            if (username.isBlank()) {
-                throw new MalformedURLException("Invalid onlyfans URL: " + url);
-            }
-            return new URL("https://coomer.st/onlyfans/user/" + username);
+        if (!host.endsWith("onlyfans.com")) {
+            return null;
+        }
+
+        List<String> pathElements = Arrays.stream(url.getPath().split("/"))
+                .filter(element -> !element.isBlank())
+                .collect(Collectors.toList());
+        if (pathElements.isEmpty()) {
+            throw new MalformedURLException("Invalid onlyfans URL: " + url);
+        }
+        String username = pathElements.get(0);
+        if ("u".equalsIgnoreCase(username) && pathElements.size() > 1) {
+            username = pathElements.get(1);
+        }
+        if (username.isBlank()) {
+            throw new MalformedURLException("Invalid onlyfans URL: " + url);
+        }
+        return new URL("https://coomer.st/onlyfans/user/" + username);
+    }
+
+    private URL normalizeInputUrl(URL url) throws MalformedURLException {
+        URL normalizedOnlyfans = normalizeOnlyfansProfile(url);
+        if (normalizedOnlyfans != null) {
+            return normalizedOnlyfans;
         }
         return url;
     }

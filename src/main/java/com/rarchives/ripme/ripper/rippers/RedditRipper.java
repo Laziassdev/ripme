@@ -38,6 +38,7 @@ import org.json.JSONObject;
 import org.json.JSONTokener;
 import org.jsoup.Jsoup;
 
+import com.rarchives.ripme.ripper.AbstractRipper;
 import com.rarchives.ripme.ripper.AlbumRipper;
 import com.rarchives.ripme.ui.RipStatusMessage;
 import com.rarchives.ripme.ui.UpdateUtils;
@@ -637,6 +638,9 @@ public class RedditRipper extends AlbumRipper {
         } catch (MalformedURLException | URISyntaxException e) {
             return;
         }
+        if (tryRipCoomerProfile(originalURL)) {
+            return;
+        }
         String subdirectory = "";
         if (Utils.getConfigBoolean("reddit.use_sub_dirs", true)) {
             if (Utils.getConfigBoolean("album_titles.save", true)) {
@@ -708,6 +712,27 @@ public class RedditRipper extends AlbumRipper {
                         });
             }
         }
+    }
+
+    private boolean tryRipCoomerProfile(URL originalURL) {
+        URL coomerUrl;
+        try {
+            coomerUrl = CoomerPartyRipper.normalizeOnlyfansProfile(originalURL);
+        } catch (MalformedURLException e) {
+            logger.warn("Invalid OnlyFans URL {}: {}", originalURL, e.getMessage());
+            return true;
+        }
+        if (coomerUrl == null) {
+            return false;
+        }
+        try {
+            AbstractRipper ripper = AbstractRipper.getRipper(coomerUrl);
+            ripper.setup();
+            ripper.run();
+        } catch (Exception e) {
+            logger.warn("Failed to rip Coomer profile {} from OnlyFans link {}: {}", coomerUrl, originalURL, e.getMessage());
+        }
+        return true;
     }
 
     private void handleGallery(JSONArray data, JSONObject metadata, String id, String title){
