@@ -729,6 +729,7 @@ public class RedditRipper extends AlbumRipper {
         }
         try {
             AbstractRipper ripper = AbstractRipper.getRipper(coomerUrl);
+            ripper.setObserver(getObserver());
             ripper.setup();
             ripper.run();
         } catch (Exception e) {
