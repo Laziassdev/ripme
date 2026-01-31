@@ -301,7 +301,7 @@ public abstract class AbstractJSONRipper extends AbstractRipper {
         }
         logger.debug("Using album title '" + title + "'");
 
-        title = Utils.filesystemSafe(title);
+        title = Utils.normalizeFolderName(title);
         wd = wd.resolve(title);
         if (!Files.exists(wd)) {
             logger.info("[+] Creating directory: " + Utils.removeCWD(wd));
