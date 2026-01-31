@@ -1,7 +1,7 @@
 {
-  "latestVersion": "2.1.165-1-4296e6d",
-  "currentHash": "75f9abab081f94a0b6d86ae6710f147ace34ce1b3af4f2f6a8f9b4cc5944aa5d",
+  "latestVersion": "2.1.166-1-c2e82c5",
+  "currentHash": "e6f0b889fb20af6e16aa860e04836a2b82fc235f6f5d97a70440f4d66afbd18c",
   "changeList": [
-    "2.1.165-1-4296e6d: Merge pull request #87 from Laziassdev/codex/normalize-folder-names-for-all-rippers", "2.1.165-1-4296e6d: Built at 2026-01-31T09:29:39Z"
+    "2.1.166-1-c2e82c5: Merge pull request #88 from Laziassdev/codex/update-ripper-to-handle-coomer-urls", "2.1.166-1-c2e82c5: Built at 2026-01-31T09:36:26Z"
   ]
 }
