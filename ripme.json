@@ -1,7 +1,7 @@
 {
-  "latestVersion": "2.1.163-1-1e102e6",
-  "currentHash": "065327280f3536c677963a28b3312e62cd6716756961769583be1926b92b9a48",
+  "latestVersion": "2.1.164-1-9de62b4",
+  "currentHash": "34707d38834762c397f095ea008679960f44568ddd8c9318dd3723be17c5a1dd",
   "changeList": [
-    "2.1.163-1-1e102e6: Merge pull request #85 from Laziassdev/codex/set-coomer-downloader-url-format", "2.1.163-1-1e102e6: Built at 2026-01-30T06:06:48Z"
+    "2.1.164-1-9de62b4: Merge pull request #86 from Laziassdev/codex/add-folder-name-cleanup-and-log-deletion", "2.1.164-1-9de62b4: Built at 2026-01-31T09:21:32Z"
   ]
 }
