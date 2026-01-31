@@ -1,7 +1,7 @@
 {
-  "latestVersion": "2.1.164-1-9de62b4",
-  "currentHash": "34707d38834762c397f095ea008679960f44568ddd8c9318dd3723be17c5a1dd",
+  "latestVersion": "2.1.165-1-4296e6d",
+  "currentHash": "75f9abab081f94a0b6d86ae6710f147ace34ce1b3af4f2f6a8f9b4cc5944aa5d",
   "changeList": [
-    "2.1.164-1-9de62b4: Merge pull request #86 from Laziassdev/codex/add-folder-name-cleanup-and-log-deletion", "2.1.164-1-9de62b4: Built at 2026-01-31T09:21:32Z"
+    "2.1.165-1-4296e6d: Merge pull request #87 from Laziassdev/codex/normalize-folder-names-for-all-rippers", "2.1.165-1-4296e6d: Built at 2026-01-31T09:29:39Z"
   ]
 }
