@@ -55,7 +55,8 @@ public class App {
      */
     public static void main(String[] args) throws IOException {
         LoggingConfig.setup();  // <-- Enable logging format with timestamp
-        
+        Utils.deleteArchivedLogs();
+
         logger.info("RipMe starting...");
         CommandLine cl = getArgs(args);
 
