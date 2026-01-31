@@ -129,6 +129,8 @@ public class RedditRipper extends AlbumRipper {
 
     private static final String HOST   = "reddit";
     private static final String DOMAIN = "reddit.com";
+    private static final Pattern REDDIT_USER_PATH = Pattern.compile("^/(user|u)/([^/]+).*$");
+    private static final Pattern REDDIT_USER_EDGE_CHARS = Pattern.compile("^[^A-Za-z0-9]+|[^A-Za-z0-9]+$");
 
     private static final String REDDIT_USER_AGENT = "RipMe:github.com/laziassdev/ripme:" + UpdateUtils.getThisJarVersion() + " (by /u/metaprime and /u/ineedmorealts)";
 
@@ -786,15 +788,18 @@ public class RedditRipper extends AlbumRipper {
     @Override
     public String getGID(URL url) throws MalformedURLException {
         // User
-        Pattern p = Pattern.compile("^https?://[a-zA-Z0-9.]{0,4}reddit\\.com/(user|u)/([a-zA-Z0-9_\\-]{3,}).*$");
-        Matcher m = p.matcher(url.toExternalForm());
-        if (m.matches()) {
-            return "user_" + m.group(m.groupCount());
+        String path = url.getPath();
+        Matcher userPath = REDDIT_USER_PATH.matcher(path);
+        if (userPath.matches()) {
+            String username = normalizeRedditUser(userPath.group(2));
+            if (username != null && !username.isBlank()) {
+                return "user_" + username;
+            }
         }
 
         // Post
-        p = Pattern.compile("^https?://[a-zA-Z0-9.]{0,4}reddit\\.com/.*comments/([a-zA-Z0-9]{1,8}).*$");
-        m = p.matcher(url.toExternalForm());
+        Pattern p = Pattern.compile("^https?://[a-zA-Z0-9.]{0,4}reddit\\.com/.*comments/([a-zA-Z0-9]{1,8}).*$");
+        Matcher m = p.matcher(url.toExternalForm());
         if (m.matches()) {
             return "post_" + m.group(m.groupCount());
         }
@@ -814,6 +819,13 @@ public class RedditRipper extends AlbumRipper {
         }
 
         throw new MalformedURLException("Only accepts user pages, subreddits, post, or gallery can't understand " + url);
+    }
+
+    private static String normalizeRedditUser(String username) {
+        if (username == null) {
+            return null;
+        }
+        return REDDIT_USER_EDGE_CHARS.matcher(username).replaceAll("");
     }
 
     private static final String HTML_STYLING = " .author { font-weight: bold; } .op { color: blue; } .comment { border: 0px; margin: 0 0 25px; padding-left: 5px; } .child { margin: 2px 0 0 20px; border-left: 2px dashed #AAF; } .collapsed { background: darkgrey; margin-bottom: 0; } .collapsed > div { display: none; } .md { max-width: 840px; padding-right: 1em; } h1 { margin: 0; } body { position: relative; background-color: #eeeeec; color: #00000a; font-weight: 400; font-style: normal; font-variant: normal; font-family: Helvetica,Arial,sans-serif; line-height: 1.4 } blockquote { margin: 5px 5px 5px 15px; padding: 1px 1px 1px 15px; max-width: 60em; border: 1px solid #ccc; border-width: 0 0 0 1px; } pre { white-space: pre-wrap; } img, video { max-width: 60vw; max-height: 90vh; object-fit: contain; } .thing { overflow: hidden; margin: 0 5px 3px 40px; border: 1px solid #e0e0e0; background-color: #fcfcfb; } :target > .md { border: 5px solid blue; } .post { margin-bottom: 20px; margin-top: 20px; } .gold { background: goldenrod; } .silver { background: silver; } .platinum { background: aqua; } .deleted { background: #faa; } .md.deleted { background: inherit; border: 5px solid #faa; } .oppost { background-color: #EEF; } blockquote > p { margin: 0; } #related { max-height: 20em; overflow-y: scroll; background-color: #F4FFF4; } #related h3 { position: sticky; top: 0; background-color: white; } .flex { display: flex; flex-flow: wrap; flex-direction: row-reverse; justify-content: flex-end; } ";

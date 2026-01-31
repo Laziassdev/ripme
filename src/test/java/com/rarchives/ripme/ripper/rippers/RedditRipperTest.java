@@ -47,6 +47,24 @@ class RedditRipperTest {
         assertEquals(0, animalsTracker.getSuccessfulDownloads());
     }
 
+    @Test
+    void trimsNonAlphanumericEdgesFromUserGid() throws Exception {
+        RedditRipper ripper = new RedditRipper(new URL("https://www.reddit.com/user/_JudgmentNatasha/"));
+
+        assertEquals("user_JudgmentNatasha",
+                ripper.getGID(new URL("https://www.reddit.com/user/_JudgmentNatasha/")));
+        assertEquals("user_JudgmentNatasha",
+                ripper.getGID(new URL("https://www.reddit.com/user/JudgmentNatasha_/")));
+        assertEquals("user_JudgmentNatasha",
+                ripper.getGID(new URL("https://www.reddit.com/user/-JudgmentNatasha/")));
+        assertEquals("user_JudgmentNatasha",
+                ripper.getGID(new URL("https://www.reddit.com/user/JudgmentNatasha-/")));
+        assertEquals("user_JudgmentNatasha",
+                ripper.getGID(new URL("https://www.reddit.com/user/JudgmentNatasha#/")));
+        assertEquals("user_Judgment_Natasha",
+                ripper.getGID(new URL("https://www.reddit.com/user/Judgment_Natasha-/")));
+    }
+
     private DownloadLimitTracker downloadLimitTrackerOf(RedditRipper ripper) throws Exception {
         Field field = RedditRipper.class.getDeclaredField("downloadLimitTracker");
         field.setAccessible(true);

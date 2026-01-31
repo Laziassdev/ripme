@@ -32,6 +32,7 @@ import java.util.jar.JarEntry;
 import java.util.jar.JarFile;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
+import java.util.stream.Stream;
 import java.security.DigestInputStream;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
@@ -66,6 +67,7 @@ public class Utils {
     private static final String CONFIG_FILE = "rip.properties";
     private static final String OS = System.getProperty("os.name").toLowerCase();
     private static final int SHORTENED_PATH_LENGTH = 12;
+    private static final Pattern RIPME_ARCHIVED_LOG_PATTERN = Pattern.compile("^ripme\\.\\d+\\.log\\.gz$");
 
     private static final HashMap<String, HashMap<String, String>> cookieCache;
     private static final HashMap<ByteBuffer, String> magicHash = new HashMap<>();
@@ -677,6 +679,25 @@ public class Utils {
             loggerConfig.removeAppender("ripmelog");
         }
         ctx.updateLoggers();  // This causes all Loggers to refetch information from their LoggerConfig.
+    }
+
+    public static void deleteArchivedLogs() {
+        Path directory = Paths.get(".").toAbsolutePath().normalize();
+        try (Stream<Path> logFiles = Files.list(directory)) {
+            logFiles.filter(Utils::isArchivedLogFile).forEach(path -> {
+                try {
+                    Files.deleteIfExists(path);
+                } catch (IOException e) {
+                    LOGGER.debug("Failed to delete archived log file {}", path, e);
+                }
+            });
+        } catch (IOException e) {
+            LOGGER.debug("Failed to scan for archived log files", e);
+        }
+    }
+
+    private static boolean isArchivedLogFile(Path path) {
+        return RIPME_ARCHIVED_LOG_PATTERN.matcher(path.getFileName().toString()).matches();
     }
 
     /**
