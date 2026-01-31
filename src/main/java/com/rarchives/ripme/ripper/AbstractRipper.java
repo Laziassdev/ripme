@@ -292,6 +292,10 @@ public abstract class AbstractRipper
         this.observer = obs;
     }
 
+    protected RipStatusHandler getObserver() {
+        return observer;
+    }
+
     /**
      * Queues image to be downloaded and saved.
      *
