@@ -547,6 +547,20 @@ public class Utils {
     }
 
     /**
+     * Normalizes folder names by removing non-alphanumeric characters from the start and end.
+     * Non-alphanumeric characters within the name are preserved.
+     *
+     * @param text The folder name to normalize.
+     * @return The normalized folder name.
+     */
+    public static String normalizeFolderName(String text) {
+        String safe = filesystemSafe(text);
+        safe = safe.replaceAll("^[^a-zA-Z0-9]+", "");
+        safe = safe.replaceAll("[^a-zA-Z0-9]+$", "");
+        return safe;
+    }
+
+    /**
      * Checks if given path already exists as lowercase
      *
      * @param path - original path entered to be ripped

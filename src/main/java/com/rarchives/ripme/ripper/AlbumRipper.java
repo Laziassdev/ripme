@@ -216,7 +216,7 @@ public abstract class AlbumRipper extends AbstractRipper {
         }
         logger.debug("Using album title '" + title + "'");
 
-        title = Utils.filesystemSafe(title);
+        title = Utils.normalizeFolderName(title);
         path += title;
         path = Utils.getOriginalDirectory(path) + File.separator;   // check for case sensitive (unix only)
 
