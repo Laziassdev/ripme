@@ -30,8 +30,8 @@ dependencies {
   implementation("commons-io:commons-io:2.14.0")
   implementation("org.apache.httpcomponents:httpclient:4.5.14")
   implementation("org.apache.httpcomponents:httpmime:4.5.14")
-  implementation("org.apache.logging.log4j:log4j-api:2.20.0")
-  implementation("org.apache.logging.log4j:log4j-core:2.20.0")
+  implementation("org.apache.logging.log4j:log4j-api:2.25.3")
+  implementation("org.apache.logging.log4j:log4j-core:2.25.3")
   implementation("com.squareup.okhttp3:okhttp:4.12.0")
   implementation("org.graalvm.js:js:22.3.2")
   implementation("org.xerial:sqlite-jdbc:3.45.3.0")
@@ -40,7 +40,7 @@ dependencies {
   testImplementation(enforcedPlatform("org.junit:junit-bom:5.10.0"))
   testImplementation("org.junit.jupiter:junit-jupiter")
   testRuntimeOnly("org.junit.platform:junit-platform-launcher")
-  annotationProcessor("org.apache.logging.log4j:log4j-core:2.20.0")
+  annotationProcessor("org.apache.logging.log4j:log4j-core:2.25.3")
 }
 
 group = "com.rarchives.ripme"
