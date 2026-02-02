@@ -22,6 +22,7 @@ import java.net.URL;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.Date;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.HashMap;
@@ -56,6 +57,7 @@ import java.sql.*;
 
 public class RedditRipper extends AlbumRipper {
 
+    private final Set<String> coomerProfilesSeen = new HashSet<>();
 
     // Loads all Reddit cookies from Firefox (Windows), tries all profiles, returns cookie string for HTTP header
     private static String getRedditCookiesFromFirefox() {
@@ -726,6 +728,11 @@ public class RedditRipper extends AlbumRipper {
         }
         if (coomerUrl == null) {
             return false;
+        }
+        String normalizedProfile = coomerUrl.toExternalForm();
+        if (!coomerProfilesSeen.add(normalizedProfile)) {
+            logger.debug("Skipping duplicate OnlyFans profile {} found in Reddit thread", normalizedProfile);
+            return true;
         }
         try {
             AbstractRipper ripper = AbstractRipper.getRipper(coomerUrl);
