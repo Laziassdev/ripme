@@ -1,7 +1,7 @@
 {
-  "latestVersion": "2.1.167-1-41aae14",
-  "currentHash": "8d8f70f7533c322d2d842d9290a6a4ece4807e8658119b519c7fcb7c8e690ab2",
+  "latestVersion": "2.1.168-1-db264b4",
+  "currentHash": "cd60a93f157947c60e6448bdc1958b808a160bb6aad332800d47b95d88ef3165",
   "changeList": [
-    "2.1.167-1-41aae14: Merge pull request #91 from Laziassdev/dependabot/gradle/org.apache.logging.log4j-log4j-core-2.25.3", "2.1.167-1-41aae14: Built at 2026-02-01T11:24:06Z"
+    "2.1.168-1-db264b4: Merge pull request #92 from Laziassdev/codex/enhance-onlyfans-download-handling", "2.1.168-1-db264b4: Built at 2026-02-02T18:29:34Z"
   ]
 }
