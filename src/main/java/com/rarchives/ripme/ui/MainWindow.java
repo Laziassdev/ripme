@@ -259,6 +259,32 @@ public final class MainWindow implements Runnable, RipStatusHandler {
         }
     }
 
+    private void ensureActiveRipperEntry(AbstractRipper ripper) {
+        if (ripper == null || activeRippers.containsKey(ripper)) {
+            return;
+        }
+        String domain = "unknown";
+        try {
+            URL ripperUrl = ripper.getURL();
+            if (ripperUrl != null && ripperUrl.getHost() != null) {
+                domain = ripperUrl.getHost().toLowerCase(Locale.ROOT);
+            }
+        } catch (Exception e) {
+            LOGGER.debug("Unable to determine domain for active ripper", e);
+        }
+        activeRippers.put(ripper, new ActiveDownloadEntry(domain));
+        refreshActivePanel();
+    }
+
+    private void removeActiveRipperEntry(AbstractRipper ripper) {
+        if (ripper == null) {
+            return;
+        }
+        if (activeRippers.remove(ripper) != null) {
+            refreshActivePanel();
+        }
+    }
+
     private static void addCheckboxListener(JCheckBox checkBox, String configString) {
         checkBox.addActionListener(arg0 -> {
             Utils.setConfigBoolean(configString, checkBox.isSelected());
@@ -1924,6 +1950,10 @@ public final class MainWindow implements Runnable, RipStatusHandler {
             return;
         }
 
+        if (msg.getStatus() != RipStatusMessage.STATUS.RIP_COMPLETE) {
+            ensureActiveRipperEntry(evt.ripper);
+        }
+
         int completedPercent = evt.ripper.getCompletionPercentage();
         statusProgress.setValue(completedPercent);
         statusProgress.setVisible(true);
@@ -1974,6 +2004,7 @@ public final class MainWindow implements Runnable, RipStatusHandler {
             openButton.setVisible(false);
             pack();
             statusWithColor("Error: " + msg.getObject(), Color.RED);
+            removeActiveRipperEntry(evt.ripper);
             break;
 
         case RIP_COMPLETE:
@@ -2064,6 +2095,7 @@ public final class MainWindow implements Runnable, RipStatusHandler {
                 }
             });
             pack();
+            removeActiveRipperEntry(evt.ripper);
             break;
         case COMPLETED_BYTES:
             // Update completed bytes
@@ -2080,6 +2112,7 @@ public final class MainWindow implements Runnable, RipStatusHandler {
             openButton.setVisible(false);
             pack();
             statusWithColor("Error: " + msg.getObject(), Color.RED);
+            removeActiveRipperEntry(evt.ripper);
             break;
         }
     }
