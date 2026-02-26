@@ -65,6 +65,18 @@ class RedditRipperTest {
                 ripper.getGID(new URL("https://www.reddit.com/user/Judgment_Natasha-/")));
     }
 
+    @Test
+    void supportsSearchPageGid() throws Exception {
+        RedditRipper ripper = new RedditRipper(new URL("https://www.reddit.com/search/?q=missy+mae&type=media"));
+
+        assertEquals("search_missy_mae_media",
+                ripper.getGID(new URL("https://www.reddit.com/search/?q=missy+mae&type=media")));
+        assertEquals("search_missy_mae_all",
+                ripper.getGID(new URL("https://www.reddit.com/search/?q=missy+mae")));
+        assertEquals("search_Cats_Dogs_media",
+                ripper.getGID(new URL("https://www.reddit.com/search/?q=Cats%20%26%20Dogs&type=media")));
+    }
+
     private DownloadLimitTracker downloadLimitTrackerOf(RedditRipper ripper) throws Exception {
         Field field = RedditRipper.class.getDeclaredField("downloadLimitTracker");
         field.setAccessible(true);
