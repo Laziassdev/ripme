@@ -1,7 +1,7 @@
 {
-  "latestVersion": "2.1.168-1-db264b4",
-  "currentHash": "cd60a93f157947c60e6448bdc1958b808a160bb6aad332800d47b95d88ef3165",
+  "latestVersion": "2.1.169-1-9543a47",
+  "currentHash": "3848cc3e92d940288c39d992ac5e08c13e9092e1e6ce0261e792943865c922a3",
   "changeList": [
-    "2.1.168-1-db264b4: Merge pull request #92 from Laziassdev/codex/enhance-onlyfans-download-handling", "2.1.168-1-db264b4: Built at 2026-02-02T18:29:34Z"
+    "2.1.169-1-9543a47: Merge pull request #93 from Laziassdev/codex/enable-media-search-support-for-redditripper", "2.1.169-1-9543a47: Built at 2026-02-26T17:34:47Z"
   ]
 }
