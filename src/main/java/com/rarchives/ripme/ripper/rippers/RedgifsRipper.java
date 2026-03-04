@@ -31,6 +31,8 @@ import org.json.JSONObject;
 
 import com.rarchives.ripme.ripper.AbstractJSONRipper;
 import com.rarchives.ripme.utils.Http;
+import com.rarchives.ripme.utils.RipUtils;
+import com.rarchives.ripme.utils.Utils;
 
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -57,6 +59,7 @@ public class RedgifsRipper extends AbstractJSONRipper {
             .compile("^https?://[a-zA-Z0-9.]*redgifs\\.com/watch/([a-zA-Z0-9_-]+).*$");
     private static final Pattern ACCESS_TOKEN_PATTERN = Pattern
             .compile("\"accessToken\"\\s*:\\s*\"([^\"]+)\"");
+    private static final List<String> REDGIFS_COOKIE_DOMAINS = Arrays.asList("redgifs.com", "www.redgifs.com", "api.redgifs.com");
 
     /**
      * Keep a single auth token for the complete lifecycle of the app.
@@ -123,9 +126,9 @@ public class RedgifsRipper extends AbstractJSONRipper {
             if (isSingleton().matches()) {
                 maxPages = 1;
                 String gifDetailsURL = String.format(GIFS_DETAIL_ENDPOINT, getGID(url));
-                return Http.url(gifDetailsURL).header("Authorization", "Bearer " + authToken).getJSON();
+                return getJSONWithBearerAuth(gifDetailsURL);
             } else if (isSearch().matches() || isTags().matches()) {
-                var json = Http.url(getSearchOrTagsURL()).header("Authorization", "Bearer " + authToken).getJSON();
+                var json = getJSONWithBearerAuth(getSearchOrTagsURL());
                 maxPages = json.getInt("pages");
                 return json;
             } else {
@@ -134,7 +137,7 @@ public class RedgifsRipper extends AbstractJSONRipper {
                 uri.addParameter("order", "new");
                 uri.addParameter("count", Integer.toString(count));
                 uri.addParameter("page", Integer.toString(currentPage));
-                var json = Http.url(uri.build().toURL()).header("Authorization", "Bearer " + authToken).getJSON();
+                var json = getJSONWithBearerAuth(uri.build().toURL());
                 maxPages = json.getInt("pages");
                 return json;
             }
@@ -206,7 +209,7 @@ public class RedgifsRipper extends AbstractJSONRipper {
         }
         currentPage++;
         if (isSearch().matches() || isTags().matches()) {
-            var json = Http.url(getSearchOrTagsURL()).header("Authorization", "Bearer " + authToken).getJSON();
+            var json = getJSONWithBearerAuth(getSearchOrTagsURL());
             // Handle rare maxPages change during a rip
             maxPages = json.getInt("pages");
             return json;
@@ -215,7 +218,7 @@ public class RedgifsRipper extends AbstractJSONRipper {
             uri.addParameter("order", "new");
             uri.addParameter("count", Integer.toString(count));
             uri.addParameter("page", Integer.toString(currentPage));
-            var json = Http.url(uri.build().toURL()).header("Authorization", "Bearer " + authToken).getJSON();
+            var json = getJSONWithBearerAuth(uri.build().toURL());
             // Handle rare maxPages change during a rip
             maxPages = json.getInt("pages");
             return json;
@@ -266,8 +269,7 @@ public class RedgifsRipper extends AbstractJSONRipper {
             return list;
         }
         try {
-            var json = Http.url(String.format(GALLERY_ENDPOINT, galleryID))
-                    .header("Authorization", "Bearer " + authToken).getJSON();
+            var json = getJSONWithBearerAuth(String.format(GALLERY_ENDPOINT, galleryID));
             for (var gif : json.getJSONArray("gifs")) {
                 var hdURL = ((JSONObject) gif).getJSONObject("urls").getString("hd");
                 list.add(hdURL);
@@ -297,7 +299,7 @@ public class RedgifsRipper extends AbstractJSONRipper {
         }
         var gid = m.group(1).split("-")[0];
         var gifDetailsURL = String.format(GIFS_DETAIL_ENDPOINT, gid);
-        var json = Http.url(gifDetailsURL).header("Authorization", "Bearer " + authToken).getJSON();
+        var json = getJSONWithBearerAuth(gifDetailsURL);
         var gif = json.getJSONObject("gif");
         if (!gif.isNull("gallery")) {
             // TODO check how to handle a image gallery
@@ -312,6 +314,13 @@ public class RedgifsRipper extends AbstractJSONRipper {
      * @throws IOException
      */
     private static void fetchAuthToken() throws IOException {
+        String redgifsCookieToken = fetchAuthTokenFromConfiguredRedgifsCookies();
+        if (redgifsCookieToken != null && !redgifsCookieToken.isBlank()) {
+            authToken = redgifsCookieToken;
+            logger.info("Loaded Redgifs auth token from configured cookies");
+            return;
+        }
+
         String redditToken = fetchAuthTokenFromRedditCookies();
         if (redditToken != null && !redditToken.isBlank()) {
             authToken = redditToken;
@@ -323,6 +332,51 @@ public class RedgifsRipper extends AbstractJSONRipper {
         var token = json.getString("token");
         authToken = token;
         logger.info("Incase of redgif 401 errors, please restart the app to refresh the auth token");
+    }
+
+    private static JSONObject getJSONWithBearerAuth(URL requestUrl) throws IOException {
+        return getJSONWithBearerAuth(requestUrl.toExternalForm());
+    }
+
+    private static JSONObject getJSONWithBearerAuth(String requestUrl) throws IOException {
+        if (authToken == null || authToken.isBlank()) {
+            fetchAuthToken();
+        }
+
+        try {
+            return Http.url(requestUrl).header("Authorization", "Bearer " + authToken).getJSON();
+        } catch (IOException e) {
+            if (!isUnauthorizedError(e)) {
+                throw e;
+            }
+
+            logger.info("Redgifs authorization failed; refreshing auth token and retrying once");
+            authToken = "";
+            fetchAuthToken();
+            return Http.url(requestUrl).header("Authorization", "Bearer " + authToken).getJSON();
+        }
+    }
+
+    private static boolean isUnauthorizedError(IOException e) {
+        return e.getMessage() != null && e.getMessage().contains("Status Code 401");
+    }
+
+    private static String fetchAuthTokenFromConfiguredRedgifsCookies() {
+        for (String cookieDomain : REDGIFS_COOKIE_DOMAINS) {
+            String cookieStr = Utils.getConfigString("cookies." + cookieDomain, "");
+            if (cookieStr == null || cookieStr.isBlank()) {
+                continue;
+            }
+
+            Map<String, String> cookies = RipUtils.getCookiesFromString(cookieStr);
+            String token = extractAccessTokenFromCookies(cookies);
+            if (token != null && !token.isBlank()) {
+                logger.info("Found Redgifs auth token in cookies.{}", cookieDomain);
+                return token;
+            }
+        }
+
+        return null;
     }
 
     private static String fetchAuthTokenFromRedditCookies() {
