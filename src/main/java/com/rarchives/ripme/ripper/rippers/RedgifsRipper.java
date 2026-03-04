@@ -56,7 +56,7 @@ public class RedgifsRipper extends AbstractJSONRipper {
     private static final Pattern TAGS_PATTERN = Pattern
             .compile("^https?:\\/\\/[a-zA-Z0-9.]*redgifs\\.com\\/gifs\\/([a-zA-Z0-9_.,-]+).*$");
     private static final Pattern SINGLETON_PATTERN = Pattern
-            .compile("^https?://[a-zA-Z0-9.]*redgifs\\.com/watch/([a-zA-Z0-9_-]+).*$");
+            .compile("^https?://[a-zA-Z0-9.]*redgifs\\.com/(?:watch|ifr)/([a-zA-Z0-9_-]+).*$");
     private static final Pattern ACCESS_TOKEN_PATTERN = Pattern
             .compile("\"accessToken\"\\s*:\\s*\"([^\"]+)\"");
     private static final List<String> REDGIFS_COOKIE_DOMAINS = Arrays.asList("redgifs.com", "www.redgifs.com", "api.redgifs.com");
@@ -96,6 +96,7 @@ public class RedgifsRipper extends AbstractJSONRipper {
         String sUrl = url.toExternalForm();
         sUrl = sUrl.replace("/gifs/detail", "");
         sUrl = sUrl.replace("/amp", "");
+        sUrl = sUrl.replace("/ifr/", "/watch/");
         sUrl = sUrl.replace("gifdeliverynetwork.com", "redgifs.com/watch");
         return new URI(sUrl).toURL();
     }
