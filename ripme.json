@@ -1,7 +1,7 @@
 {
-  "latestVersion": "2.1.169-1-9543a47",
-  "currentHash": "3848cc3e92d940288c39d992ac5e08c13e9092e1e6ce0261e792943865c922a3",
+  "latestVersion": "2.1.170-1-3ed04a9",
+  "currentHash": "07143db1564bf23c99a575ef1cedf128c556d5f669237146b431c1c98333da8a",
   "changeList": [
-    "2.1.169-1-9543a47: Merge pull request #93 from Laziassdev/codex/enable-media-search-support-for-redditripper", "2.1.169-1-9543a47: Built at 2026-02-26T17:34:47Z"
+    "2.1.170-1-3ed04a9: Merge pull request #94 from Laziassdev/codex/get-redgifs-token-from-cookies", "2.1.170-1-3ed04a9: Built at 2026-03-04T01:00:47Z"
   ]
 }
