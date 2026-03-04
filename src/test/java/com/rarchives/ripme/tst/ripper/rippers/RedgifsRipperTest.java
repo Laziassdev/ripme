@@ -7,6 +7,9 @@ import org.junit.jupiter.api.*;
 import java.io.IOException;
 import java.net.URI;
 import java.net.URISyntaxException;
+import java.net.URL;
+
+import static org.junit.jupiter.api.Assertions.assertEquals;
 
 public class RedgifsRipperTest extends RippersTest {
 
@@ -26,6 +29,13 @@ public class RedgifsRipperTest extends RippersTest {
     public void testRedgifsBadRL() throws IOException, URISyntaxException {
         RedgifsRipper ripper = new RedgifsRipper(new URI("https://www.gifdeliverynetwork.com/consideratetrustworthypigeon").toURL());
         testRipper(ripper);
+    }
+
+    @Test
+    public void testRedgifsIfrURLIsSanitizedToWatch() throws IOException, URISyntaxException {
+        RedgifsRipper ripper = new RedgifsRipper(new URI("https://www.redgifs.com/ifr/limegreenstarkkiwi").toURL());
+        URL sanitized = ripper.sanitizeURL(new URI("https://www.redgifs.com/ifr/limegreenstarkkiwi").toURL());
+        assertEquals("https://www.redgifs.com/watch/limegreenstarkkiwi", sanitized.toExternalForm());
     }
 
     /**
