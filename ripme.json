@@ -1,7 +1,7 @@
 {
-  "latestVersion": "2.1.170-1-3ed04a9",
-  "currentHash": "07143db1564bf23c99a575ef1cedf128c556d5f669237146b431c1c98333da8a",
+  "latestVersion": "2.1.171-1-dd6ef9c",
+  "currentHash": "f04cb322242faf5035e61b22ba9e01ab4620fd14c49e0847c9ceea88536b3bed",
   "changeList": [
-    "2.1.170-1-3ed04a9: Merge pull request #94 from Laziassdev/codex/get-redgifs-token-from-cookies", "2.1.170-1-3ed04a9: Built at 2026-03-04T01:00:47Z"
+    "2.1.171-1-dd6ef9c: Merge pull request #95 from Laziassdev/codex/fix-ioexception-fetching-redgifs-url", "2.1.171-1-dd6ef9c: Built at 2026-03-04T01:42:31Z"
   ]
 }
