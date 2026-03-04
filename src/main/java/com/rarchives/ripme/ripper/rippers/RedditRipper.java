@@ -614,6 +614,18 @@ public class RedditRipper extends AlbumRipper {
     }
 
     private URL parseRedditVideoMPD(String vidURL) {
+        // Some Reddit API responses already contain a direct CMAF mp4 URL.
+        // In that case we can download the file directly instead of trying to
+        // resolve a DASH manifest from a non-container path.
+        if (vidURL.matches("^https?://v\\.redd\\.it/.+\\.mp4($|\\?.*)")) {
+            try {
+                return new URI(vidURL).toURL();
+            } catch (MalformedURLException | URISyntaxException e) {
+                logger.warn("Unable to parse direct Reddit video URL {}: {}", vidURL, e.getMessage());
+                return null;
+            }
+        }
+
         org.jsoup.nodes.Document doc;
         try {
             doc = Http.url(vidURL + "/DASHPlaylist.mpd").ignoreContentType().get();
@@ -673,7 +685,10 @@ public class RedditRipper extends AlbumRipper {
                 if (urlToDownload != null) {
                     final URL downloadUrl = urlToDownload;
                     final Path videoPath = Utils.getPath(savePath);
-                    tryQueueDownload(downloadUrl, () -> addURLToDownload(downloadUrl, videoPath), () -> videoPath);
+                    final String refUrl = theUrl;
+                    tryQueueDownload(downloadUrl,
+                            () -> addURLToDownload(downloadUrl, videoPath, refUrl, null, false),
+                            () -> videoPath);
                 }
             } else {
                 if (url.contains("redgifs.com")) {

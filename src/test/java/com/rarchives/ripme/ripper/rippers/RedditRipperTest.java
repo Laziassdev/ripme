@@ -7,6 +7,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
 import java.lang.reflect.Field;
+import java.lang.reflect.Method;
 import java.net.URL;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -75,6 +76,17 @@ class RedditRipperTest {
                 ripper.getGID(new URL("https://www.reddit.com/search/?q=missy+mae")));
         assertEquals("search_Cats_Dogs_media",
                 ripper.getGID(new URL("https://www.reddit.com/search/?q=Cats%20%26%20Dogs&type=media")));
+    }
+
+    @Test
+    void parsesDirectRedditCmafVideoUrlWithoutManifestLookup() throws Exception {
+        RedditRipper ripper = new RedditRipper(new URL("https://www.reddit.com/r/test"));
+        Method parseRedditVideoMPD = RedditRipper.class.getDeclaredMethod("parseRedditVideoMPD", String.class);
+        parseRedditVideoMPD.setAccessible(true);
+
+        URL parsed = (URL) parseRedditVideoMPD.invoke(ripper, "https://v.redd.it/hdohowvhfslg1/CMAF_360.mp4");
+
+        assertEquals("https://v.redd.it/hdohowvhfslg1/CMAF_360.mp4", parsed.toExternalForm());
     }
 
     private DownloadLimitTracker downloadLimitTrackerOf(RedditRipper ripper) throws Exception {
