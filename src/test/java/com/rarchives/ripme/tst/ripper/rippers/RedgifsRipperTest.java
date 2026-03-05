@@ -90,6 +90,19 @@ public class RedgifsRipperTest extends RippersTest {
     }
 
     @Test
+    public void testRedgifsNicheAlbumTitleIgnoresAlbumTitlesSaveSetting() throws Exception {
+        String previous = com.rarchives.ripme.utils.Utils.getConfigString("album_titles.save", "true");
+        com.rarchives.ripme.utils.Utils.setConfigString("album_titles.save", "false");
+        try {
+            RedgifsRipper ripper = new RedgifsRipper(new URI("https://www.redgifs.com/niches/trans-women").toURL());
+            ripper.setWorkingDir(new URI("https://www.redgifs.com/niches/trans-women").toURL());
+            assertTrue(ripper.getWorkingDir().getName().startsWith("redgifs_niches_trans-women"));
+        } finally {
+            com.rarchives.ripme.utils.Utils.setConfigString("album_titles.save", previous);
+        }
+    }
+
+    @Test
     public void testExtractMaxPagesTopLevelPages() {
         JSONObject json = new JSONObject("{\"pages\":42}");
         assertEquals(42, RedgifsRipper.extractMaxPages(json, 1));

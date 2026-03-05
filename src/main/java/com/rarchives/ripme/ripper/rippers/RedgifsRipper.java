@@ -161,6 +161,30 @@ public class RedgifsRipper extends AbstractJSONRipper {
     }
 
     @Override
+    public void setWorkingDir(URL url) throws IOException, URISyntaxException {
+        Path wd = Utils.getWorkingDirectory();
+        String title;
+        if (isNiche(this.url).matches()) {
+            // Keep niche folder naming stable regardless of album_titles.save setting.
+            title = getAlbumTitle(this.url);
+        } else if (Utils.getConfigBoolean("album_titles.save", true)) {
+            title = getAlbumTitle(this.url);
+        } else {
+            title = super.getAlbumTitle(this.url);
+        }
+        logger.debug("Using album title '{}'", title);
+
+        title = Utils.normalizeFolderName(title);
+        wd = wd.resolve(title);
+        if (!Files.exists(wd)) {
+            logger.info("[+] Creating directory: {}", Utils.removeCWD(wd));
+            Files.createDirectory(wd);
+        }
+        this.workingDir = wd.toFile();
+        logger.info("Set working directory to: {}", this.workingDir);
+    }
+
+    @Override
     public JSONObject getFirstPage() throws IOException {
         try {
             if (authToken == null || authToken.isBlank()) {
