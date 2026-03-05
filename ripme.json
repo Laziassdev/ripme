@@ -1,7 +1,7 @@
 {
-  "latestVersion": "2.1.174-1-7fe12cd",
-  "currentHash": "fa78a43124b361e15e0395219b0601fcc9570f047f181f3a08952bc1e6283954",
+  "latestVersion": "2.1.175-1-d3ac0d6",
+  "currentHash": "a4c59b35d6dc668892ad295362b433fe2680323136279921533978bdb11dae27",
   "changeList": [
-    "2.1.174-1-7fe12cd: Merge pull request #98 from Laziassdev/codex/fix-jsonexception-in-redgifsripper", "2.1.174-1-7fe12cd: Built at 2026-03-05T18:15:44Z"
+    "2.1.175-1-d3ac0d6: Merge pull request #99 from Laziassdev/codex/check-video-list-rendering-for-ripping", "2.1.175-1-d3ac0d6: Built at 2026-03-05T18:33:31Z"
   ]
 }
