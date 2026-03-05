@@ -48,6 +48,7 @@ public class RedgifsRipper extends AbstractJSONRipper {
     private static final String GALLERY_ENDPOINT = "https://api.redgifs.com/v2/gallery/%s";
     private static final String SEARCH_ENDPOINT = "https://api.redgifs.com/v2/search/%s";
     private static final String TAGS_ENDPOINT = "https://api.redgifs.com/v2/gifs/search";
+    private static final String NICHES_ENDPOINT = "https://api.redgifs.com/v2/niches/%s";
     private static final String TEMPORARY_AUTH_ENDPOINT = "https://api.redgifs.com/v2/auth/temporary";
     private static final Pattern PROFILE_PATTERN = Pattern
             .compile("^https?://[a-zA-Z0-9.]*redgifs\\.com/users/([a-zA-Z0-9_.-]+).*$");
@@ -55,8 +56,12 @@ public class RedgifsRipper extends AbstractJSONRipper {
             "^https?:\\/\\/[a-zA-Z0-9.]*redgifs\\.com\\/search(?:\\/[a-zA-Z]+)?\\?.*?query=([a-zA-Z0-9-_+%]+).*$");
     private static final Pattern TAGS_PATTERN = Pattern
             .compile("^https?:\\/\\/[a-zA-Z0-9.]*redgifs\\.com\\/gifs\\/([a-zA-Z0-9_.,-]+).*$");
+    private static final Pattern NICHES_PATTERN = Pattern
+            .compile("^https?://[a-zA-Z0-9.]*redgifs\\.com/niches/([a-zA-Z0-9_.-]+).*$");
     private static final Pattern SINGLETON_PATTERN = Pattern
             .compile("^https?://[a-zA-Z0-9.]*redgifs\\.com/(?:watch|ifr)/([a-zA-Z0-9_-]+).*$");
+    private static final Pattern DIRECT_IMAGE_PATTERN = Pattern
+            .compile("^https?://i\\.redgifs\\.com/i/([a-zA-Z0-9_-]+)(?:\\.[a-zA-Z0-9]+)?(?:\\?.*)?$");
     private static final Pattern ACCESS_TOKEN_PATTERN = Pattern
             .compile("\"accessToken\"\\s*:\\s*\"([^\"]+)\"");
     private static final List<String> REDGIFS_COOKIE_DOMAINS = Arrays.asList("redgifs.com", "www.redgifs.com", "api.redgifs.com");
@@ -98,6 +103,10 @@ public class RedgifsRipper extends AbstractJSONRipper {
         sUrl = sUrl.replace("/amp", "");
         sUrl = sUrl.replace("/ifr/", "/watch/");
         sUrl = sUrl.replace("gifdeliverynetwork.com", "redgifs.com/watch");
+        Matcher directImageMatcher = DIRECT_IMAGE_PATTERN.matcher(sUrl);
+        if (directImageMatcher.matches()) {
+            sUrl = "https://www.redgifs.com/watch/" + directImageMatcher.group(1);
+        }
         return new URI(sUrl).toURL();
     }
 
@@ -111,6 +120,10 @@ public class RedgifsRipper extends AbstractJSONRipper {
 
     public Matcher isTags() {
         return TAGS_PATTERN.matcher(url.toExternalForm());
+    }
+
+    public Matcher isNiche() {
+        return NICHES_PATTERN.matcher(url.toExternalForm());
     }
 
     public Matcher isSingleton() {
@@ -128,8 +141,8 @@ public class RedgifsRipper extends AbstractJSONRipper {
                 maxPages = 1;
                 String gifDetailsURL = String.format(GIFS_DETAIL_ENDPOINT, getGID(url));
                 return getJSONWithBearerAuth(gifDetailsURL);
-            } else if (isSearch().matches() || isTags().matches()) {
-                var json = getJSONWithBearerAuth(getSearchOrTagsURL());
+            } else if (isSearch().matches() || isTags().matches() || isNiche().matches()) {
+                var json = getJSONWithBearerAuth(getSearchTagsOrNicheURL());
                 maxPages = json.getInt("pages");
                 return json;
             } else {
@@ -187,6 +200,10 @@ public class RedgifsRipper extends AbstractJSONRipper {
             gid = gid.replaceAll("[^A-Za-z0-9_-]", "-");
             return gid;
         }
+        m = isNiche();
+        if (m.matches()) {
+            return m.group(1).replaceAll("[^A-Za-z0-9_-]", "-");
+        }
         m = isSingleton();
         if (m.matches()) {
             return m.group(1).split("-")[0];
@@ -209,8 +226,8 @@ public class RedgifsRipper extends AbstractJSONRipper {
             return null;
         }
         currentPage++;
-        if (isSearch().matches() || isTags().matches()) {
-            var json = getJSONWithBearerAuth(getSearchOrTagsURL());
+        if (isSearch().matches() || isTags().matches() || isNiche().matches()) {
+            var json = getJSONWithBearerAuth(getSearchTagsOrNicheURL());
             // Handle rare maxPages change during a rip
             maxPages = json.getInt("pages");
             return json;
@@ -231,7 +248,7 @@ public class RedgifsRipper extends AbstractJSONRipper {
     @Override
     public List<String> getURLsFromJSON(JSONObject json) {
         List<String> result = new ArrayList<>();
-        if (isProfile().matches() || isSearch().matches() || isTags().matches()) {
+        if (isProfile().matches() || isSearch().matches() || isTags().matches() || isNiche().matches()) {
             var gifs = json.getJSONArray("gifs");
             for (var gif : gifs) {
                 if (((JSONObject) gif).isNull("gallery")) {
@@ -292,6 +309,9 @@ public class RedgifsRipper extends AbstractJSONRipper {
     public static String getVideoURL(URL url) throws IOException, URISyntaxException {
         logger.info("Retrieving " + url.toExternalForm());
         var m = SINGLETON_PATTERN.matcher(url.toExternalForm());
+        if (!m.matches()) {
+            m = DIRECT_IMAGE_PATTERN.matcher(url.toExternalForm());
+        }
         if (!m.matches()) {
             throw new IOException(String.format("Cannot fetch redgif url %s", url.toExternalForm()));
         }
@@ -551,7 +571,11 @@ public class RedgifsRipper extends AbstractJSONRipper {
      *
      * @return Search or tags endpoint url
      */
-    private URL getSearchOrTagsURL() throws IOException, URISyntaxException {
+    private URL getSearchTagsOrNicheURL() throws IOException, URISyntaxException {
+        if (isNiche().matches()) {
+            return getNicheURL();
+        }
+
         URIBuilder uri;
         Map<String, String> endpointQueryParams = new HashMap<>();
         var browserURLQueryParams = new URIBuilder(url.toString()).getQueryParams();
@@ -621,6 +645,35 @@ public class RedgifsRipper extends AbstractJSONRipper {
         endpointQueryParams.put("count", Integer.toString(count));
         endpointQueryParams.forEach((k, v) -> uri.addParameter(k, v));
 
+        return uri.build().toURL();
+    }
+
+    private URL getNicheURL() throws IOException, URISyntaxException {
+        Matcher nicheMatcher = isNiche();
+        if (!nicheMatcher.matches()) {
+            throw new IOException("Failed to get niche identifier for url");
+        }
+
+        URIBuilder uri = new URIBuilder(String.format(NICHES_ENDPOINT, nicheMatcher.group(1)));
+        var browserURLQueryParams = new URIBuilder(url.toString()).getQueryParams();
+        for (var qp : browserURLQueryParams) {
+            var name = qp.getName();
+            var value = qp.getValue();
+            switch (name) {
+                case "order", "verified", "type" -> uri.addParameter(name, value);
+                case "tab" -> {
+                    if ("images".equals(value)) {
+                        uri.addParameter("type", "i");
+                    } else {
+                        uri.addParameter("type", "g");
+                    }
+                }
+                default -> {
+                }
+            }
+        }
+        uri.addParameter("count", Integer.toString(count));
+        uri.addParameter("page", Integer.toString(currentPage));
         return uri.build().toURL();
     }
 }
