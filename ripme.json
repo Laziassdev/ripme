@@ -1,7 +1,7 @@
 {
-  "latestVersion": "2.1.183-1-258d5d4",
-  "currentHash": "fd8b9232ec922fe007c348e09f9b6805103cb39a75eeb9454e354d8eee07579f",
+  "latestVersion": "2.1.184-1-c734472",
+  "currentHash": "a69b9fbbd0817effd1352240354a821e4f489ef3df8ffb4af4c2bea93c36b237",
   "changeList": [
-    "2.1.183-1-258d5d4: Merge pull request #108 from Laziassdev/codex/fix-concurrentmodificationexception-in-mainwindow", "2.1.183-1-258d5d4: Built at 2026-03-05T20:49:21Z"
+    "2.1.184-1-c734472: Merge pull request #109 from Laziassdev/codex/implement-backoff-policy-in-429retry", "2.1.184-1-c734472: Built at 2026-03-05T23:11:48Z"
   ]
 }
