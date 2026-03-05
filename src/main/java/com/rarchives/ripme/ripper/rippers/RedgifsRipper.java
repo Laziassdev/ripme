@@ -128,13 +128,33 @@ public class RedgifsRipper extends AbstractJSONRipper {
         return NICHES_PATTERN.matcher(url.toExternalForm());
     }
 
+    private Matcher isNiche(URL targetUrl) {
+        return NICHES_PATTERN.matcher(targetUrl.toExternalForm());
+    }
+
+    private Matcher isProfile(URL targetUrl) {
+        return PROFILE_PATTERN.matcher(targetUrl.toExternalForm());
+    }
+
+    private Matcher isSearch(URL targetUrl) {
+        return SEARCH_PATTERN.matcher(targetUrl.toExternalForm());
+    }
+
+    private Matcher isTags(URL targetUrl) {
+        return TAGS_PATTERN.matcher(targetUrl.toExternalForm());
+    }
+
+    private Matcher isSingleton(URL targetUrl) {
+        return SINGLETON_PATTERN.matcher(targetUrl.toExternalForm());
+    }
+
     public Matcher isSingleton() {
         return SINGLETON_PATTERN.matcher(url.toExternalForm());
     }
 
     @Override
     public String getAlbumTitle(URL url) throws MalformedURLException, URISyntaxException {
-        if (NICHES_PATTERN.matcher(url.toExternalForm()).matches()) {
+        if (isNiche(url).matches()) {
             return getHost() + "_niches_" + getGID(url);
         }
         return super.getAlbumTitle(url);
@@ -179,11 +199,11 @@ public class RedgifsRipper extends AbstractJSONRipper {
 
     @Override
     public String getGID(URL url) throws MalformedURLException {
-        Matcher m = isProfile();
+        Matcher m = isProfile(url);
         if (m.matches()) {
             return m.group(1);
         }
-        m = isSearch();
+        m = isSearch(url);
         if (m.matches()) {
             var sText = m.group(1);
             if (sText == null || sText.isBlank()) {
@@ -194,7 +214,7 @@ public class RedgifsRipper extends AbstractJSONRipper {
             sText = sText.replaceAll("[^A-Za-z0-9_-]", "-");
             return sText;
         }
-        m = isTags();
+        m = isTags(url);
         if (m.matches()) {
             var sText = m.group(1);
             if (sText == null || sText.isBlank()) {
@@ -210,11 +230,11 @@ public class RedgifsRipper extends AbstractJSONRipper {
             gid = gid.replaceAll("[^A-Za-z0-9_-]", "-");
             return gid;
         }
-        m = isNiche();
+        m = isNiche(url);
         if (m.matches()) {
             return m.group(1).replaceAll("[^A-Za-z0-9_-]", "-");
         }
-        m = isSingleton();
+        m = isSingleton(url);
         if (m.matches()) {
             return m.group(1).split("-")[0];
         }
@@ -750,6 +770,7 @@ public class RedgifsRipper extends AbstractJSONRipper {
 
         // Default to gifs; switch to images for tab=images or type=i.
         var listingPath = "gifs";
+        var listingType = "g";
         URIBuilder uri;
         var browserURLQueryParams = new URIBuilder(url.toString()).getQueryParams();
         for (var qp : browserURLQueryParams) {
@@ -759,11 +780,13 @@ public class RedgifsRipper extends AbstractJSONRipper {
                 case "type" -> {
                     if ("i".equalsIgnoreCase(value)) {
                         listingPath = "images";
+                        listingType = "i";
                     }
                 }
                 case "tab" -> {
                     if ("images".equalsIgnoreCase(value)) {
                         listingPath = "images";
+                        listingType = "i";
                     }
                 }
                 default -> {
@@ -786,6 +809,7 @@ public class RedgifsRipper extends AbstractJSONRipper {
                 }
             }
         }
+        uri.addParameter("type", listingType);
         uri.addParameter("count", Integer.toString(count));
         uri.addParameter("page", Integer.toString(currentPage));
         return uri.build().toURL();
