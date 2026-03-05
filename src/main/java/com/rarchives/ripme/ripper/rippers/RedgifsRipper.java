@@ -49,7 +49,8 @@ public class RedgifsRipper extends AbstractJSONRipper {
     private static final String GALLERY_ENDPOINT = "https://api.redgifs.com/v2/gallery/%s";
     private static final String SEARCH_ENDPOINT = "https://api.redgifs.com/v2/search/%s";
     private static final String TAGS_ENDPOINT = "https://api.redgifs.com/v2/gifs/search";
-    private static final String NICHES_ENDPOINT = "https://api.redgifs.com/v2/niches/%s";
+    // Niche listing endpoint is path-based (…/niches/{slug}/gifs or …/images)
+    private static final String NICHES_LISTING_ENDPOINT = "https://api.redgifs.com/v2/niches/%s/%s";
     private static final String TEMPORARY_AUTH_ENDPOINT = "https://api.redgifs.com/v2/auth/temporary";
     private static final Pattern PROFILE_PATTERN = Pattern
             .compile("^https?://[a-zA-Z0-9.]*redgifs\\.com/users/([a-zA-Z0-9_.-]+).*$");
@@ -739,9 +740,30 @@ public class RedgifsRipper extends AbstractJSONRipper {
             throw new IOException("Failed to get niche identifier for url");
         }
 
-        URIBuilder uri = new URIBuilder(String.format(NICHES_ENDPOINT, nicheMatcher.group(1)));
-        boolean hasType = false;
+        // Default to gifs; switch to images for tab=images or type=i.
+        var listingPath = "gifs";
+        URIBuilder uri;
         var browserURLQueryParams = new URIBuilder(url.toString()).getQueryParams();
+        for (var qp : browserURLQueryParams) {
+            var name = qp.getName();
+            var value = qp.getValue();
+            switch (name) {
+                case "type" -> {
+                    if ("i".equalsIgnoreCase(value)) {
+                        listingPath = "images";
+                    }
+                }
+                case "tab" -> {
+                    if ("images".equalsIgnoreCase(value)) {
+                        listingPath = "images";
+                    }
+                }
+                default -> {
+                }
+            }
+        }
+
+        uri = new URIBuilder(String.format(NICHES_LISTING_ENDPOINT, nicheMatcher.group(1), listingPath));
         for (var qp : browserURLQueryParams) {
             var name = qp.getName();
             var value = qp.getValue();
@@ -752,24 +774,9 @@ public class RedgifsRipper extends AbstractJSONRipper {
                         uri.addParameter("verified", "yes");
                     }
                 }
-                case "type" -> {
-                    uri.addParameter("type", value);
-                    hasType = true;
-                }
-                case "tab" -> {
-                    if ("images".equals(value)) {
-                        uri.addParameter("type", "i");
-                    } else {
-                        uri.addParameter("type", "g");
-                    }
-                    hasType = true;
-                }
                 default -> {
                 }
             }
-        }
-        if (!hasType) {
-            uri.addParameter("type", "g");
         }
         uri.addParameter("count", Integer.toString(count));
         uri.addParameter("page", Integer.toString(currentPage));
