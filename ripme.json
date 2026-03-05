@@ -1,7 +1,7 @@
 {
-  "latestVersion": "2.1.182-1-5ca021e",
-  "currentHash": "0dd55951fc52f12150d169133543f6aaa3a7c6746da021ec4cd8cb4219b15d26",
+  "latestVersion": "2.1.183-1-258d5d4",
+  "currentHash": "fd8b9232ec922fe007c348e09f9b6805103cb39a75eeb9454e354d8eee07579f",
   "changeList": [
-    "2.1.182-1-5ca021e: Merge pull request #107 from Laziassdev/codex/fix-folder-creation-for-niches-in-url", "2.1.182-1-5ca021e: Built at 2026-03-05T20:30:35Z"
+    "2.1.183-1-258d5d4: Merge pull request #108 from Laziassdev/codex/fix-concurrentmodificationexception-in-mainwindow", "2.1.183-1-258d5d4: Built at 2026-03-05T20:49:21Z"
   ]
 }
