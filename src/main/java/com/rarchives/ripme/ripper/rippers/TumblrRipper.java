@@ -585,6 +585,11 @@ public class TumblrRipper extends AlbumRipper {
     }
 
     @Override
+    protected boolean usesCustomDownloadLimitTracking() {
+        return true;
+    }
+
+    @Override
     public String getHost() {
         return HOST;
     }

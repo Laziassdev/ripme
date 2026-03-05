@@ -30,6 +30,7 @@ class DownloadVideoThread implements Runnable {
     private final String prettySaveAs;
     private final AbstractRipper observer;
     private final int retries;
+    private final int retrySleep;
 
     public DownloadVideoThread(URL url, Path saveAs, AbstractRipper observer) {
         super();
@@ -38,6 +39,7 @@ class DownloadVideoThread implements Runnable {
         this.prettySaveAs = Utils.removeCWD(saveAs);
         this.observer = observer;
         this.retries = Utils.getConfigInteger("download.retries", 1);
+        this.retrySleep = Utils.getConfigInteger("download.retry.sleep", 0);
     }
 
     /**
@@ -110,6 +112,31 @@ class DownloadVideoThread implements Runnable {
                 tries += 1;
                 logger.debug("Request properties: " + huc.getRequestProperties().toString());
                 huc.connect();
+                int statusCode = huc.getResponseCode();
+                if (statusCode == 429) {
+                    String retryAfterHeader = huc.getHeaderField("Retry-After");
+                    int waitTimeSeconds = 5;
+                    if (retryAfterHeader != null) {
+                        try {
+                            waitTimeSeconds = Integer.parseInt(retryAfterHeader);
+                        } catch (NumberFormatException e) {
+                            logger.warn("Retry-After header not a number: {}", retryAfterHeader);
+                        }
+                    } else {
+                        waitTimeSeconds = (int) Math.pow(2, tries);
+                    }
+                    logger.warn("[429] Too Many Requests for {}. Waiting {} seconds before retrying", url,
+                            waitTimeSeconds);
+                    Utils.sleep(waitTimeSeconds * 1000L);
+                    continue;
+                }
+                if (statusCode / 100 == 4) {
+                    observer.downloadErrored(url, "HTTP status code " + statusCode + " while downloading " + url.toExternalForm());
+                    return;
+                }
+                if (statusCode / 100 == 5) {
+                    throw new IOException("Retriable status code " + statusCode);
+                }
                 // Check status code
                 bis = new BufferedInputStream(huc.getInputStream());
                 fos = Files.newOutputStream(workingPath);
@@ -164,6 +191,8 @@ class DownloadVideoThread implements Runnable {
                 logger.error("[!] Exceeded maximum retries (" + this.retries + ") for URL " + url);
                 observer.downloadErrored(url, "Failed to download " + url.toExternalForm());
                 return;
+            } else if (retrySleep > 0) {
+                Utils.sleep(retrySleep);
             }
         } while (true);
         observer.downloadCompleted(url, targetPath);

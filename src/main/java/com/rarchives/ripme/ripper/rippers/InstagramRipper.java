@@ -67,6 +67,11 @@ public class InstagramRipper extends AbstractJSONRipper {
     }
 
     @Override
+    protected boolean usesCustomDownloadLimitTracking() {
+        return true;
+    }
+
+    @Override
     public String getHost() {
         return "instagram";
     }
