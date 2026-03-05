@@ -2,6 +2,7 @@ package com.rarchives.ripme.tst.ripper.rippers;
 
 import com.rarchives.ripme.ripper.rippers.RedditRipper;
 import com.rarchives.ripme.ripper.rippers.RedgifsRipper;
+import org.json.JSONObject;
 import org.junit.jupiter.api.*;
 
 import java.io.IOException;
@@ -78,6 +79,24 @@ public class RedgifsRipperTest extends RippersTest {
     public void testRedgifsNicheGID() throws IOException, URISyntaxException {
         RedgifsRipper ripper = new RedgifsRipper(new URI("https://www.redgifs.com/niches/puffies").toURL());
         assertEquals("puffies", ripper.getGID(new URI("https://www.redgifs.com/niches/puffies").toURL()));
+    }
+
+    @Test
+    public void testExtractMaxPagesTopLevelPages() {
+        JSONObject json = new JSONObject("{\"pages\":42}");
+        assertEquals(42, RedgifsRipper.extractMaxPages(json, 1));
+    }
+
+    @Test
+    public void testExtractMaxPagesNestedPagination() {
+        JSONObject json = new JSONObject("{\"page\":{\"totalPages\":7}}");
+        assertEquals(7, RedgifsRipper.extractMaxPages(json, 1));
+    }
+
+    @Test
+    public void testExtractMaxPagesFallbackWhenMissing() {
+        JSONObject json = new JSONObject("{\"gifs\":[]}");
+        assertEquals(3, RedgifsRipper.extractMaxPages(json, 3));
     }
 
     @Test
