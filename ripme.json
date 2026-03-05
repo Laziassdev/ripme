@@ -1,7 +1,7 @@
 {
-  "latestVersion": "2.1.176-1-89ab973",
-  "currentHash": "a61722536f0c2beea4dd6fb95a149b43f486b35f59816992c3e2b1fc7febc246",
+  "latestVersion": "2.1.177-1-4ff9973",
+  "currentHash": "331a549637c9669577ff8c5ae4157069d7517e2c69c8c3840e9b1606990dab54",
   "changeList": [
-    "2.1.176-1-89ab973: Merge pull request #100 from Laziassdev/codex/investigate-/niches-page-extraction-issue", "2.1.176-1-89ab973: Built at 2026-03-05T18:39:44Z"
+    "2.1.177-1-4ff9973: Merge pull request #102 from Laziassdev/codex/fix-redgifsripper-niche-api-requests", "2.1.177-1-4ff9973: Built at 2026-03-05T19:14:48Z"
   ]
 }
