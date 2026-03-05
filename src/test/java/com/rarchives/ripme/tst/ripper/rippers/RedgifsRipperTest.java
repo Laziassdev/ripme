@@ -38,6 +38,13 @@ public class RedgifsRipperTest extends RippersTest {
         assertEquals("https://www.redgifs.com/watch/limegreenstarkkiwi", sanitized.toExternalForm());
     }
 
+    @Test
+    public void testRedgifsDirectImageURLIsSanitizedToWatch() throws IOException, URISyntaxException {
+        RedgifsRipper ripper = new RedgifsRipper(new URI("https://i.redgifs.com/i/roastedstimulatinggrebe.jpg?v=wzil5999.jpg").toURL());
+        URL sanitized = ripper.sanitizeURL(new URI("https://i.redgifs.com/i/roastedstimulatinggrebe.jpg?v=wzil5999.jpg").toURL());
+        assertEquals("https://www.redgifs.com/watch/roastedstimulatinggrebe", sanitized.toExternalForm());
+    }
+
     /**
      * Rips a Redgifs profile
      */
@@ -65,6 +72,12 @@ public class RedgifsRipperTest extends RippersTest {
     public void testRedgifsTags() throws IOException, URISyntaxException {
         RedgifsRipper ripper  = new RedgifsRipper(new URI("https://www.redgifs.com/gifs/animation,sfw,funny?order=best&tab=gifs").toURL());
         testRipper(ripper);
+    }
+
+    @Test
+    public void testRedgifsNicheGID() throws IOException, URISyntaxException {
+        RedgifsRipper ripper = new RedgifsRipper(new URI("https://www.redgifs.com/niches/puffies").toURL());
+        assertEquals("puffies", ripper.getGID(new URI("https://www.redgifs.com/niches/puffies").toURL()));
     }
 
     @Test
