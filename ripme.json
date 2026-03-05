@@ -1,7 +1,7 @@
 {
-  "latestVersion": "2.1.173-1-9af4480",
-  "currentHash": "26f7ff3437249c287596228fb0ab1a2cdcc3f872598feca1bed383b8d6d1bf5a",
+  "latestVersion": "2.1.174-1-7fe12cd",
+  "currentHash": "fa78a43124b361e15e0395219b0601fcc9570f047f181f3a08952bc1e6283954",
   "changeList": [
-    "2.1.173-1-9af4480: Merge pull request #97 from Laziassdev/codex/fix-ioexception-for-redgifs-url-fetching", "2.1.173-1-9af4480: Built at 2026-03-05T17:57:14Z"
+    "2.1.174-1-7fe12cd: Merge pull request #98 from Laziassdev/codex/fix-jsonexception-in-redgifsripper", "2.1.174-1-7fe12cd: Built at 2026-03-05T18:15:44Z"
   ]
 }
