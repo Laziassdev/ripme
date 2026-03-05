@@ -1,7 +1,7 @@
 {
-  "latestVersion": "2.1.179-1-e9ea425",
-  "currentHash": "25606cc086e3568880a8c9370d7943e5fb5f5d0e46658686ede48b0bce7c420f",
+  "latestVersion": "2.1.180-1-d159480",
+  "currentHash": "0dcbe43c995d8c5d112e566441ca0b204a398e93538582f7fb89617130c0d3f9",
   "changeList": [
-    "2.1.179-1-e9ea425: Merge pull request #104 from Laziassdev/codex/ensure-rippers-follow-maxdownload-settings", "2.1.179-1-e9ea425: Built at 2026-03-05T19:40:35Z"
+    "2.1.180-1-d159480: Merge pull request #105 from Laziassdev/codex/download-niches-to-redgifs_niches_folder", "2.1.180-1-d159480: Built at 2026-03-05T19:53:00Z"
   ]
 }
