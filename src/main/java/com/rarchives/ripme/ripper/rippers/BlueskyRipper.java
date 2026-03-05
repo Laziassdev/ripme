@@ -197,6 +197,11 @@ public class BlueskyRipper extends AbstractJSONRipper {
     }
 
     @Override
+    protected boolean usesCustomDownloadLimitTracking() {
+        return true;
+    }
+
+    @Override
     public String getHost() {
         return HOST;
     }

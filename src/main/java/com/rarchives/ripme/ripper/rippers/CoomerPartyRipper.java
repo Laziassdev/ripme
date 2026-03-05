@@ -103,6 +103,11 @@ public class CoomerPartyRipper extends AbstractJSONRipper {
     }
 
     @Override
+    protected boolean usesCustomDownloadLimitTracking() {
+        return true;
+    }
+
+    @Override
     public String getHost() {
         return "coomer.party";
     }

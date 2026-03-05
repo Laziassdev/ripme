@@ -101,6 +101,10 @@ public abstract class AbstractRipper
         }
     }
 
+    protected boolean usesCustomDownloadLimitTracking() {
+        return false;
+    }
+
     /**
      * Adds a URL to the url history file
      *
@@ -416,7 +420,7 @@ public abstract class AbstractRipper
             return false;
         }
 
-        if (!downloadLimitTracker.tryAcquire(url)) {
+        if (!usesCustomDownloadLimitTracking() && !downloadLimitTracker.tryAcquire(url)) {
             if (downloadLimitTracker.shouldNotifyLimitReached()) {
                 String message = "Reached max download limit of " + maxDownloads + ". Stopping.";
                 logger.info(message);
@@ -452,13 +456,16 @@ public abstract class AbstractRipper
         }
 
         boolean queued = addURLToDownload(url, saveAs, referrer, cookies, getFileExtFromMIME);
-        if (!queued) {
+        if (!queued && !usesCustomDownloadLimitTracking()) {
             downloadLimitTracker.onFailure(url);
         }
         return queued;
     }
 
     protected void onDownloadSuccess(URL url) {
+        if (usesCustomDownloadLimitTracking()) {
+            return;
+        }
         if (downloadLimitTracker.onSuccess(url)) {
             stop();
             if (downloadLimitTracker.shouldNotifyLimitReached()) {
@@ -470,6 +477,9 @@ public abstract class AbstractRipper
     }
 
     protected void onDownloadFailure(URL url) {
+        if (usesCustomDownloadLimitTracking()) {
+            return;
+        }
         downloadLimitTracker.onFailure(url);
     }
 
