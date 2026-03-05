@@ -1,7 +1,7 @@
 {
-  "latestVersion": "2.1.177-1-4ff9973",
-  "currentHash": "331a549637c9669577ff8c5ae4157069d7517e2c69c8c3840e9b1606990dab54",
+  "latestVersion": "2.1.178-1-fcfb9d2",
+  "currentHash": "efcfebadf1bb16a365ea1ef714aa1a66ad0dcae7c265149251d40c82bca1c329",
   "changeList": [
-    "2.1.177-1-4ff9973: Merge pull request #102 from Laziassdev/codex/fix-redgifsripper-niche-api-requests", "2.1.177-1-4ff9973: Built at 2026-03-05T19:14:48Z"
+    "2.1.178-1-fcfb9d2: Merge pull request #103 from Laziassdev/codex/ensure-rippers-follow-maxdownload-settings", "2.1.178-1-fcfb9d2: Built at 2026-03-05T19:36:55Z"
   ]
 }
