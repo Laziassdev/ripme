@@ -36,6 +36,7 @@ import com.rarchives.ripme.ui.RipStatusComplete;
 import com.rarchives.ripme.ui.RipStatusHandler;
 import com.rarchives.ripme.ui.RipStatusMessage;
 import com.rarchives.ripme.ui.RipStatusMessage.STATUS;
+import com.rarchives.ripme.utils.DownloadLimitTracker;
 import com.rarchives.ripme.utils.Utils;
 
 // Suppress warning for specifically Observable. Hopefully no other deprecations
@@ -78,6 +79,8 @@ public abstract class AbstractRipper
     public int alreadyDownloadedUrls = 0;
     private final AtomicBoolean shouldStop = new AtomicBoolean(false);
     private static boolean thisIsATest = false;
+    private final int maxDownloads = Utils.getConfigInteger("maxdownloads", -1);
+    private final DownloadLimitTracker downloadLimitTracker = new DownloadLimitTracker(maxDownloads);
 
     private final Set<String> knownHashes = Collections.synchronizedSet(new HashSet<>());
     private volatile boolean hashHistoryLoaded = false;
@@ -413,6 +416,16 @@ public abstract class AbstractRipper
             return false;
         }
 
+        if (!downloadLimitTracker.tryAcquire(url)) {
+            if (downloadLimitTracker.shouldNotifyLimitReached()) {
+                String message = "Reached max download limit of " + maxDownloads + ". Stopping.";
+                logger.info(message);
+                sendUpdate(STATUS.DOWNLOAD_COMPLETE_HISTORY, message);
+            }
+            stop();
+            return false;
+        }
+
         logger.debug("url: " + url + ", subdirectory" + subdirectory + ", referrer: " + referrer + ", cookies: "
                 + cookies + ", prefix: " + prefix + ", fileName: " + fileName);
 
@@ -438,7 +451,26 @@ public abstract class AbstractRipper
             }
         }
 
-        return addURLToDownload(url, saveAs, referrer, cookies, getFileExtFromMIME);
+        boolean queued = addURLToDownload(url, saveAs, referrer, cookies, getFileExtFromMIME);
+        if (!queued) {
+            downloadLimitTracker.onFailure(url);
+        }
+        return queued;
+    }
+
+    protected void onDownloadSuccess(URL url) {
+        if (downloadLimitTracker.onSuccess(url)) {
+            stop();
+            if (downloadLimitTracker.shouldNotifyLimitReached()) {
+                String message = "Reached max download limit of " + maxDownloads + ". Stopping.";
+                logger.info(message);
+                sendUpdate(STATUS.DOWNLOAD_COMPLETE_HISTORY, message);
+            }
+        }
+    }
+
+    protected void onDownloadFailure(URL url) {
+        downloadLimitTracker.onFailure(url);
     }
 
     protected boolean addURLToDownload(URL url, String prefix, String subdirectory, String referrer,
