@@ -26,6 +26,7 @@ import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 import org.apache.http.client.utils.URIBuilder;
+import org.json.JSONArray;
 import org.json.JSONException;
 import org.json.JSONObject;
 
@@ -249,7 +250,7 @@ public class RedgifsRipper extends AbstractJSONRipper {
     public List<String> getURLsFromJSON(JSONObject json) {
         List<String> result = new ArrayList<>();
         if (isProfile().matches() || isSearch().matches() || isTags().matches() || isNiche().matches()) {
-            var gifs = json.getJSONArray("gifs");
+            var gifs = getGifEntries(json);
             for (var gif : gifs) {
                 if (((JSONObject) gif).isNull("gallery")) {
                     var hdURL = ((JSONObject) gif).getJSONObject("urls").getString("hd");
@@ -272,6 +273,31 @@ public class RedgifsRipper extends AbstractJSONRipper {
             }
         }
         return result;
+    }
+
+    private static JSONArray getGifEntries(JSONObject json) {
+        List<String> arrayKeys = Arrays.asList("gifs", "items", "posts", "results");
+        for (String key : arrayKeys) {
+            if (json.has(key) && !json.isNull(key) && json.get(key) instanceof JSONArray) {
+                return json.getJSONArray(key);
+            }
+        }
+
+        List<String> containerKeys = Arrays.asList("page", "pagination", "meta", "data", "result");
+        for (String containerKey : containerKeys) {
+            if (!json.has(containerKey) || json.isNull(containerKey) || !(json.get(containerKey) instanceof JSONObject)) {
+                continue;
+            }
+            JSONObject container = json.getJSONObject(containerKey);
+            for (String key : arrayKeys) {
+                if (container.has(key) && !container.isNull(key) && container.get(key) instanceof JSONArray) {
+                    return container.getJSONArray(key);
+                }
+            }
+        }
+
+        logger.warn("Redgifs response did not include a recognizable gif list field");
+        return new JSONArray();
     }
 
     /**
@@ -570,6 +596,19 @@ public class RedgifsRipper extends AbstractJSONRipper {
 
         List<String> containerKeys = Arrays.asList("page", "pagination", "meta");
         List<String> pageCountKeys = Arrays.asList("pages", "pageCount", "totalPages", "total_pages", "lastPage");
+        List<String> totalCountKeys = Arrays.asList("total", "totalCount", "total_count", "itemsTotal");
+        List<String> perPageKeys = Arrays.asList("count", "perPage", "per_page", "itemsPerPage", "limit");
+
+        Integer pageCount = extractFirstIntValue(json, pageCountKeys);
+        if (pageCount != null) {
+            return pageCount;
+        }
+
+        Integer totalCount = extractFirstIntValue(json, totalCountKeys);
+        Integer perPage = extractFirstIntValue(json, perPageKeys);
+        if (totalCount != null && perPage != null && perPage > 0) {
+            return Math.max(1, (int) Math.ceil((double) totalCount / perPage));
+        }
 
         for (String containerKey : containerKeys) {
             if (!json.has(containerKey) || json.isNull(containerKey)) {
@@ -580,15 +619,29 @@ public class RedgifsRipper extends AbstractJSONRipper {
                 continue;
             }
             JSONObject pagination = (JSONObject) paginationObj;
-            for (String pageCountKey : pageCountKeys) {
-                if (pagination.has(pageCountKey) && !pagination.isNull(pageCountKey)) {
-                    return pagination.getInt(pageCountKey);
-                }
+            pageCount = extractFirstIntValue(pagination, pageCountKeys);
+            if (pageCount != null) {
+                return pageCount;
+            }
+
+            totalCount = extractFirstIntValue(pagination, totalCountKeys);
+            perPage = extractFirstIntValue(pagination, perPageKeys);
+            if (totalCount != null && perPage != null && perPage > 0) {
+                return Math.max(1, (int) Math.ceil((double) totalCount / perPage));
             }
         }
 
         logger.warn("Redgifs response did not include a recognizable page count field; defaulting max pages to {}", fallbackPage);
         return fallbackPage;
+    }
+
+    private static Integer extractFirstIntValue(JSONObject json, List<String> keys) {
+        for (String key : keys) {
+            if (json.has(key) && !json.isNull(key)) {
+                return json.getInt(key);
+            }
+        }
+        return null;
     }
 
     /**

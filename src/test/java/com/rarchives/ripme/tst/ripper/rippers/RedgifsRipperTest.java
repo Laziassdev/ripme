@@ -9,8 +9,10 @@ import java.io.IOException;
 import java.net.URI;
 import java.net.URISyntaxException;
 import java.net.URL;
+import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 public class RedgifsRipperTest extends RippersTest {
 
@@ -97,6 +99,33 @@ public class RedgifsRipperTest extends RippersTest {
     public void testExtractMaxPagesFallbackWhenMissing() {
         JSONObject json = new JSONObject("{\"gifs\":[]}");
         assertEquals(3, RedgifsRipper.extractMaxPages(json, 3));
+    }
+
+    @Test
+    public void testExtractMaxPagesFromTotalAndCount() {
+        JSONObject json = new JSONObject("{\"total\":121,\"count\":40}");
+        assertEquals(4, RedgifsRipper.extractMaxPages(json, 1));
+    }
+
+    @Test
+    public void testExtractUrlsWhenEntriesAreInItemsArray() throws IOException, URISyntaxException {
+        RedgifsRipper ripper = new RedgifsRipper(new URI("https://www.redgifs.com/niches/puffies").toURL());
+        JSONObject json = new JSONObject("""
+                {
+                  "items": [
+                    {
+                      "gallery": null,
+                      "urls": {
+                        "hd": "https://media.example.com/video1.mp4"
+                      }
+                    }
+                  ]
+                }
+                """);
+
+        List<String> urls = ripper.getURLsFromJSON(json);
+        assertEquals(1, urls.size());
+        assertTrue(urls.contains("https://media.example.com/video1.mp4"));
     }
 
     @Test
