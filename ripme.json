@@ -1,7 +1,7 @@
 {
-  "latestVersion": "2.1.180-1-d159480",
-  "currentHash": "0dcbe43c995d8c5d112e566441ca0b204a398e93538582f7fb89617130c0d3f9",
+  "latestVersion": "2.1.181-1-d8718ca",
+  "currentHash": "1c00eab7e8dc19f94d06519b8a20963f396f60bf0ac4b096fd88bacd69414429",
   "changeList": [
-    "2.1.180-1-d159480: Merge pull request #105 from Laziassdev/codex/download-niches-to-redgifs_niches_folder", "2.1.180-1-d159480: Built at 2026-03-05T19:53:00Z"
+    "2.1.181-1-d8718ca: Merge pull request #106 from Laziassdev/codex/fix-folder-creation-for-redgifs_niches", "2.1.181-1-d8718ca: Built at 2026-03-05T20:15:30Z"
   ]
 }
