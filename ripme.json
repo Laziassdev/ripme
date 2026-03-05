@@ -1,7 +1,7 @@
 {
-  "latestVersion": "2.1.172-1-a594099",
-  "currentHash": "3796f2ce4ebf70afd226ae36dbbe26c916569701998908348a0c66f642bd79d3",
+  "latestVersion": "2.1.173-1-9af4480",
+  "currentHash": "26f7ff3437249c287596228fb0ab1a2cdcc3f872598feca1bed383b8d6d1bf5a",
   "changeList": [
-    "2.1.172-1-a594099: Merge pull request #96 from Laziassdev/codex/fix-cookie-loading-for-redd.it", "2.1.172-1-a594099: Built at 2026-03-04T18:57:29Z"
+    "2.1.173-1-9af4480: Merge pull request #97 from Laziassdev/codex/fix-ioexception-for-redgifs-url-fetching", "2.1.173-1-9af4480: Built at 2026-03-05T17:57:14Z"
   ]
 }
