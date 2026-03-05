@@ -28,6 +28,9 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.io.InputStreamReader;
 import java.net.HttpURLConnection;
+import java.time.ZonedDateTime;
+import java.time.format.DateTimeFormatter;
+import java.time.format.DateTimeParseException;
 import java.util.Random;
 import java.util.zip.GZIPInputStream;
 import java.util.zip.InflaterInputStream;
@@ -244,22 +247,8 @@ public class Http {
             if (responseCode == 429) {
                 if (retries < maxRetries) {
                     String retryAfter = connection.getHeaderField("Retry-After");
-                    long waitTime;
-
-                    if (retryAfter != null) {
-                        try {
-                            waitTime = Long.parseLong(retryAfter);
-                            logger.warn("[!] 429 Too Many Requests - retrying in " + waitTime + "s (attempt " + (retries + 1) + ") (using Retry-After)");
-                        } catch (NumberFormatException e) {
-                            waitTime = Math.min(baseDelaySeconds * (1L << retries), maxDelaySeconds);
-                            logger.warn("[!] Invalid Retry-After format - fallback retrying in " + waitTime + "s (attempt " + (retries + 1) + ")");
-                        }
-                    } else {
-                        waitTime = Math.min(baseDelaySeconds * (1L << retries), maxDelaySeconds);
-                        int jitter = random.nextInt(5); // 0–4s jitter
-                        waitTime += jitter;
-                        logger.warn("[!] 429 Too Many Requests - retrying in " + waitTime + "s (attempt " + (retries + 1) + ") (no Retry-After header)");
-                    }
+                    long waitTime = calculate429WaitSeconds(retries, baseDelaySeconds, maxDelaySeconds, retryAfter, random);
+                    logger.warn("[!] 429 Too Many Requests - retrying in {}s (attempt {}/{})", waitTime, retries + 1, maxRetries);
 
                     Utils.sleep(waitTime * 1000L);
                     retries++;
@@ -267,7 +256,7 @@ public class Http {
                 } else {
                     // After final normal retry, wait 10 minutes and try once more
                     logger.warn("[!] Max retries reached. Waiting 10 minutes before one final attempt...");
-                    Utils.sleep(600_000); // 10 minutes in ms
+                    Utils.sleep(600_000);
                     retries++; // Ensure we exit loop if this fails
                     continue;
                 }
@@ -300,9 +289,7 @@ public class Http {
         } catch (IOException e) {
             if (e.getMessage() != null && e.getMessage().contains("429")) {
                 if (retries < maxRetries) {
-                    long waitTime = Math.min(baseDelaySeconds * (1L << retries), maxDelaySeconds);
-                    int jitter = random.nextInt(5);
-                    waitTime += jitter;
+                    long waitTime = calculate429WaitSeconds(retries, baseDelaySeconds, maxDelaySeconds, null, random);
                     logger.warn("[!] IOException suggests 429 - retrying in " + waitTime + "s (attempt " + (retries + 1) + ")");
                     Utils.sleep(waitTime * 1000L);
                     retries++;
@@ -431,24 +418,20 @@ public class Http {
                 int responseCode = connection.getResponseCode();
 
                 if (responseCode == 429) {
-                    String retryAfter = connection.getHeaderField("Retry-After");
-                    long waitTime;
+                    if (retries < maxRetries) {
+                        String retryAfter = connection.getHeaderField("Retry-After");
+                        long waitTime = calculate429WaitSeconds(retries, baseDelaySeconds, maxDelaySeconds, retryAfter, random);
 
-                    if (retryAfter != null) {
-                        try {
-                            waitTime = Long.parseLong(retryAfter);
-                        } catch (NumberFormatException e) {
-                            waitTime = Math.min(baseDelaySeconds * (1L << retries), maxDelaySeconds);
-                        }
+                        logger.warn("[429] Too Many Requests - waiting {}s before retry (attempt {}/{})", waitTime, retries + 1, maxRetries);
+                        Utils.sleep(waitTime * 1000L);
+                        retries++;
+                        continue;
                     } else {
-                        waitTime = Math.min(baseDelaySeconds * (1L << retries), maxDelaySeconds);
-                        waitTime += random.nextInt(5); // jitter
+                        logger.warn("[429] Max retries reached while resolving redirects. Waiting 10 minutes before one final attempt...");
+                        Utils.sleep(600_000);
+                        retries++;
+                        continue;
                     }
-
-                    logger.warn("[429] Too Many Requests - waiting {}s before retry (attempt {}/{})", waitTime, retries + 1, maxRetries);
-                    Utils.sleep(waitTime * 1000L);
-                    retries++;
-                    continue;
                 }
 
                 if (responseCode == 301 || responseCode == 302 || responseCode == 308) {
@@ -467,12 +450,17 @@ public class Http {
                 return currentUrl;
 
             } catch (IOException e) {
-                if (e.getMessage() != null && e.getMessage().contains("429") && retries < maxRetries) {
-                    long waitTime = Math.min(baseDelaySeconds * (1L << retries), maxDelaySeconds);
-                    waitTime += random.nextInt(5);
-                    logger.warn("IOException suggests 429 - retrying in {}s (attempt {}/{})", waitTime, retries + 1, maxRetries);
-                    Utils.sleep(waitTime * 1000L);
-                    retries++;
+                if (e.getMessage() != null && e.getMessage().contains("429")) {
+                    if (retries < maxRetries) {
+                        long waitTime = calculate429WaitSeconds(retries, baseDelaySeconds, maxDelaySeconds, null, random);
+                        logger.warn("IOException suggests 429 - retrying in {}s (attempt {}/{})", waitTime, retries + 1, maxRetries);
+                        Utils.sleep(waitTime * 1000L);
+                        retries++;
+                    } else {
+                        logger.warn("IOException suggests 429 and max retries reached while resolving redirects. Waiting 10 minutes before one final attempt...");
+                        Utils.sleep(600_000);
+                        retries++;
+                    }
                 } else {
                     throw e;
                 }
@@ -484,6 +472,27 @@ public class Http {
         }
 
         throw new IOException("Exceeded max retries while resolving redirects for " + originalUrl);
+    }
+
+    public static long calculate429WaitSeconds(int retries, int baseDelaySeconds, int maxDelaySeconds, String retryAfterHeader, Random random) {
+        if (retryAfterHeader != null) {
+            String trimmed = retryAfterHeader.trim();
+            try {
+                long retryAfterSeconds = Long.parseLong(trimmed);
+                return Math.max(0L, Math.min(retryAfterSeconds, maxDelaySeconds));
+            } catch (NumberFormatException ignored) {
+                try {
+                    ZonedDateTime retryAt = ZonedDateTime.parse(trimmed, DateTimeFormatter.RFC_1123_DATE_TIME);
+                    long waitSeconds = Math.max(0L, (retryAt.toInstant().toEpochMilli() - System.currentTimeMillis() + 999) / 1000);
+                    return Math.min(waitSeconds, maxDelaySeconds);
+                } catch (DateTimeParseException ignoredDateFormat) {
+                    // Fall back to exponential backoff below.
+                }
+            }
+        }
+
+        long waitTime = Math.min(baseDelaySeconds * (1L << retries), maxDelaySeconds);
+        return waitTime + random.nextInt(5); // 0-4s jitter
     }
 
     public static void undoSSLVerifyOff() {

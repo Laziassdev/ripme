@@ -5,6 +5,9 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.net.InetSocketAddress;
 import java.net.URL;
+import java.time.ZoneOffset;
+import java.time.ZonedDateTime;
+import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.Executors;
@@ -12,6 +15,7 @@ import java.util.HashMap;
 import java.util.Map;
 import java.io.OutputStream;
 import java.nio.charset.StandardCharsets;
+import java.util.Random;
 import java.util.concurrent.atomic.AtomicInteger;
 
 import org.junit.jupiter.api.Test;
@@ -160,5 +164,28 @@ public class HttpTest {
         } finally {
             server.stop(0);
         }
+    }
+
+    @Test
+    public void testCalculate429WaitSecondsFromDeltaRetryAfter() {
+        long wait = Http.calculate429WaitSeconds(2, 3, 600, "12", new Random(0));
+        assertEquals(12L, wait);
+    }
+
+    @Test
+    public void testCalculate429WaitSecondsFromDateRetryAfter() {
+        String retryAt = ZonedDateTime.now(ZoneOffset.UTC)
+                .plusSeconds(2)
+                .format(DateTimeFormatter.RFC_1123_DATE_TIME);
+
+        long wait = Http.calculate429WaitSeconds(0, 1, 600, retryAt, new Random(0));
+
+        assertTrue(wait >= 1L && wait <= 3L);
+    }
+
+    @Test
+    public void testCalculate429WaitSecondsFallsBackForInvalidRetryAfter() {
+        long wait = Http.calculate429WaitSeconds(1, 2, 600, "not-a-valid-header", new Random(0));
+        assertEquals(4L, wait);
     }
 }
