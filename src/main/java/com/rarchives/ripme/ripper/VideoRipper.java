@@ -129,6 +129,7 @@ public abstract class VideoRipper extends AbstractRipper {
      */
     @Override
     public void downloadCompleted(URL url, Path saveAs) {
+        onDownloadSuccess(url);
         if (observer == null) {
             return;
         }
@@ -153,6 +154,7 @@ public abstract class VideoRipper extends AbstractRipper {
      */
     @Override
     public void downloadErrored(URL url, String reason) {
+        onDownloadFailure(url);
         if (observer == null) {
             return;
         }
@@ -168,6 +170,7 @@ public abstract class VideoRipper extends AbstractRipper {
      */
     @Override
     public void downloadExists(URL url, Path file) {
+        onDownloadFailure(url);
         if (observer == null) {
             return;
         }

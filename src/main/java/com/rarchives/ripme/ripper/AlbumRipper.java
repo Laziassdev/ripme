@@ -132,6 +132,7 @@ public abstract class AlbumRipper extends AbstractRipper {
      * Cleans up & tells user about successful download
      */
     public void downloadCompleted(URL url, Path saveAs) {
+        onDownloadSuccess(url);
         if (observer == null) {
             return;
         }
@@ -153,6 +154,7 @@ public abstract class AlbumRipper extends AbstractRipper {
      * Cleans up & tells user about failed download.
      */
     public void downloadErrored(URL url, String reason) {
+        onDownloadFailure(url);
         if (observer == null) {
             return;
         }
@@ -169,6 +171,7 @@ public abstract class AlbumRipper extends AbstractRipper {
      * already been downloaded in the past.
      */
     public void downloadExists(URL url, Path file) {
+        onDownloadFailure(url);
         if (observer == null) {
             return;
         }
