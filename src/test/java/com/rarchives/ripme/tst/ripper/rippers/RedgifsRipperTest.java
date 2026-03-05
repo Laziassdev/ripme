@@ -128,6 +128,21 @@ public class RedgifsRipperTest extends RippersTest {
         assertTrue(urls.contains("https://media.example.com/video1.mp4"));
     }
 
+
+
+    @Test
+    public void testNicheURLDefaultsToGifsTypeAndMapsVerified() throws Exception {
+        RedgifsRipper ripper = new RedgifsRipper(new URI("https://www.redgifs.com/niches/puffies?verified=1").toURL());
+        var method = RedgifsRipper.class.getDeclaredMethod("getNicheURL");
+        method.setAccessible(true);
+
+        URL nicheURL = (URL) method.invoke(ripper);
+        String query = nicheURL.toURI().getQuery();
+
+        assertTrue(query.contains("type=g"));
+        assertTrue(query.contains("verified=yes"));
+    }
+
     @Test
     @Tag("flaky")
     public void testRedditRedgifs() throws IOException, URISyntaxException {

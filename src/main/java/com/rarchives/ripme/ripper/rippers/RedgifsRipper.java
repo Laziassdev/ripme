@@ -740,22 +740,36 @@ public class RedgifsRipper extends AbstractJSONRipper {
         }
 
         URIBuilder uri = new URIBuilder(String.format(NICHES_ENDPOINT, nicheMatcher.group(1)));
+        boolean hasType = false;
         var browserURLQueryParams = new URIBuilder(url.toString()).getQueryParams();
         for (var qp : browserURLQueryParams) {
             var name = qp.getName();
             var value = qp.getValue();
             switch (name) {
-                case "order", "verified", "type" -> uri.addParameter(name, value);
+                case "order" -> uri.addParameter(name, value);
+                case "verified" -> {
+                    if ("1".equals(value)) {
+                        uri.addParameter("verified", "yes");
+                    }
+                }
+                case "type" -> {
+                    uri.addParameter("type", value);
+                    hasType = true;
+                }
                 case "tab" -> {
                     if ("images".equals(value)) {
                         uri.addParameter("type", "i");
                     } else {
                         uri.addParameter("type", "g");
                     }
+                    hasType = true;
                 }
                 default -> {
                 }
             }
+        }
+        if (!hasType) {
+            uri.addParameter("type", "g");
         }
         uri.addParameter("count", Integer.toString(count));
         uri.addParameter("page", Integer.toString(currentPage));
