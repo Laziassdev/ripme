@@ -128,6 +128,31 @@ public class RedgifsRipperTest extends RippersTest {
         assertTrue(urls.contains("https://media.example.com/video1.mp4"));
     }
 
+    @Test
+    public void testExtractUrlsWhenEntriesAreDeeplyNested() throws IOException, URISyntaxException {
+        RedgifsRipper ripper = new RedgifsRipper(new URI("https://www.redgifs.com/niches/puffies").toURL());
+        JSONObject json = new JSONObject("""
+                {
+                  "data": {
+                    "payload": {
+                      "results": [
+                        {
+                          "gallery": null,
+                          "urls": {
+                            "hd": "https://media.example.com/video2.mp4"
+                          }
+                        }
+                      ]
+                    }
+                  }
+                }
+                """);
+
+        List<String> urls = ripper.getURLsFromJSON(json);
+        assertEquals(1, urls.size());
+        assertTrue(urls.contains("https://media.example.com/video2.mp4"));
+    }
+
 
 
     @Test
@@ -141,6 +166,22 @@ public class RedgifsRipperTest extends RippersTest {
 
         assertTrue(query.contains("type=g"));
         assertTrue(query.contains("verified=yes"));
+    }
+
+    @Test
+    public void testExtractMaxPagesFromDeeplyNestedPageCountAsString() {
+        JSONObject json = new JSONObject("""
+                {
+                  "data": {
+                    "payload": {
+                      "pagination": {
+                        "total_pages": "9"
+                      }
+                    }
+                  }
+                }
+                """);
+        assertEquals(9, RedgifsRipper.extractMaxPages(json, 1));
     }
 
     @Test

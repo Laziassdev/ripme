@@ -277,10 +277,9 @@ public class RedgifsRipper extends AbstractJSONRipper {
 
     private static JSONArray getGifEntries(JSONObject json) {
         List<String> arrayKeys = Arrays.asList("gifs", "items", "posts", "results");
-        for (String key : arrayKeys) {
-            if (json.has(key) && !json.isNull(key) && json.get(key) instanceof JSONArray) {
-                return json.getJSONArray(key);
-            }
+        JSONArray foundArray = findArrayByPreferredKeys(json, arrayKeys);
+        if (foundArray != null) {
+            return foundArray;
         }
 
         List<String> containerKeys = Arrays.asList("page", "pagination", "meta", "data", "result");
@@ -296,8 +295,56 @@ public class RedgifsRipper extends AbstractJSONRipper {
             }
         }
 
+        foundArray = findArrayByPreferredKeysRecursive(json, arrayKeys, 4);
+        if (foundArray != null) {
+            return foundArray;
+        }
+
         logger.warn("Redgifs response did not include a recognizable gif list field");
         return new JSONArray();
+    }
+
+    private static JSONArray findArrayByPreferredKeys(JSONObject json, List<String> keys) {
+        for (String key : keys) {
+            if (!json.has(key) || json.isNull(key)) {
+                continue;
+            }
+            Object value = json.get(key);
+            if (value instanceof JSONArray) {
+                return (JSONArray) value;
+            }
+            if (value instanceof JSONObject) {
+                JSONArray nestedArray = findArrayByPreferredKeys((JSONObject) value, keys);
+                if (nestedArray != null) {
+                    return nestedArray;
+                }
+            }
+        }
+        return null;
+    }
+
+    private static JSONArray findArrayByPreferredKeysRecursive(JSONObject json, List<String> keys, int maxDepth) {
+        if (maxDepth <= 0) {
+            return null;
+        }
+
+        for (String key : json.keySet()) {
+            Object value = json.get(key);
+            if (value instanceof JSONObject) {
+                JSONObject nestedObject = (JSONObject) value;
+                JSONArray nestedArray = findArrayByPreferredKeys(nestedObject, keys);
+                if (nestedArray != null) {
+                    return nestedArray;
+                }
+
+                nestedArray = findArrayByPreferredKeysRecursive(nestedObject, keys, maxDepth - 1);
+                if (nestedArray != null) {
+                    return nestedArray;
+                }
+            }
+        }
+
+        return null;
     }
 
     /**
@@ -631,6 +678,17 @@ public class RedgifsRipper extends AbstractJSONRipper {
             }
         }
 
+        pageCount = findFirstIntValueRecursive(json, pageCountKeys, 4);
+        if (pageCount != null) {
+            return pageCount;
+        }
+
+        totalCount = findFirstIntValueRecursive(json, totalCountKeys, 4);
+        perPage = findFirstIntValueRecursive(json, perPageKeys, 4);
+        if (totalCount != null && perPage != null && perPage > 0) {
+            return Math.max(1, (int) Math.ceil((double) totalCount / perPage));
+        }
+
         logger.warn("Redgifs response did not include a recognizable page count field; defaulting max pages to {}", fallbackPage);
         return fallbackPage;
     }
@@ -638,9 +696,41 @@ public class RedgifsRipper extends AbstractJSONRipper {
     private static Integer extractFirstIntValue(JSONObject json, List<String> keys) {
         for (String key : keys) {
             if (json.has(key) && !json.isNull(key)) {
-                return json.getInt(key);
+                Object value = json.get(key);
+                if (value instanceof Number) {
+                    return ((Number) value).intValue();
+                }
+                if (value instanceof String) {
+                    try {
+                        return Integer.parseInt((String) value);
+                    } catch (NumberFormatException ignored) {
+                    }
+                }
             }
         }
+        return null;
+    }
+
+    private static Integer findFirstIntValueRecursive(JSONObject json, List<String> keys, int maxDepth) {
+        if (maxDepth <= 0) {
+            return null;
+        }
+
+        Integer value = extractFirstIntValue(json, keys);
+        if (value != null) {
+            return value;
+        }
+
+        for (String key : json.keySet()) {
+            Object nestedValue = json.get(key);
+            if (nestedValue instanceof JSONObject) {
+                Integer nestedResult = findFirstIntValueRecursive((JSONObject) nestedValue, keys, maxDepth - 1);
+                if (nestedResult != null) {
+                    return nestedResult;
+                }
+            }
+        }
+
         return null;
     }
 
