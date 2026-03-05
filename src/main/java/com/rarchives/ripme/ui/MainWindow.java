@@ -1287,7 +1287,8 @@ public final class MainWindow implements Runnable, RipStatusHandler {
                 return;
             }
             int added = 0;
-            for (HistoryEntry entry : HISTORY.toList()) {
+            List<HistoryEntry> historySnapshot = new ArrayList<>(HISTORY.toList());
+            for (HistoryEntry entry : historySnapshot) {
                 if (entry.selected) {
                     added++;
                     queueListModel.addElement(entry.url);
