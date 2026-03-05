@@ -84,6 +84,12 @@ public class RedgifsRipperTest extends RippersTest {
     }
 
     @Test
+    public void testRedgifsNicheAlbumTitleUsesNichesPrefix() throws IOException, URISyntaxException {
+        RedgifsRipper ripper = new RedgifsRipper(new URI("https://www.redgifs.com/niches/puffies").toURL());
+        assertEquals("redgifs_niches_puffies", ripper.getAlbumTitle(new URI("https://www.redgifs.com/niches/puffies").toURL()));
+    }
+
+    @Test
     public void testExtractMaxPagesTopLevelPages() {
         JSONObject json = new JSONObject("{\"pages\":42}");
         assertEquals(42, RedgifsRipper.extractMaxPages(json, 1));

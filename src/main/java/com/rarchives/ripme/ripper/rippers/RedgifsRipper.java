@@ -133,6 +133,14 @@ public class RedgifsRipper extends AbstractJSONRipper {
     }
 
     @Override
+    public String getAlbumTitle(URL url) throws MalformedURLException, URISyntaxException {
+        if (NICHES_PATTERN.matcher(url.toExternalForm()).matches()) {
+            return getHost() + "_niches_" + getGID(url);
+        }
+        return super.getAlbumTitle(url);
+    }
+
+    @Override
     public JSONObject getFirstPage() throws IOException {
         try {
             if (authToken == null || authToken.isBlank()) {
