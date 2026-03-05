@@ -143,7 +143,7 @@ public class RedgifsRipper extends AbstractJSONRipper {
                 return getJSONWithBearerAuth(gifDetailsURL);
             } else if (isSearch().matches() || isTags().matches() || isNiche().matches()) {
                 var json = getJSONWithBearerAuth(getSearchTagsOrNicheURL());
-                maxPages = json.getInt("pages");
+                maxPages = extractMaxPages(json, currentPage);
                 return json;
             } else {
                 username = getGID(url);
@@ -152,7 +152,7 @@ public class RedgifsRipper extends AbstractJSONRipper {
                 uri.addParameter("count", Integer.toString(count));
                 uri.addParameter("page", Integer.toString(currentPage));
                 var json = getJSONWithBearerAuth(uri.build().toURL());
-                maxPages = json.getInt("pages");
+                maxPages = extractMaxPages(json, currentPage);
                 return json;
             }
         } catch (URISyntaxException e) {
@@ -229,7 +229,7 @@ public class RedgifsRipper extends AbstractJSONRipper {
         if (isSearch().matches() || isTags().matches() || isNiche().matches()) {
             var json = getJSONWithBearerAuth(getSearchTagsOrNicheURL());
             // Handle rare maxPages change during a rip
-            maxPages = json.getInt("pages");
+            maxPages = extractMaxPages(json, currentPage);
             return json;
         } else if (isProfile().matches()) {
             var uri = new URIBuilder(String.format(USERS_SEARCH_ENDPOINT, getGID(url)));
@@ -238,7 +238,7 @@ public class RedgifsRipper extends AbstractJSONRipper {
             uri.addParameter("page", Integer.toString(currentPage));
             var json = getJSONWithBearerAuth(uri.build().toURL());
             // Handle rare maxPages change during a rip
-            maxPages = json.getInt("pages");
+            maxPages = extractMaxPages(json, currentPage);
             return json;
         } else {
             return null;
@@ -557,6 +557,38 @@ public class RedgifsRipper extends AbstractJSONRipper {
             normalized = normalized.substring(7).trim();
         }
         return normalized;
+    }
+
+    public static int extractMaxPages(JSONObject json, int fallbackPage) {
+        if (json == null) {
+            return fallbackPage;
+        }
+
+        if (json.has("pages") && !json.isNull("pages")) {
+            return json.getInt("pages");
+        }
+
+        List<String> containerKeys = Arrays.asList("page", "pagination", "meta");
+        List<String> pageCountKeys = Arrays.asList("pages", "pageCount", "totalPages", "total_pages", "lastPage");
+
+        for (String containerKey : containerKeys) {
+            if (!json.has(containerKey) || json.isNull(containerKey)) {
+                continue;
+            }
+            Object paginationObj = json.get(containerKey);
+            if (!(paginationObj instanceof JSONObject)) {
+                continue;
+            }
+            JSONObject pagination = (JSONObject) paginationObj;
+            for (String pageCountKey : pageCountKeys) {
+                if (pagination.has(pageCountKey) && !pagination.isNull(pageCountKey)) {
+                    return pagination.getInt(pageCountKey);
+                }
+            }
+        }
+
+        logger.warn("Redgifs response did not include a recognizable page count field; defaulting max pages to {}", fallbackPage);
+        return fallbackPage;
     }
 
     /**
