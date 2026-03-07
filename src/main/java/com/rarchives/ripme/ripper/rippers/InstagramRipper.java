@@ -38,7 +38,7 @@ public class InstagramRipper extends AbstractJSONRipper {
     private static final Logger logger = LogManager.getLogger(InstagramRipper.class);
     private static final int WAIT_TIME = 2000;
     private static final int TIMEOUT = 20000;
-    private static final int MAX_RETRIES = 3;
+    private static final int MAX_RATE_LIMIT_RETRIES = 6;
     private String csrftoken = null;
     
     static {
@@ -384,10 +384,11 @@ public class InstagramRipper extends AbstractJSONRipper {
     private Response executeInstagramApiRequest(String requestUrl, String referer, String actionDescription) throws IOException {
         IOException lastException = null;
 
-        for (int attempt = 1; attempt <= MAX_RETRIES; attempt++) {
+        for (int attempt = 1; attempt <= MAX_RATE_LIMIT_RETRIES; attempt++) {
             try {
                 Http request = Http.url(requestUrl)
                         .retries(1)
+                        .ignoreHttpErrors()
                         .header("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36")
                         .header("Accept", "application/json, */*;q=0.1")
                         .header("Accept-Language", "en-US,en;q=0.5")
@@ -408,18 +409,23 @@ public class InstagramRipper extends AbstractJSONRipper {
                     request.header("Referer", referer);
                 }
 
-                return request.response();
+                Response response = request.response();
+                if (response.statusCode() == 429) {
+                    throw new HttpStatusException("HTTP error fetching URL", 429, requestUrl);
+                }
+
+                return response;
             } catch (IOException e) {
-                lastException = e instanceof IOException ? (IOException) e : new IOException(e);
+                lastException = e;
 
                 boolean isRateLimit = e instanceof HttpStatusException && ((HttpStatusException) e).getStatusCode() == 429;
                 long waitMillis = WAIT_TIME * (1L << (attempt - 1));
 
-                if (attempt < MAX_RETRIES && (isRateLimit || !(e instanceof HttpStatusException))) {
+                if (attempt < MAX_RATE_LIMIT_RETRIES && (isRateLimit || !(e instanceof HttpStatusException))) {
                     if (isRateLimit) {
-                        logger.warn("Instagram rate limited {} (attempt {}/{}). Waiting {} ms before retry.", actionDescription, attempt, MAX_RETRIES, waitMillis);
+                        logger.warn("Instagram rate limited {} (attempt {}/{}). Waiting {} ms before retry.", actionDescription, attempt, MAX_RATE_LIMIT_RETRIES, waitMillis);
                     } else {
-                        logger.warn("Error {} (attempt {}/{}). Waiting {} ms before retry: {}", actionDescription, attempt, MAX_RETRIES, waitMillis, e.getMessage());
+                        logger.warn("Error {} (attempt {}/{}). Waiting {} ms before retry: {}", actionDescription, attempt, MAX_RATE_LIMIT_RETRIES, waitMillis, e.getMessage());
                     }
                     Utils.sleep(waitMillis);
                     continue;
@@ -433,7 +439,7 @@ public class InstagramRipper extends AbstractJSONRipper {
             }
         }
 
-        throw new IOException("Failed to " + actionDescription + " after " + MAX_RETRIES + " attempts", lastException);
+        throw new IOException("Failed to " + actionDescription + " after " + MAX_RATE_LIMIT_RETRIES + " attempts", lastException);
     }
 
     private String fetchUserIdFromProfile(String username) throws IOException {

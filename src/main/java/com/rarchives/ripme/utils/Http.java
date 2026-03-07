@@ -136,6 +136,11 @@ public class Http {
         return this;
     }
 
+    public Http ignoreHttpErrors() {
+        connection.ignoreHttpErrors(true);
+        return this;
+    }
+
     public Http referrer(String ref) {
         connection.referrer(ref);
         return this;
