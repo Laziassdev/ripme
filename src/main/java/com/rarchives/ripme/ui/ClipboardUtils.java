@@ -1,5 +1,6 @@
 package com.rarchives.ripme.ui;
 
+import java.awt.HeadlessException;
 import java.awt.Toolkit;
 import java.awt.datatransfer.DataFlavor;
 import java.awt.datatransfer.Transferable;
@@ -34,7 +35,18 @@ class ClipboardUtils {
     }
 
     public static String getClipboardString() {
-        Transferable contents = Toolkit.getDefaultToolkit().getSystemClipboard().getContents(null);
+        Transferable contents;
+        try {
+            contents = Toolkit.getDefaultToolkit().getSystemClipboard().getContents(null);
+        } catch (IllegalStateException | HeadlessException e) {
+            logger.debug("Unable to access system clipboard", e);
+            return null;
+        }
+
+        if (contents == null) {
+            return null;
+        }
+
         if (contents.isDataFlavorSupported(DataFlavor.stringFlavor)) {
             try {
                 return (String) contents.getTransferData(DataFlavor.stringFlavor);
