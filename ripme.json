@@ -1,7 +1,7 @@
 {
-  "latestVersion": "2.1.185-1-eaddba7",
-  "currentHash": "41cd96f6abb6862594e7f9652219287ed08e6da017a33eaa353ddf9ae862aeb3",
+  "latestVersion": "2.1.186-1-7580e52",
+  "currentHash": "c94557645dd9aaf0dfe14a4263ec7c0b7c95bcd7f294e0ae1ab5d0a0730a53c1",
   "changeList": [
-    "2.1.185-1-eaddba7: Merge pull request #110 from Laziassdev/codex/fix-http-429-error-for-instagram-api", "2.1.185-1-eaddba7: Built at 2026-03-07T11:01:39Z"
+    "2.1.186-1-7580e52: Merge pull request #111 from Laziassdev/codex/fix-illegalstateexception-in-clipboard-access", "2.1.186-1-7580e52: Built at 2026-03-14T14:32:09Z"
   ]
 }
