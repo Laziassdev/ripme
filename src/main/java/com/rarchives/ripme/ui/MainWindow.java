@@ -85,7 +85,7 @@ public final class MainWindow implements Runnable, RipStatusHandler {
     private static JFrame mainFrame;
 
     private static JTextField ripTextfield;
-    private static JButton ripButton, stopButton;
+    private static JButton ripButton, stopButton, pauseButton;
 
     private static JLabel statusLabel;
     private static JButton openButton;
@@ -473,6 +473,7 @@ public final class MainWindow implements Runnable, RipStatusHandler {
         queueList = new JList<>(queueListModel);
         optionQueue = new JButton(Utils.getLocalizedString("queue"));
         stopButton = new JButton();
+        pauseButton = new JButton();
         statusProgress = new JProgressBar();
     }
 
@@ -618,7 +619,9 @@ public final class MainWindow implements Runnable, RipStatusHandler {
         ImageIcon ripIcon = new ImageIcon(mainIcon);
         ripButton = new JButton("<html><font size=\"5\"><b>Rip</b></font></html>", ripIcon);
         stopButton = new JButton("<html><font size=\"5\"><b>Stop</b></font></html>");
+        pauseButton = new JButton(Utils.getLocalizedString("active.pause"));
         stopButton.setEnabled(false);
+        pauseButton.setEnabled(false);
         try {
             Image stopIcon = ImageIO.read(getClass().getClassLoader().getResource("stop.png"));
             stopButton.setIcon(new ImageIcon(stopIcon));
@@ -640,6 +643,8 @@ public final class MainWindow implements Runnable, RipStatusHandler {
         gbc.gridx = 2;
         ripPanel.add(ripButton, gbc);
         gbc.gridx = 3;
+        ripPanel.add(pauseButton, gbc);
+        gbc.gridx = 4;
         ripPanel.add(stopButton, gbc);
         gbc.weightx = 1;
 
@@ -1261,6 +1266,7 @@ public final class MainWindow implements Runnable, RipStatusHandler {
             activeRippers.keySet().forEach(AbstractRipper::stop);
             isRipping = false;
             stopButton.setEnabled(false);
+            pauseButton.setEnabled(false);
             statusProgress.setValue(0);
             statusProgress.setVisible(false);
             pack();
@@ -1269,6 +1275,8 @@ public final class MainWindow implements Runnable, RipStatusHandler {
             appendLog("Download interrupted", Color.RED);
             refreshActivePanel();
         });
+
+        pauseButton.addActionListener(e -> pauseAll());
 
         if (activePauseAllButton != null) {
             activePauseAllButton.addActionListener(e -> pauseAll());
@@ -1856,6 +1864,7 @@ public final class MainWindow implements Runnable, RipStatusHandler {
         }
 
         stopButton.setEnabled(true);
+        pauseButton.setEnabled(true);
         activeDomains.add(domain);
         activeRippers.put(ripperRun.ripper, new ActiveDownloadEntry(domain));
         refreshActivePanel();
@@ -1889,6 +1898,7 @@ public final class MainWindow implements Runnable, RipStatusHandler {
             return null;
         }
         stopButton.setEnabled(true);
+        pauseButton.setEnabled(true);
         statusProgress.setValue(100);
         openButton.setVisible(false);
         statusLabel.setVisible(true);
@@ -1940,6 +1950,7 @@ public final class MainWindow implements Runnable, RipStatusHandler {
             }
         }
         stopButton.setEnabled(false);
+        pauseButton.setEnabled(false);
         statusProgress.setValue(0);
         pack();
         return null;
@@ -1974,6 +1985,7 @@ public final class MainWindow implements Runnable, RipStatusHandler {
         SwingUtilities.invokeLater(() -> {
             if (activeDomains.isEmpty()) {
                 stopButton.setEnabled(false);
+                pauseButton.setEnabled(false);
                 statusProgress.setValue(0);
                 statusProgress.setVisible(false);
             }
@@ -2195,6 +2207,7 @@ public final class MainWindow implements Runnable, RipStatusHandler {
             }
             saveHistory();
             stopButton.setEnabled(false);
+            pauseButton.setEnabled(false);
             statusProgress.setValue(0);
             statusProgress.setVisible(false);
             openButton.setVisible(true);
