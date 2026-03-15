@@ -1,7 +1,7 @@
 {
-  "latestVersion": "2.1.196-1-96ed35d",
-  "currentHash": "91e9557d992f1a7cb3f570e139e1d68822bbeb03f3aaea1d2b15757d3677a265",
+  "latestVersion": "2.1.197-1-72d7f66",
+  "currentHash": "059e22ddfdb422795cb92488c2ea936156e83a8ae30fba7c77f03b0eff3f5eaa",
   "changeList": [
-    "2.1.196-1-96ed35d: Enhance UmdRipper to support pagination for profile albums by accepting links with page parameters. Normalize JSON-escaped URLs for improved media URL extraction and update download method to include UMD cookies.", "2.1.196-1-96ed35d: Built at 2026-03-15T21:45:58Z"
+    "2.1.197-1-72d7f66: Improve TwitterRipper authentication error message to clarify options for users. Include path to configuration file for adding authentication tokens.", "2.1.197-1-72d7f66: Built at 2026-03-15T23:33:50Z"
   ]
 }
