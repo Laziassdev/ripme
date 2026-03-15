@@ -468,13 +468,7 @@ public abstract class AbstractRipper
             return false;
         }
 
-        if (!usesCustomDownloadLimitTracking() && !downloadLimitTracker.tryAcquire(url)) {
-            if (downloadLimitTracker.shouldNotifyLimitReached()) {
-                String message = "Reached max download limit of " + maxDownloads + ". Stopping.";
-                logger.info(message);
-                sendUpdate(STATUS.DOWNLOAD_COMPLETE_HISTORY, message);
-            }
-            stop();
+        if (!tryAcquireDownloadSlot(url)) {
             return false;
         }
 
@@ -508,6 +502,26 @@ public abstract class AbstractRipper
             downloadLimitTracker.onFailure(url);
         }
         return queued;
+    }
+
+    /**
+     * Tries to acquire a download slot (for maxDownloads limit). Returns false if limit reached.
+     * Subclasses that add URLs without going through addURLToDownload(..., prefix, ...) should call this first.
+     */
+    protected boolean tryAcquireDownloadSlot(URL url) {
+        if (usesCustomDownloadLimitTracking()) {
+            return true;
+        }
+        if (downloadLimitTracker.tryAcquire(url)) {
+            return true;
+        }
+        if (downloadLimitTracker.shouldNotifyLimitReached()) {
+            String message = "Reached max download limit of " + maxDownloads + ". Stopping.";
+            logger.info(message);
+            sendUpdate(STATUS.DOWNLOAD_COMPLETE_HISTORY, message);
+        }
+        stop();
+        return false;
     }
 
     protected void onDownloadSuccess(URL url) {

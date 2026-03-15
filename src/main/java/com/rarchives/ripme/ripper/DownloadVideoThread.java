@@ -1,6 +1,7 @@
 package com.rarchives.ripme.ripper;
 
 import java.io.BufferedInputStream;
+import java.io.BufferedOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
@@ -75,13 +76,17 @@ class DownloadVideoThread implements Runnable {
             }
         }
 
-        int bytesTotal, bytesDownloaded = 0;
+        int bytesTotal;
         try {
             bytesTotal = getTotalBytes(this.url);
         } catch (IOException e) {
             logger.error("Failed to get file size at " + this.url, e);
             observer.downloadErrored(this.url, "Failed to get file size of " + this.url);
             return;
+        }
+        // -1 means server did not send Content-Length (e.g. chunked); we cannot verify size
+        if (bytesTotal < 0) {
+            bytesTotal = 0;
         }
         observer.setBytesTotal(bytesTotal);
         observer.sendUpdate(STATUS.TOTAL_BYTES, bytesTotal);
@@ -90,14 +95,15 @@ class DownloadVideoThread implements Runnable {
         int tries = 0; // Number of attempts to download
         do {
             InputStream bis = null; OutputStream fos = null;
+            HttpURLConnection huc = null;
             byte[] data = new byte[1024 * 256];
             int bytesRead;
+            long bytesDownloaded = 0;
             try {
                 logger.info("    Downloading file: " + url + (tries > 0 ? " Retry #" + tries : ""));
                 observer.sendUpdate(STATUS.DOWNLOAD_STARTED, url.toExternalForm());
 
                 // Setup HTTP request
-                HttpURLConnection huc;
                 if (this.url.toString().startsWith("https")) {
                     huc = (HttpsURLConnection) this.url.openConnection();
                 }
@@ -105,7 +111,10 @@ class DownloadVideoThread implements Runnable {
                     huc = (HttpURLConnection) this.url.openConnection();
                 }
                 huc.setInstanceFollowRedirects(true);
-                huc.setConnectTimeout(0); // Never timeout
+                int connectTimeout = Utils.getConfigInteger("download.timeout", 60000);
+                int readTimeout = Math.max(connectTimeout, 300000); // at least 5 min for large videos
+                huc.setConnectTimeout(connectTimeout);
+                huc.setReadTimeout(readTimeout);
                 huc.setRequestProperty("accept",  "*/*");
                 huc.setRequestProperty("Referer", this.url.toExternalForm()); // Sic
                 huc.setRequestProperty("User-agent", AbstractRipper.USER_AGENT);
@@ -128,6 +137,7 @@ class DownloadVideoThread implements Runnable {
                     logger.warn("[429] Too Many Requests for {}. Waiting {} seconds before retrying", url,
                             waitTimeSeconds);
                     Utils.sleep(waitTimeSeconds * 1000L);
+                    huc.disconnect();
                     continue;
                 }
                 if (statusCode / 100 == 4) {
@@ -137,9 +147,8 @@ class DownloadVideoThread implements Runnable {
                 if (statusCode / 100 == 5) {
                     throw new IOException("Retriable status code " + statusCode);
                 }
-                // Check status code
                 bis = new BufferedInputStream(huc.getInputStream());
-                fos = Files.newOutputStream(workingPath);
+                fos = new BufferedOutputStream(Files.newOutputStream(workingPath));
                 while ( (bytesRead = bis.read(data)) != -1) {
                     try {
                         observer.stopCheck();
@@ -149,11 +158,18 @@ class DownloadVideoThread implements Runnable {
                     }
                     fos.write(data, 0, bytesRead);
                     bytesDownloaded += bytesRead;
-                    observer.setBytesCompleted(bytesDownloaded);
-                    observer.sendUpdate(STATUS.COMPLETED_BYTES, bytesDownloaded);
+                    observer.setBytesCompleted((int) Math.min(bytesDownloaded, Integer.MAX_VALUE));
+                    observer.sendUpdate(STATUS.COMPLETED_BYTES, (int) Math.min(bytesDownloaded, Integer.MAX_VALUE));
                 }
+                fos.flush();
                 bis.close();
                 fos.close();
+                // Verify we got the full file when size was known (avoids corrupt/incomplete files)
+                if (bytesTotal > 0 && bytesDownloaded != bytesTotal) {
+                    logger.warn("Incomplete download: expected {} bytes, got {}. Retrying.", bytesTotal, bytesDownloaded);
+                    Files.deleteIfExists(workingPath);
+                    throw new IOException("Incomplete download: " + bytesDownloaded + " / " + bytesTotal);
+                }
                 if (!observer.registerDownloadHash(workingPath)) {
                     logger.warn("[!] Deleting {} because its hash matches a previously downloaded file", prettySaveAs);
                     try {
@@ -179,13 +195,13 @@ class DownloadVideoThread implements Runnable {
             } catch (IOException e) {
                 logger.error("[!] Exception while downloading file: " + url + " - " + e.getMessage(), e);
             } finally {
-                // Close any open streams
                 try {
                     if (bis != null) { bis.close(); }
                 } catch (IOException ignored) { }
                 try {
                     if (fos != null) { fos.close(); }
                 } catch (IOException ignored) { }
+                if (huc != null) { huc.disconnect(); }
             }
             if (tries > this.retries) {
                 logger.error("[!] Exceeded maximum retries (" + this.retries + ") for URL " + url);
