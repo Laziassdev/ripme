@@ -239,7 +239,32 @@ public class UmdRipper extends AbstractHTMLRipper {
         if (url == null || url.isBlank() || url.startsWith("data:") || url.startsWith("javascript:")) {
             return false;
         }
-        return IMAGE_EXT.matcher(url).matches() || VIDEO_EXT.matcher(url).matches();
+        return (IMAGE_EXT.matcher(url).matches() || VIDEO_EXT.matcher(url).matches())
+                && !isSiteChromeOrUnwanted(url);
+    }
+
+    /** Exclude site UI, avatars, sidebar content, and tracking links so we only keep thread/post media. */
+    private static boolean isSiteChromeOrUnwanted(String urlString) {
+        if (urlString == null || urlString.isBlank()) {
+            return true;
+        }
+        try {
+            String path = new URL(urlString).getPath();
+            if (path == null) {
+                return false;
+            }
+            String p = path.toLowerCase();
+            return p.contains("/images/")           // logos, icons, buttons
+                    || p.contains("/templates/")   // template assets
+                    || p.contains("/media/user_icons/")   // avatars
+                    || p.contains("/media/site_thumbs/")  // sidebar thumbs
+                    || p.contains("/media/smileys/")     // emoji
+                    || p.contains("/media/subtracts/")   // sidebar banners/teasers
+                    || p.contains("/media/calendar/")     // calendar thumbs
+                    || p.contains("/go/");                // tracking/redirect links
+        } catch (Exception e) {
+            return false;
+        }
     }
 
     private static String resolveUrl(String baseUrl, String relative) {
