@@ -1,7 +1,7 @@
 {
-  "latestVersion": "2.1.186-1-7580e52",
-  "currentHash": "c94557645dd9aaf0dfe14a4263ec7c0b7c95bcd7f294e0ae1ab5d0a0730a53c1",
+  "latestVersion": "2.1.187-1-988dc15",
+  "currentHash": "63824864a66c550ff6a0559c7cbb7ba83f936bed035ec3cda620f2a8c0e65b2d",
   "changeList": [
-    "2.1.186-1-7580e52: Merge pull request #111 from Laziassdev/codex/fix-illegalstateexception-in-clipboard-access", "2.1.186-1-7580e52: Built at 2026-03-14T14:32:09Z"
+    "2.1.187-1-988dc15: pause downloads and see count per thread", "2.1.187-1-988dc15: Built at 2026-03-15T12:56:34Z"
   ]
 }
