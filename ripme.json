@@ -1,7 +1,7 @@
 {
-  "latestVersion": "2.1.191-1-cb56044",
-  "currentHash": "0725d2b52aae8a8bbc702a764895cdbceaab3a838022b30c9b599f55db57b1dd",
+  "latestVersion": "2.1.192-1-e7966e0",
+  "currentHash": "90e450938a0f9cfc3d8dff5d6ce4ec22b87d1b34d89a19b227c483ab62c8b413",
   "changeList": [
-    "2.1.191-1-cb56044: Refactor download limit handling in AbstractRipper and enhance DownloadVideoThread for better error handling and resource management", "2.1.191-1-cb56044: Built at 2026-03-15T15:15:54Z"
+    "2.1.192-1-e7966e0: Import UnsupportedEncodingException in UmdRipper for enhanced error handling during URL processing", "2.1.192-1-e7966e0: Built at 2026-03-15T20:44:50Z"
   ]
 }
