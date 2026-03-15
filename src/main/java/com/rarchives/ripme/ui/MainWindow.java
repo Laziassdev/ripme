@@ -238,7 +238,6 @@ public final class MainWindow implements Runnable, RipStatusHandler {
                             ripperEntry.resume();
                         } else {
                             ripperEntry.pause();
-                            addPausedUrl(ripperEntry.getURL().toExternalForm());
                         }
                         refreshActivePanel();
                     });
@@ -309,11 +308,7 @@ public final class MainWindow implements Runnable, RipStatusHandler {
     }
 
     private void pauseAll() {
-        activeRippers.forEach((r, e) -> {
-            r.pause();
-            addPausedUrl(r.getURL().toExternalForm());
-        });
-        savePausedDownloads();
+        activeRippers.keySet().forEach(AbstractRipper::pause);
         refreshActivePanel();
     }
 
