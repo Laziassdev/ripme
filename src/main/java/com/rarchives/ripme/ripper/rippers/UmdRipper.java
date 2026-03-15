@@ -13,6 +13,7 @@ import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 import org.apache.logging.log4j.LogManager;
@@ -44,6 +45,10 @@ public class UmdRipper extends AbstractHTMLRipper {
             ".*\\.(jpe?g|png|gif|webp|bmp)(\\?.*)?$", Pattern.CASE_INSENSITIVE);
     private static final Pattern VIDEO_EXT = Pattern.compile(
             ".*\\.(mp4|webm|mov|avi|mkv)(\\?.*)?$", Pattern.CASE_INSENSITIVE);
+    /** Match UMD profile album image URLs in script/JSON or HTML (e.g. mucky.umd.net/media/photos/.../thumbs/...jpg). */
+    private static final Pattern UMD_PHOTO_URL_IN_PAGE = Pattern.compile(
+            "https?://(?:mucky\\.)?umd\\.net/media/photos/[^\"'\\s<>]+\\.(?:jpe?g|png|gif|webp|bmp)(?:\\?[^\"'\\s<>]*)?",
+            Pattern.CASE_INSENSITIVE);
 
     public UmdRipper(URL url) throws IOException {
         super(url);
@@ -192,49 +197,131 @@ public class UmdRipper extends AbstractHTMLRipper {
     protected List<String> getURLsFromPage(Document page) throws UnsupportedEncodingException, URISyntaxException {
         Set<String> urls = new LinkedHashSet<>();
         String baseUrl = page.location();
+        boolean isProfileAlbum = isProfileAlbumUrl(this.url);
 
-        // img with src
-        for (Element img : page.select("img[src]")) {
-            String src = img.absUrl("src");
-            if (isMediaUrl(src)) {
-                urls.add(src);
-            }
+        // On profile album pages, prefer images inside likely album/gallery containers
+        Elements roots = isProfileAlbum
+                ? page.select(".album-photos, .photo-album, .gallery-photos, .user-photos, .photos-grid, [data-album-id], main, .content-area, .profile-content")
+                : page.select("body");
+        if (roots.isEmpty()) {
+            roots = page.select("body");
         }
-        // Lazy-loaded images
-        for (Element img : page.select("img[data-src]")) {
-            String src = img.attr("abs:data-src");
-            if (src.isEmpty()) {
-                src = resolveUrl(baseUrl, img.attr("data-src"));
-            }
-            if (isMediaUrl(src)) {
-                urls.add(src);
-            }
+
+        for (Element root : roots) {
+            collectMediaUrlsFromElement(root, baseUrl, urls);
         }
-        for (Element img : page.select("img[data-lazy-src]")) {
-            String src = img.attr("abs:data-lazy-src");
-            if (src.isEmpty()) {
-                src = resolveUrl(baseUrl, img.attr("data-lazy-src"));
-            }
-            if (isMediaUrl(src)) {
-                urls.add(src);
-            }
+        // Also run over full page so we don't miss images outside those containers
+        if (isProfileAlbum) {
+            collectMediaUrlsFromElement(page.body(), baseUrl, urls);
         }
-        // Links that point directly to media
-        for (Element a : page.select("a[href]")) {
-            String href = a.hasAttr("abs:href") ? a.attr("abs:href") : resolveUrl(baseUrl, a.attr("href"));
-            if (isMediaUrl(href)) {
-                urls.add(href);
-            }
+        // Profile album images may be in script/JSON or lazy-loaded; extract from raw HTML
+        if (isProfileAlbum || urls.isEmpty()) {
+            collectMediaUrlsFromPageHtml(page.html(), urls);
         }
-        // Video sources
-        for (Element source : page.select("source[src], video source[src]")) {
-            String src = source.hasAttr("abs:src") ? source.attr("abs:src") : resolveUrl(baseUrl, source.attr("src"));
-            if (isMediaUrl(src)) {
-                urls.add(src);
+        // For profile albums, prefer full-size image when we have a thumb URL
+        if (isProfileAlbum) {
+            Set<String> preferred = new LinkedHashSet<>();
+            for (String u : urls) {
+                if (u == null) {
+                    continue;
+                }
+                if (u.contains("/thumbs/")) {
+                    String full = u.replace("/thumbs/", "/");
+                    if (!full.equals(u) && isMediaUrl(full)) {
+                        preferred.add(full);
+                        continue;
+                    }
+                }
+                preferred.add(u);
             }
+            urls = preferred;
         }
 
         return new ArrayList<>(urls);
+    }
+
+    /** Extract UMD media URLs from raw HTML/script (e.g. profile album data in script tags). */
+    private void collectMediaUrlsFromPageHtml(String html, Set<String> urls) {
+        if (html == null || html.isEmpty()) {
+            return;
+        }
+        Matcher m = UMD_PHOTO_URL_IN_PAGE.matcher(html);
+        while (m.find()) {
+            String u = m.group(0);
+            if (isMediaUrl(u)) {
+                urls.add(u);
+            }
+        }
+    }
+
+    private static boolean isProfileAlbumUrl(URL url) {
+        if (url == null) {
+            return false;
+        }
+        String path = url.getPath();
+        return path != null && path.toLowerCase().contains("/profile/")
+                && path.toLowerCase().contains("/section/photos/album/");
+    }
+
+    private void collectMediaUrlsFromElement(Element root, String baseUrl, Set<String> urls) {
+        for (Element img : root.select("img")) {
+            addUrlFromAttr(img, "src", baseUrl, urls);
+            addUrlFromAttr(img, "data-src", baseUrl, urls);
+            addUrlFromAttr(img, "data-lazy-src", baseUrl, urls);
+            addUrlFromAttr(img, "data-original", baseUrl, urls);
+            addUrlFromAttr(img, "data-url", baseUrl, urls);
+            addUrlFromAttr(img, "data-full-url", baseUrl, urls);
+            addUrlFromAttr(img, "data-image", baseUrl, urls);
+            addFromSrcset(img, baseUrl, urls);
+        }
+        for (Element a : root.select("a[href]")) {
+            addUrlFromAttr(a, "href", baseUrl, urls);
+        }
+        for (Element source : root.select("source[src], video source[src]")) {
+            addUrlFromAttr(source, "src", baseUrl, urls);
+        }
+        for (Element el : root.select("[data-src], [data-image-url], [data-full]")) {
+            addUrlFromAttr(el, "data-src", baseUrl, urls);
+            addUrlFromAttr(el, "data-image-url", baseUrl, urls);
+            addUrlFromAttr(el, "data-full", baseUrl, urls);
+        }
+    }
+
+    private void addUrlFromAttr(Element el, String attr, String baseUrl, Set<String> urls) {
+        if (!el.hasAttr(attr)) {
+            return;
+        }
+        String val = el.attr(attr);
+        if (val == null || val.isBlank()) {
+            return;
+        }
+        String abs = el.hasAttr("abs:" + attr) ? el.attr("abs:" + attr) : resolveUrl(baseUrl, val);
+        if (isMediaUrl(abs)) {
+            urls.add(abs);
+        }
+    }
+
+    private void addFromSrcset(Element img, String baseUrl, Set<String> urls) {
+        for (String attr : new String[] { "srcset", "data-srcset" }) {
+            if (!img.hasAttr(attr)) {
+                continue;
+            }
+            String srcset = img.attr(attr);
+            if (srcset == null || srcset.isBlank()) {
+                continue;
+            }
+            for (String entry : srcset.split(",")) {
+                String trimmed = entry.trim();
+                if (trimmed.isEmpty()) {
+                    continue;
+                }
+                String urlPart = trimmed.split("\\s+")[0].trim();
+                String abs = urlPart.startsWith("http") ? urlPart : resolveUrl(baseUrl, urlPart);
+                if (isMediaUrl(abs)) {
+                    urls.add(abs);
+                }
+            }
+        }
     }
 
     private static boolean isMediaUrl(String url) {
