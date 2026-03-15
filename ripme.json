@@ -1,7 +1,7 @@
 {
-  "latestVersion": "2.1.190-1-75c1f36",
-  "currentHash": "e99800dbf08ecf57fea04b778885b5a083d980237509e2728d2bb8861c92832b",
+  "latestVersion": "2.1.191-1-cb56044",
+  "currentHash": "0725d2b52aae8a8bbc702a764895cdbceaab3a838022b30c9b599f55db57b1dd",
   "changeList": [
-    "2.1.190-1-75c1f36: Enhance URL display in MainWindow with HTML formatting and add htmlEscape method for safe rendering", "2.1.190-1-75c1f36: Built at 2026-03-15T15:02:28Z"
+    "2.1.191-1-cb56044: Refactor download limit handling in AbstractRipper and enhance DownloadVideoThread for better error handling and resource management", "2.1.191-1-cb56044: Built at 2026-03-15T15:15:54Z"
   ]
 }
