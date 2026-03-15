@@ -165,6 +165,20 @@ public class UmdRipper extends AbstractHTMLRipper {
                 }
             }
         }
+        // Profile album: pagination may use different markup; accept any link to same album with page param
+        if (nextLink == null && isProfileAlbumUrl(this.url)) {
+            String path = this.url.getPath();
+            if (path != null) {
+                Elements pageLinks = doc.select("a[href*='page='], a[href*='page/']");
+                for (Element a : pageLinks) {
+                    String href = a.hasAttr("abs:href") ? a.attr("abs:href") : resolveUrl(base, a.attr("href"));
+                    if (href != null && href.contains(path) && !href.equals(base)) {
+                        nextLink = a;
+                        break;
+                    }
+                }
+            }
+        }
         if (nextLink == null) {
             return null;
         }
@@ -245,7 +259,9 @@ public class UmdRipper extends AbstractHTMLRipper {
         if (html == null || html.isEmpty()) {
             return;
         }
-        Matcher m = UMD_PHOTO_URL_IN_PAGE.matcher(html);
+        // Normalize JSON-escaped URLs (e.g. https:\/\/mucky.umd.net\/media\/...) so regex can match
+        String normalized = html.replace("\\/", "/");
+        Matcher m = UMD_PHOTO_URL_IN_PAGE.matcher(normalized);
         while (m.find()) {
             String u = m.group(0);
             if (isMediaUrl(u)) {
@@ -369,6 +385,6 @@ public class UmdRipper extends AbstractHTMLRipper {
 
     @Override
     protected void downloadURL(URL url, int index) {
-        addURLToDownload(url, getPrefix(index), "", this.url.toExternalForm(), null);
+        addURLToDownload(url, getPrefix(index), "", this.url.toExternalForm(), getUmdCookies());
     }
 }
