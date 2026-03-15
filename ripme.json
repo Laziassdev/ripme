@@ -1,7 +1,7 @@
 {
-  "latestVersion": "2.1.192-1-e7966e0",
-  "currentHash": "90e450938a0f9cfc3d8dff5d6ce4ec22b87d1b34d89a19b227c483ab62c8b413",
+  "latestVersion": "2.1.193-1-02fd395",
+  "currentHash": "b94f5581bada8ccc117abb4210d76e262d1acd499592aa5df982a5ac1c11aace",
   "changeList": [
-    "2.1.192-1-e7966e0: Import UnsupportedEncodingException in UmdRipper for enhanced error handling during URL processing", "2.1.192-1-e7966e0: Built at 2026-03-15T20:44:50Z"
+    "2.1.193-1-02fd395: Merge branch 'main' of https://github.com/Laziassdev/ripme", "2.1.193-1-02fd395: Built at 2026-03-15T21:02:37Z"
   ]
 }
