@@ -30,7 +30,8 @@ import com.rarchives.ripme.utils.Utils;
 
 /**
  * Ripper for https://umd.net
- * Supports: forums (/forums/forum/...), groups (/groups), pic archive (/picarchive), gallery (/gallery).
+ * Supports: forums (/forums/...), groups (/groups), pic archive (/picarchive), gallery (/gallery),
+ * profile photo albums (/profile/id/.../section/photos/album/...).
  * Cookies are read from Firefox (if logged in there) or from cookies.umd.net in rip.properties.
  */
 public class UmdRipper extends AbstractHTMLRipper {
@@ -70,7 +71,8 @@ public class UmdRipper extends AbstractHTMLRipper {
         path = path.toLowerCase();
         return path.startsWith("/forums/") || path.equals("/groups") || path.startsWith("/groups/")
                 || path.equals("/picarchive") || path.startsWith("/picarchive")
-                || path.equals("/gallery") || path.startsWith("/gallery");
+                || path.equals("/gallery") || path.startsWith("/gallery")
+                || (path.contains("/profile/") && path.contains("/section/photos/album/"));
     }
 
     @Override
