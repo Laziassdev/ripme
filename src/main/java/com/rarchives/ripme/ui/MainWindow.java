@@ -5,6 +5,8 @@ import java.awt.TrayIcon.MessageType;
 import java.awt.event.*;
 import java.io.BufferedReader;
 import java.io.File;
+import java.io.FileInputStream;
+import java.io.FileOutputStream;
 import java.io.FileReader;
 import java.io.IOException;
 import java.io.InputStreamReader;
@@ -49,10 +51,15 @@ import org.apache.logging.log4j.core.LoggerContext;
 import org.apache.logging.log4j.core.config.Configuration;
 import org.apache.logging.log4j.core.config.LoggerConfig;
 
+import org.json.JSONArray;
+import org.json.JSONException;
+
 import com.rarchives.ripme.ripper.AbstractRipper;
 import com.rarchives.ripme.uiUtils.ContextActionProtections;
 import com.rarchives.ripme.utils.RipUtils;
 import com.rarchives.ripme.utils.Utils;
+
+import org.apache.commons.io.IOUtils;
 
 /**
  * Everything UI-related starts and ends here.
@@ -113,6 +120,10 @@ public final class MainWindow implements Runnable, RipStatusHandler {
     private static JButton optionActive;
     private static JPanel activePanel;
     private static JPanel activeListPanel;
+    private static JButton activePauseAllButton;
+    private static JButton activeResumeAllButton;
+    private static final String PAUSED_DOWNLOADS_FILENAME = "paused_downloads.json";
+    private final List<String> pausedDownloadUrls = Collections.synchronizedList(new ArrayList<>());
 
     // Configuration
     private static JButton optionConfiguration;
@@ -185,7 +196,11 @@ public final class MainWindow implements Runnable, RipStatusHandler {
     private void refreshActivePanel() {
         SwingUtilities.invokeLater(() -> {
             activeListPanel.removeAll();
-            if (activeRippers.isEmpty()) {
+
+            activePauseAllButton.setEnabled(!activeRippers.isEmpty());
+            activeResumeAllButton.setEnabled(activeRippers.keySet().stream().anyMatch(AbstractRipper::isPaused));
+
+            if (activeRippers.isEmpty() && pausedDownloadUrls.isEmpty()) {
                 JLabel emptyLabel = new JLabel(Utils.getLocalizedString("active.none"));
                 emptyLabel.setBorder(new EmptyBorder(5, 5, 5, 5));
                 activeListPanel.add(emptyLabel);
@@ -212,6 +227,24 @@ public final class MainWindow implements Runnable, RipStatusHandler {
                     rowPanel.add(domainLabel, rowGbc);
 
                     rowGbc.gridx = 2;
+                    JLabel filesLabel = new JLabel(
+                            String.format("%s: %d", Utils.getLocalizedString("active.files_downloaded"), entry.filesDownloaded));
+                    rowPanel.add(filesLabel, rowGbc);
+
+                    rowGbc.gridx = 3;
+                    JButton pauseResumeButton = new JButton(ripperEntry.isPaused() ? Utils.getLocalizedString("active.resume") : Utils.getLocalizedString("active.pause"));
+                    pauseResumeButton.addActionListener(e -> {
+                        if (ripperEntry.isPaused()) {
+                            ripperEntry.resume();
+                        } else {
+                            ripperEntry.pause();
+                            addPausedUrl(ripperEntry.getURL().toExternalForm());
+                        }
+                        refreshActivePanel();
+                    });
+                    rowPanel.add(pauseResumeButton, rowGbc);
+
+                    rowGbc.gridx = 4;
                     JButton cancelButton = new JButton(Utils.getLocalizedString("cancel"));
                     cancelButton.addActionListener(e -> cancelRipper(ripperEntry));
                     rowPanel.add(cancelButton, rowGbc);
@@ -219,7 +252,7 @@ public final class MainWindow implements Runnable, RipStatusHandler {
                     if (entry.currentItem != null && !entry.currentItem.isEmpty()) {
                         rowGbc.gridx = 0;
                         rowGbc.gridy = 1;
-                        rowGbc.gridwidth = 3;
+                        rowGbc.gridwidth = 5;
                         rowGbc.insets = new Insets(4, 0, 0, 0);
                         JLabel currentItemLabel = new JLabel(
                                 String.format("%s %s", Utils.getLocalizedString("active.current_file"),
@@ -232,6 +265,32 @@ public final class MainWindow implements Runnable, RipStatusHandler {
 
                     activeListPanel.add(rowPanel);
                 });
+
+                // Paused downloads from previous session
+                List<String> urlsCopy;
+                synchronized (pausedDownloadUrls) {
+                    urlsCopy = new ArrayList<>(pausedDownloadUrls);
+                }
+                for (String pausedUrl : urlsCopy) {
+                    JPanel pausedRow = new JPanel(new FlowLayout(FlowLayout.LEFT));
+                    JLabel pausedUrlLabel = new JLabel(pausedUrl);
+                    pausedUrlLabel.setToolTipText(pausedUrl);
+                    pausedRow.add(pausedUrlLabel);
+                    JButton resumeButton = new JButton(Utils.getLocalizedString("active.resume"));
+                    resumeButton.addActionListener(e -> {
+                        removePausedUrl(pausedUrl);
+                        String domain = getDomainFromUrl(pausedUrl);
+                        if (domain != null) {
+                            ripperLauncher.accept(pausedUrl, domain);
+                        }
+                        refreshActivePanel();
+                    });
+                    pausedRow.add(resumeButton);
+                    JLabel pausedHint = new JLabel(" (" + Utils.getLocalizedString("active.paused_from_previous") + ")");
+                    pausedHint.setFont(pausedHint.getFont().deriveFont(Font.ITALIC, pausedHint.getFont().getSize2D() - 1f));
+                    pausedRow.add(pausedHint);
+                    activeListPanel.add(pausedRow);
+                }
             }
             activeListPanel.revalidate();
             activeListPanel.repaint();
@@ -242,10 +301,80 @@ public final class MainWindow implements Runnable, RipStatusHandler {
     private void cancelRipper(AbstractRipper ripper) {
         ActiveDownloadEntry entry = activeRippers.get(ripper);
         if (entry != null) {
+            removePausedUrl(ripper.getURL().toExternalForm());
             ripper.stop();
             onRipperFinished(entry.domain, ripper);
         }
         refreshActivePanel();
+    }
+
+    private void pauseAll() {
+        activeRippers.forEach((r, e) -> {
+            r.pause();
+            addPausedUrl(r.getURL().toExternalForm());
+        });
+        savePausedDownloads();
+        refreshActivePanel();
+    }
+
+    private void resumeAll() {
+        activeRippers.keySet().forEach(AbstractRipper::resume);
+        refreshActivePanel();
+    }
+
+    private void addPausedUrl(String url) {
+        if (url == null || url.isEmpty()) {
+            return;
+        }
+        synchronized (pausedDownloadUrls) {
+            if (!pausedDownloadUrls.contains(url)) {
+                pausedDownloadUrls.add(url);
+            }
+        }
+    }
+
+    private void removePausedUrl(String url) {
+        if (url == null) {
+            return;
+        }
+        synchronized (pausedDownloadUrls) {
+            pausedDownloadUrls.remove(url);
+        }
+        savePausedDownloads();
+    }
+
+    private void loadPausedDownloads() {
+        Path path = Paths.get(Utils.getConfigDir(), PAUSED_DOWNLOADS_FILENAME);
+        if (!Files.exists(path)) {
+            return;
+        }
+        try {
+            String json = IOUtils.toString(new FileInputStream(path.toFile()), "UTF-8");
+            JSONArray arr = new JSONArray(json);
+            synchronized (pausedDownloadUrls) {
+                pausedDownloadUrls.clear();
+                for (int i = 0; i < arr.length(); i++) {
+                    pausedDownloadUrls.add(arr.getString(i));
+                }
+            }
+        } catch (IOException | JSONException e) {
+            LOGGER.warn("Could not load paused downloads from {}", path, e);
+        }
+    }
+
+    private void savePausedDownloads() {
+        Path path = Paths.get(Utils.getConfigDir(), PAUSED_DOWNLOADS_FILENAME);
+        try {
+            JSONArray arr = new JSONArray();
+            synchronized (pausedDownloadUrls) {
+                pausedDownloadUrls.forEach(arr::put);
+            }
+            try (FileOutputStream fos = new FileOutputStream(path.toFile())) {
+                IOUtils.write(arr.toString(2), fos, "UTF-8");
+            }
+        } catch (IOException e) {
+            LOGGER.warn("Could not save paused downloads to {}", path, e);
+        }
     }
 
     private void setActiveRipperCurrentItem(AbstractRipper ripper, Object item) {
@@ -272,7 +401,9 @@ public final class MainWindow implements Runnable, RipStatusHandler {
         } catch (Exception e) {
             LOGGER.debug("Unable to determine domain for active ripper", e);
         }
-        activeRippers.put(ripper, new ActiveDownloadEntry(domain));
+        ActiveDownloadEntry entry = new ActiveDownloadEntry(domain);
+        entry.filesDownloaded = ripper.getDownloadedCount();
+        activeRippers.put(ripper, entry);
         refreshActivePanel();
     }
 
@@ -321,7 +452,9 @@ public final class MainWindow implements Runnable, RipStatusHandler {
         pack();
 
         loadHistory();
+        loadPausedDownloads();
         setupHandlers();
+        refreshActivePanel();
 
         Thread shutdownThread = new Thread(this::shutdownCleanup);
         Runtime.getRuntime().addShutdownHook(shutdownThread);
@@ -378,6 +511,9 @@ public final class MainWindow implements Runnable, RipStatusHandler {
         Utils.setConfigBoolean("ssl.verify.off", configSSLVerifyOff.isSelected());
         Utils.setConfigString("lang", configSelectLangComboBox.getSelectedItem().toString());
         saveWindowPosition(mainFrame);
+        // Persist any currently paused rippers so user can resume after re-launch
+        activeRippers.keySet().stream().filter(AbstractRipper::isPaused).forEach(r -> addPausedUrl(r.getURL().toExternalForm()));
+        savePausedDownloads();
         saveHistory();
         Utils.saveConfig();
     }
@@ -793,6 +929,15 @@ public final class MainWindow implements Runnable, RipStatusHandler {
         GridBagConstraints activeGbc = new GridBagConstraints();
         activeGbc.fill = GridBagConstraints.BOTH;
         activeGbc.weightx = 1;
+        activeGbc.weighty = 0;
+        activeGbc.gridy = 0;
+        activePauseAllButton = new JButton(Utils.getLocalizedString("active.pause_all"));
+        activeResumeAllButton = new JButton(Utils.getLocalizedString("active.resume_all"));
+        JPanel activeTopPanel = new JPanel(new FlowLayout(FlowLayout.LEFT));
+        activeTopPanel.add(activePauseAllButton);
+        activeTopPanel.add(activeResumeAllButton);
+        activePanel.add(activeTopPanel, activeGbc);
+        activeGbc.gridy = 1;
         activeGbc.weighty = 1;
         activePanel.add(activeListScroll, activeGbc);
 
@@ -1124,6 +1269,13 @@ public final class MainWindow implements Runnable, RipStatusHandler {
             appendLog("Download interrupted", Color.RED);
             refreshActivePanel();
         });
+
+        if (activePauseAllButton != null) {
+            activePauseAllButton.addActionListener(e -> pauseAll());
+        }
+        if (activeResumeAllButton != null) {
+            activeResumeAllButton.addActionListener(e -> resumeAll());
+        }
 
         optionLog.addActionListener(event -> {
             logPanel.setVisible(!logPanel.isVisible());
@@ -1810,6 +1962,7 @@ public final class MainWindow implements Runnable, RipStatusHandler {
 
     void onRipperFinished(String domain, AbstractRipper ripper) {
         if (ripper != null) {
+            removePausedUrl(ripper.getURL().toExternalForm());
             activeRippers.remove(ripper);
         }
         if (domain != null && activeDomains.remove(domain)) {
@@ -1852,6 +2005,7 @@ public final class MainWindow implements Runnable, RipStatusHandler {
     private static final class ActiveDownloadEntry {
         private final String domain;
         private String currentItem;
+        private int filesDownloaded;
 
         private ActiveDownloadEntry(String domain) {
             this.domain = domain;
@@ -1973,6 +2127,10 @@ public final class MainWindow implements Runnable, RipStatusHandler {
                 appendLog("Downloaded " + msg.getObject(), Color.GREEN);
             }
             setActiveRipperCurrentItem(evt.ripper, msg.getObject());
+            ActiveDownloadEntry dlEntry = activeRippers.get(evt.ripper);
+            if (dlEntry != null) {
+                dlEntry.filesDownloaded = evt.ripper.getDownloadedCount();
+            }
             break;
         case DOWNLOAD_COMPLETE_HISTORY:
             if (LOGGER.isEnabled(Level.INFO)) {

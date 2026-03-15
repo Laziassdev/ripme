@@ -147,7 +147,7 @@ public abstract class AbstractHTMLRipper extends AbstractRipper {
         logger.info("Got doc location " + doc.location());
 
         while (doc != null) {
-
+            waitIfPaused();
             logger.info("Processing a doc...");
 
             // catch if we saw a doc location already, save the ones seen in a list
@@ -180,6 +180,7 @@ public abstract class AbstractHTMLRipper extends AbstractRipper {
                 }
 
                 for (String imageURL : imageURLs) {
+                    waitIfPaused();
                     index += 1;
                     logger.debug("Found image url #" + index + ": '" + imageURL + "'");
                     downloadURL(new URI(imageURL).toURL(), index);

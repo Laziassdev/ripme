@@ -76,6 +76,7 @@ public abstract class AbstractJSONRipper extends AbstractRipper {
         JSONObject json = getFirstPage();
 
         while (json != null) {
+            waitIfPaused();
             List<String> imageURLs = getURLsFromJSON(json);
 
             if (alreadyDownloadedUrls >= Utils.getConfigInteger("history.end_rip_after_already_seen", 1000000000) && !isThisATest()) {
@@ -95,6 +96,7 @@ public abstract class AbstractJSONRipper extends AbstractRipper {
             }
 
             for (String imageURL : imageURLs) {
+                waitIfPaused();
                 if (isStopped()) {
                     break;
                 }

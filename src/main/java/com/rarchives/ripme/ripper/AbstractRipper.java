@@ -78,6 +78,8 @@ public abstract class AbstractRipper
     // Everytime addUrlToDownload skips a already downloaded url this increases by 1
     public int alreadyDownloadedUrls = 0;
     private final AtomicBoolean shouldStop = new AtomicBoolean(false);
+    private final AtomicBoolean shouldPause = new AtomicBoolean(false);
+    private final Object pauseLock = new Object();
     private static boolean thisIsATest = false;
     private final int maxDownloads = Utils.getConfigInteger("maxdownloads", -1);
     private final DownloadLimitTracker downloadLimitTracker = new DownloadLimitTracker(maxDownloads);
@@ -95,10 +97,56 @@ public abstract class AbstractRipper
         return shouldStop.get();
     }
 
+    /**
+     * Pause this ripper. The rip thread will block in waitIfPaused() until resume() is called.
+     */
+    public void pause() {
+        shouldPause.set(true);
+    }
+
+    /**
+     * Resume a paused ripper.
+     */
+    public void resume() {
+        shouldPause.set(false);
+        synchronized (pauseLock) {
+            pauseLock.notifyAll();
+        }
+    }
+
+    public boolean isPaused() {
+        return shouldPause.get();
+    }
+
+    /**
+     * If paused, blocks until resume() is called. Returns immediately if not paused.
+     * Call this at safe points in the rip loop (e.g. between pages or items).
+     */
+    protected void waitIfPaused() {
+        while (shouldPause.get() && !shouldStop.get()) {
+            synchronized (pauseLock) {
+                try {
+                    pauseLock.wait(500);
+                } catch (InterruptedException e) {
+                    Thread.currentThread().interrupt();
+                    logger.warn("Interrupted while paused");
+                    return;
+                }
+            }
+        }
+    }
+
     protected void stopCheck() throws IOException {
         if (shouldStop.get()) {
             throw new IOException("Ripping interrupted");
         }
+    }
+
+    /**
+     * Returns the number of files downloaded so far (for UI progress). Default delegates to getCount().
+     */
+    public int getDownloadedCount() {
+        return getCount();
     }
 
     protected boolean usesCustomDownloadLimitTracking() {
