@@ -44,6 +44,8 @@ public class TwitterRipper extends AbstractJSONRipper {
 
     private static final String[] DOMAINS = {"twitter.com", "x.com"};
     private static final String DOMAIN = "twitter.com", HOST = "twitter";
+    private static final String API_TWITTER = "https://api.twitter.com";
+    private static final String API_X = "https://api.x.com";
 
     private static final int MAX_REQUESTS = Utils.getConfigInteger("twitter.max_requests", 10);
     private static final boolean RIP_RETWEETS = Utils.getConfigBoolean("twitter.rip_retweets", true);
@@ -73,6 +75,7 @@ public class TwitterRipper extends AbstractJSONRipper {
     private volatile boolean maxDownloadLimitReached = false;
     private String twitterCookieHeader;
     private final Map<String, String> twitterCookies = new LinkedHashMap<>();
+    private volatile String apiBase = API_TWITTER;
 
     public TwitterRipper(URL url) throws IOException {
         super(url);
@@ -160,56 +163,62 @@ public class TwitterRipper extends AbstractJSONRipper {
 
         if (authKey == null || authKey.isEmpty()) {
             throw new IOException(
-                    "Could not find twitter authentication credentials in configuration. Provide twitter.auth or twitter.access_token");
+                    "Could not find X/Twitter authentication. Log in to X (twitter.com or x.com) in Firefox and try again, "
+                            + "or set twitter.access_token or twitter.auth in rip.properties. Free API access was discontinued by X.");
         }
 
-        try {
-            Document doc = Http.url("https://api.twitter.com/oauth2/token").ignoreContentType()
-                    .header("Authorization", "Basic " + authKey)
-                    .header("Content-Type", "application/x-www-form-urlencoded;charset=UTF-8")
-                    .header("User-agent", "ripe and zipe").data("grant_type", "client_credentials").post();
-            String body = doc.body().html().replaceAll("&quot;", "\"");
+        for (String base : new String[] { API_TWITTER, API_X }) {
             try {
-                JSONObject json = new JSONObject(body);
-                accessToken = json.getString("access_token").trim();
-            } catch (JSONException e) {
-                // Fall through
-                throw new IOException("Failure while parsing JSON: " + body, e);
+                Document doc = Http.url(base + "/oauth2/token").ignoreContentType()
+                        .header("Authorization", "Basic " + authKey)
+                        .header("Content-Type", "application/x-www-form-urlencoded;charset=UTF-8")
+                        .header("User-agent", "ripe and zipe").data("grant_type", "client_credentials").post();
+                String body = doc.body().html().replaceAll("&quot;", "\"");
+                try {
+                    JSONObject json = new JSONObject(body);
+                    accessToken = json.getString("access_token").trim();
+                    apiBase = base;
+                    return;
+                } catch (JSONException e) {
+                    throw new IOException("Failure while parsing JSON: " + body, e);
+                }
+            } catch (HttpStatusException e) {
+                if (e.getStatusCode() == 403 || e.getStatusCode() == 401) {
+                    logger.warn("{} oauth2/token returned HTTP {}; trying next API base", base, e.getStatusCode());
+                    continue;
+                }
+                throw new IOException("Failed to load " + base + "/oauth2/token (HTTP " + e.getStatusCode()
+                        + "). Set twitter.access_token in rip.properties to use a bearer token instead.", e);
             }
-        } catch (HttpStatusException e) {
-            throw new IOException(
-                    "Failed to load https://api.twitter.com/oauth2/token (HTTP " + e.getStatusCode()
-                            + "). Provide twitter.access_token in rip.properties to bypass this call.",
-                    e);
         }
+        throw new IOException("Could not obtain X/Twitter access token from " + API_TWITTER + " or " + API_X
+                + ". Free API was discontinued. Log in to X in Firefox, or set twitter.access_token in rip.properties.");
     }
 
-    private void checkRateLimits(String resource, String api) throws IOException {
-        Http http = Http.url("https://api.twitter.com/1.1/application/rate_limit_status.json?resources=" + resource)
-                .ignoreContentType().header("Authorization", "Bearer " + accessToken)
-                .header("Content-Type", "application/x-www-form-urlencoded;charset=UTF-8")
-                .header("User-agent", "ripe and zipe");
-        if (twitterCookieHeader != null && !twitterCookieHeader.isEmpty()) {
-            http = http.header("Cookie", twitterCookieHeader);
-            String csrf = getTwitterCookie("ct0");
-            if (csrf != null && !csrf.isEmpty()) {
-                http = http.header("x-csrf-token", csrf);
-            }
-        }
-        Document doc = http.get();
-        String body = doc.body().html().replaceAll("&quot;", "\"");
+    private void checkRateLimits(String resource, String api) {
         try {
+            Http http = Http.url(apiBase + "/1.1/application/rate_limit_status.json?resources=" + resource)
+                    .ignoreContentType().header("Authorization", "Bearer " + accessToken)
+                    .header("Content-Type", "application/x-www-form-urlencoded;charset=UTF-8")
+                    .header("User-agent", "ripe and zipe");
+            if (twitterCookieHeader != null && !twitterCookieHeader.isEmpty()) {
+                http = http.header("Cookie", twitterCookieHeader);
+                String csrf = getTwitterCookie("ct0");
+                if (csrf != null && !csrf.isEmpty()) {
+                    http = http.header("x-csrf-token", csrf);
+                }
+            }
+            Document doc = http.get();
+            String body = doc.body().html().replaceAll("&quot;", "\"");
             JSONObject json = new JSONObject(body);
             JSONObject stats = json.getJSONObject("resources").getJSONObject(resource).getJSONObject(api);
             int remaining = stats.getInt("remaining");
             logger.info("    Twitter " + resource + " calls remaining: " + remaining);
             if (remaining < 20) {
-                logger.error("Twitter API calls exhausted: " + stats.toString());
-                throw new IOException("Less than 20 API calls remaining; not enough to rip.");
+                logger.warn("Twitter API calls low (" + remaining + "); continuing anyway.");
             }
-        } catch (JSONException e) {
-            logger.error("JSONException: ", e);
-            throw new IOException("Error while parsing JSON: " + body, e);
+        } catch (Exception e) {
+            logger.warn("Could not check rate limits ({}); continuing. {}", resource, e.getMessage());
         }
     }
 
@@ -217,13 +226,13 @@ public class TwitterRipper extends AbstractJSONRipper {
         StringBuilder req = new StringBuilder();
         switch (albumType) {
         case ACCOUNT:
-            req.append("https://api.twitter.com/1.1/statuses/user_timeline.json")
+            req.append(apiBase).append("/1.1/statuses/user_timeline.json")
                     .append("?screen_name=" + this.accountName).append("&include_entities=true")
                     .append("&exclude_replies=" + EXCLUDE_REPLIES).append("&trim_user=true").append("&count=" + MAX_ITEMS_REQUEST)
                     .append("&tweet_mode=extended");
             break;
         case SEARCH:// Only get tweets from last week
-            req.append("https://api.twitter.com/1.1/search/tweets.json").append("?q=" + this.searchText)
+            req.append(apiBase).append("/1.1/search/tweets.json").append("?q=" + this.searchText)
                     .append("&include_entities=true").append("&result_type=recent").append("&count=100")
                     .append("&tweet_mode=extended");
             break;
@@ -238,34 +247,65 @@ public class TwitterRipper extends AbstractJSONRipper {
         currentRequest++;
         String url = getApiURL(lastMaxID - 1);
         logger.info("    Retrieving " + url);
-        Http http = Http.url(url).ignoreContentType().header("Authorization", "Bearer " + accessToken)
-                .header("Content-Type", "application/x-www-form-urlencoded;charset=UTF-8")
-                .header("User-agent", "ripe and zipe");
-        if (twitterCookieHeader != null && !twitterCookieHeader.isEmpty()) {
-            http = http.header("Cookie", twitterCookieHeader);
-            String csrf = getTwitterCookie("ct0");
-            if (csrf != null && !csrf.isEmpty()) {
-                http = http.header("x-csrf-token", csrf);
+        for (int attempt = 0; attempt < 2; attempt++) {
+            try {
+                Http http = Http.url(url).ignoreContentType().header("Authorization", "Bearer " + accessToken)
+                        .header("Content-Type", "application/x-www-form-urlencoded;charset=UTF-8")
+                        .header("User-agent", "ripe and zipe");
+                if (twitterCookieHeader != null && !twitterCookieHeader.isEmpty()) {
+                    http = http.header("Cookie", twitterCookieHeader);
+                    String csrf = getTwitterCookie("ct0");
+                    if (csrf != null && !csrf.isEmpty()) {
+                        http = http.header("x-csrf-token", csrf);
+                    }
+                }
+                Document doc = http.get();
+                String body = doc.body().html().replaceAll("&quot;", "\"");
+                Object jsonObj = new JSONTokener(body).nextValue();
+                JSONArray statuses;
+                if (jsonObj instanceof JSONObject) {
+                    JSONObject json = (JSONObject) jsonObj;
+                    if (json.has("errors")) {
+                        String msg = formatApiErrors(json);
+                        throw new IOException("X/Twitter API responded with errors: " + msg);
+                    }
+                    statuses = json.has("statuses") ? json.getJSONArray("statuses") : json.getJSONArray("tweets");
+                } else {
+                    statuses = (JSONArray) jsonObj;
+                }
+                JSONObject r = new JSONObject();
+                r.put("tweets", statuses);
+                return r;
+            } catch (HttpStatusException e) {
+                if ((e.getStatusCode() == 403 || e.getStatusCode() == 401) && attempt == 0) {
+                    String other = apiBase.equals(API_TWITTER) ? API_X : API_TWITTER;
+                    logger.warn("{} returned HTTP {}; retrying with {}", apiBase, e.getStatusCode(), other);
+                    apiBase = other;
+                    url = getApiURL(lastMaxID - 1);
+                    continue;
+                }
+                throw new IOException("X/Twitter API returned HTTP " + e.getStatusCode()
+                        + ". Log in to X in Firefox and try again, or set twitter.access_token in rip.properties.", e);
             }
         }
-        Document doc = http.get();
-        String body = doc.body().html().replaceAll("&quot;", "\"");
-        Object jsonObj = new JSONTokener(body).nextValue();
-        JSONArray statuses;
-        if (jsonObj instanceof JSONObject) {
-            JSONObject json = (JSONObject) jsonObj;
-            if (json.has("errors")) {
-                String msg = json.getJSONObject("errors").getString("message");
-                throw new IOException("Twitter responded with errors: " + msg);
-            }
-            statuses = json.getJSONArray("statuses");
-        } else {
-            statuses = (JSONArray) jsonObj;
-        }
+        throw new IOException("Could not fetch tweets from X/Twitter API.");
+    }
 
-        JSONObject r = new JSONObject();
-        r.put("tweets", statuses);
-        return r;
+    private static String formatApiErrors(JSONObject json) {
+        try {
+            if (json.has("errors") && json.get("errors") instanceof JSONArray) {
+                JSONArray errs = json.getJSONArray("errors");
+                if (errs.length() > 0) {
+                    return errs.getJSONObject(0).optString("message", errs.toString());
+                }
+            }
+            if (json.has("error")) {
+                return json.optString("error_description", json.optString("error", ""));
+            }
+        } catch (JSONException ignored) {
+            // fall through
+        }
+        return json.optString("errors", "unknown");
     }
 
     public String getPrefix(int index) {
@@ -375,17 +415,16 @@ public class TwitterRipper extends AbstractJSONRipper {
         for (JSONObject tweet : tweets) {
             lastMaxID = tweet.getLong("id");
 
-            if (!tweet.has("extended_entities")) {
-                logger.error("XXX Tweet doesn't have entities");
-                continue;
-            }
-
             if (!RIP_RETWEETS && tweet.has("retweeted_status")) {
                 logger.info("Skipping a retweet as twitter.rip_retweet is set to false.");
                 continue;
             }
 
-            JSONObject entities = tweet.getJSONObject("extended_entities");
+            JSONObject entities = tweet.has("extended_entities") ? tweet.getJSONObject("extended_entities")
+                    : tweet.has("entities") ? tweet.getJSONObject("entities") : null;
+            if (entities == null || !entities.has("media")) {
+                continue;
+            }
 
             if (entities.has("media")) {
                 JSONArray medias = entities.getJSONArray("media");
@@ -394,37 +433,40 @@ public class TwitterRipper extends AbstractJSONRipper {
 
                 for (int i = 0; i < medias.length(); i++) {
                     media = (JSONObject) medias.get(i);
-                    url = media.getString("media_url");
-                    if (media.getString("type").equals("video") || media.getString("type").equals("animated_gif")) {
-                        JSONArray variants = media.getJSONObject("video_info").getJSONArray("variants");
-                        int largestBitrate = 0;
-                        String urlToDownload = null;
-                        // Loop over all the video options and find the biggest video
-                        for (int j = 0; j < variants.length(); j++) {
-                            JSONObject variant = (JSONObject) variants.get(j);
-                            logger.info(variant);
-                            // If the video doesn't have a bitrate it's a m3u8 file we can't download
-                            if (variant.has("bitrate")) {
-                                if (variant.getInt("bitrate") > largestBitrate) {
-                                    largestBitrate = variant.getInt("bitrate");
-                                    urlToDownload = variant.getString("url");
-                                } else if (media.getString("type").equals("animated_gif")) {
-                                    // If the type if animated_gif the bitrate doesn't matter
-                                    urlToDownload = variant.getString("url");
+                    url = media.optString("media_url_https", media.optString("media_url", ""));
+                    if (url.isEmpty()) {
+                        continue;
+                    }
+                    String type = media.optString("type", "photo");
+                    if (("video".equals(type) || "animated_gif".equals(type)) && media.has("video_info")) {
+                        try {
+                            JSONArray variants = media.getJSONObject("video_info").getJSONArray("variants");
+                            int largestBitrate = 0;
+                            String urlToDownload = null;
+                            for (int j = 0; j < variants.length(); j++) {
+                                JSONObject variant = (JSONObject) variants.get(j);
+                                logger.debug("variant: {}", variant);
+                                if (variant.has("bitrate")) {
+                                    if (variant.getInt("bitrate") > largestBitrate) {
+                                        largestBitrate = variant.getInt("bitrate");
+                                        urlToDownload = variant.getString("url");
+                                    } else if ("animated_gif".equals(type)) {
+                                        urlToDownload = variant.getString("url");
+                                    }
                                 }
                             }
+                            if (urlToDownload != null) {
+                                urls.add(urlToDownload);
+                            }
+                        } catch (JSONException e) {
+                            logger.warn("Could not parse video_info for media: {}", e.getMessage());
                         }
-                        if (urlToDownload != null) {
-                            urls.add(urlToDownload);
-                        } else {
-                            logger.error("URLToDownload was null");
-                        }
-                    } else if (media.getString("type").equals("photo")) {
+                    } else {
                         if (url.contains(".twimg.com/")) {
                             url += ":orig";
                             urls.add(url);
                         } else {
-                            logger.debug("Unexpected media_url: " + url);
+                            urls.add(url);
                         }
                     }
                 }
