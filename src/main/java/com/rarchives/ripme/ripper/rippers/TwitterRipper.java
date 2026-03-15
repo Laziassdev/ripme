@@ -162,9 +162,11 @@ public class TwitterRipper extends AbstractJSONRipper {
         }
 
         if (authKey == null || authKey.isEmpty()) {
+            String configPath = Utils.getConfigDir() + java.io.File.separator + "rip.properties";
             throw new IOException(
-                    "Could not find X/Twitter authentication. Log in to X (twitter.com or x.com) in Firefox and try again, "
-                            + "or set twitter.access_token or twitter.auth in rip.properties. Free API access was discontinued by X.");
+                    "X/Twitter ripping requires authentication (X discontinued free API). "
+                            + "Option 1: Log in to twitter.com or x.com in Firefox, then try this rip again (ripme will try to use your session). "
+                            + "Option 2: Add twitter.access_token=YOUR_BEARER_TOKEN to " + configPath);
         }
 
         for (String base : new String[] { API_TWITTER, API_X }) {
