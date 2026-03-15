@@ -1,6 +1,7 @@
 package com.rarchives.ripme.ripper.rippers;
 
 import java.io.IOException;
+import java.io.UnsupportedEncodingException;
 import java.net.MalformedURLException;
 import java.net.URI;
 import java.net.URISyntaxException;
