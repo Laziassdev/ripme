@@ -1,7 +1,7 @@
 {
-  "latestVersion": "2.1.189-1-97403ee",
-  "currentHash": "820442aaef87001a4ff56efed706602b1359770d785e426dfe781a2b0ee1df6d",
+  "latestVersion": "2.1.190-1-75c1f36",
+  "currentHash": "e99800dbf08ecf57fea04b778885b5a083d980237509e2728d2bb8861c92832b",
   "changeList": [
-    "2.1.189-1-97403ee: Refactor pause functionality in MainWindow to streamline paused URL handling", "2.1.189-1-97403ee: Built at 2026-03-15T14:09:16Z"
+    "2.1.190-1-75c1f36: Enhance URL display in MainWindow with HTML formatting and add htmlEscape method for safe rendering", "2.1.190-1-75c1f36: Built at 2026-03-15T15:02:28Z"
   ]
 }
