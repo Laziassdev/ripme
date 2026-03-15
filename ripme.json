@@ -1,7 +1,7 @@
 {
-  "latestVersion": "2.1.195-1-a4a713c",
-  "currentHash": "9de77a04e2565ab81ea3c24ed9610a5dfd75dd26df6a5d7a0ab7b1a3c29f1321",
+  "latestVersion": "2.1.196-1-96ed35d",
+  "currentHash": "91e9557d992f1a7cb3f570e139e1d68822bbeb03f3aaea1d2b15757d3677a265",
   "changeList": [
-    "2.1.195-1-a4a713c: Enhance UmdRipper to improve media URL extraction from profile albums by adding support for lazy-loaded images and extracting URLs from raw HTML. Introduce methods to handle various image attributes and ensure full-size images are preferred when available.", "2.1.195-1-a4a713c: Built at 2026-03-15T21:33:49Z"
+    "2.1.196-1-96ed35d: Enhance UmdRipper to support pagination for profile albums by accepting links with page parameters. Normalize JSON-escaped URLs for improved media URL extraction and update download method to include UMD cookies.", "2.1.196-1-96ed35d: Built at 2026-03-15T21:45:58Z"
   ]
 }
