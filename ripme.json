@@ -1,7 +1,7 @@
 {
-  "latestVersion": "2.1.188-1-089b62d",
-  "currentHash": "21701b8e912ad495ef0eb5ff8535c59d7a6eada1fbc13b49a3e1588525958fa9",
+  "latestVersion": "2.1.189-1-97403ee",
+  "currentHash": "820442aaef87001a4ff56efed706602b1359770d785e426dfe781a2b0ee1df6d",
   "changeList": [
-    "2.1.188-1-089b62d: Merge branch 'main' of https://github.com/Laziassdev/ripme", "2.1.188-1-089b62d: Built at 2026-03-15T13:22:30Z"
+    "2.1.189-1-97403ee: Refactor pause functionality in MainWindow to streamline paused URL handling", "2.1.189-1-97403ee: Built at 2026-03-15T14:09:16Z"
   ]
 }
