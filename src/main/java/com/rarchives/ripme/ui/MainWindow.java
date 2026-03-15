@@ -216,8 +216,10 @@ public final class MainWindow implements Runnable, RipStatusHandler {
                     rowGbc.insets = new Insets(0, 0, 0, 5);
                     rowGbc.fill = GridBagConstraints.HORIZONTAL;
                     rowGbc.weightx = 1;
-                    JLabel urlLabel = new JLabel(ripperEntry.getURL().toString());
-                    urlLabel.setToolTipText(ripperEntry.getURL().toString());
+                    String urlText = ripperEntry.getURL().toString();
+                    JLabel urlLabel = new JLabel("<html><body style='width: 280px; word-wrap: break-word'>"
+                            + htmlEscape(urlText) + "</body></html>");
+                    urlLabel.setToolTipText(urlText);
                     rowPanel.add(urlLabel, rowGbc);
 
                     rowGbc.gridx = 1;
@@ -272,7 +274,8 @@ public final class MainWindow implements Runnable, RipStatusHandler {
                 }
                 for (String pausedUrl : urlsCopy) {
                     JPanel pausedRow = new JPanel(new FlowLayout(FlowLayout.LEFT));
-                    JLabel pausedUrlLabel = new JLabel(pausedUrl);
+                    JLabel pausedUrlLabel = new JLabel("<html><body style='width: 280px; word-wrap: break-word'>"
+                            + htmlEscape(pausedUrl) + "</body></html>");
                     pausedUrlLabel.setToolTipText(pausedUrl);
                     pausedRow.add(pausedUrlLabel);
                     JButton resumeButton = new JButton(Utils.getLocalizedString("active.resume"));
@@ -315,6 +318,13 @@ public final class MainWindow implements Runnable, RipStatusHandler {
     private void resumeAll() {
         activeRippers.keySet().forEach(AbstractRipper::resume);
         refreshActivePanel();
+    }
+
+    private static String htmlEscape(String s) {
+        if (s == null) {
+            return "";
+        }
+        return s.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;").replace("\"", "&quot;");
     }
 
     private void addPausedUrl(String url) {
