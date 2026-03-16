@@ -487,13 +487,16 @@ public class UmdRipper extends AbstractHTMLRipper {
         String prefix = getPrefix(index);
 
         // UMD direct download URLs don't include a file extension; ask the downloader to
-        // derive the extension from the MIME type so files are saved as e.g. .mp4.
+        // derive or assign an extension so files are saved with a proper suffix.
         if (isUmdDownloadUrl(url)) {
             Map<String, String> options = new LinkedHashMap<>();
             options.put("prefix", prefix);
             options.put("subdirectory", "");
             options.put("referrer", this.url.toExternalForm());
-            options.put("getFileExtFromMIME", "true");
+            // UMD download endpoints are video files (typically MP4) even when the
+            // server omits Content-Type. Default to .mp4 so we always have a usable
+            // filename, regardless of MIME detection.
+            options.put("extension", "mp4");
             addURLToDownload(url, options, getUmdCookies());
             return;
         }
