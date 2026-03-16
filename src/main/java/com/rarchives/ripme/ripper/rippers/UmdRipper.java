@@ -74,10 +74,12 @@ public class UmdRipper extends AbstractHTMLRipper {
             return false;
         }
         path = path.toLowerCase();
-        return path.startsWith("/forums/") || path.equals("/groups") || path.startsWith("/groups/")
-                || path.equals("/picarchive") || path.startsWith("/picarchive")
-                || path.equals("/gallery") || path.startsWith("/gallery")
-                || (path.contains("/profile/") && path.contains("/section/photos/album/"));
+        boolean isForumOrGroup = path.startsWith("/forums/") || path.equals("/groups") || path.startsWith("/groups/");
+        boolean isPicArchive = path.equals("/picarchive") || path.startsWith("/picarchive");
+        boolean isGallery = path.equals("/gallery") || path.startsWith("/gallery");
+        boolean isPhotoAlbum = path.contains("/profile/") && path.contains("/section/photos/album/");
+        boolean isVideoSection = path.contains("/profile/") && path.contains("/section/videos");
+        return isForumOrGroup || isPicArchive || isGallery || isPhotoAlbum || isVideoSection;
     }
 
     @Override
@@ -107,6 +109,60 @@ public class UmdRipper extends AbstractHTMLRipper {
             gid.append("umd");
         }
         return gid.toString();
+    }
+
+    @Override
+    protected boolean hasQueueSupport() {
+        return true;
+    }
+
+    @Override
+    protected boolean pageContainsAlbums(URL url) {
+        if (url == null) {
+            return false;
+        }
+        String path = url.getPath();
+        if (path == null) {
+            return false;
+        }
+        path = path.toLowerCase();
+        // Treat profile video listings as "album index" pages for queuing
+        return path.contains("/profile/") && path.contains("/section/videos")
+                && !path.contains("/section/videos/video/");
+    }
+
+    @Override
+    protected List<String> getAlbumsToQueue(Document doc) {
+        List<String> result = new ArrayList<>();
+        if (doc == null) {
+            return result;
+        }
+        Set<String> seen = new LinkedHashSet<>();
+        Document current = doc;
+
+        while (current != null) {
+            String baseUrl = current.location();
+            for (Element a : current.select("a[href*=\"/section/videos/video/\"]")) {
+                String href = a.hasAttr("abs:href") ? a.attr("abs:href") : a.attr("href");
+                if (href == null || href.isBlank()) {
+                    continue;
+                }
+                if (!href.startsWith("http")) {
+                    href = resolveUrl(baseUrl, href);
+                }
+                if (href != null && !href.isBlank() && seen.add(href)) {
+                    result.add(href);
+                }
+            }
+            try {
+                current = getNextPage(current);
+            } catch (IOException | URISyntaxException e) {
+                logger.warn("Error while loading next UMD videos page for queue: {}", e.getMessage());
+                break;
+            }
+        }
+
+        return result;
     }
 
     /**
