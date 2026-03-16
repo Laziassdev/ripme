@@ -208,14 +208,9 @@ public class BlueskyRipper extends AbstractJSONRipper {
 
     @Override
     public String getGID(URL url) throws MalformedURLException {
-        try {
-            System.out.println("🔍 Checking GID for: " + url);
-            Matcher m = Pattern.compile("^https?://bsky\\.(?:app|social)/profile/([^/]+)").matcher(url.toExternalForm());
-            if (m.find()) {
-                return m.group(1);
-            }
-        } catch (Exception e) {
-            e.printStackTrace();
+        Matcher m = Pattern.compile("^https?://bsky\\.(?:app|social)/profile/([^/]+)").matcher(url.toExternalForm());
+        if (m.find()) {
+            return m.group(1);
         }
         throw new MalformedURLException("Expected format: https://bsky.app/profile/username or https://bsky.social/profile/username");
     }
@@ -413,23 +408,36 @@ public class BlueskyRipper extends AbstractJSONRipper {
 
     @Override
     protected void downloadURL(URL url, int index) {
-        String fileName = url.getPath();
+        String path = url.getPath();
+        if (path == null) path = "";
         String ext = null;
-        int atIdx = fileName.lastIndexOf('@');
-        if (atIdx != -1 && atIdx < fileName.length() - 1) {
-            ext = fileName.substring(atIdx + 1);
+        int atIdx = path.lastIndexOf('@');
+        if (atIdx != -1 && atIdx < path.length() - 1) {
+            ext = path.substring(atIdx + 1);
         } else {
-            int lastDot = fileName.lastIndexOf('.');
-            if (lastDot != -1 && lastDot < fileName.length() - 1) {
-                ext = fileName.substring(lastDot + 1);
+            int lastDot = path.lastIndexOf('.');
+            if (lastDot != -1 && lastDot < path.length() - 1) {
+                String afterDot = path.substring(lastDot + 1);
+                if (afterDot.matches("[a-zA-Z0-9]{2,5}")) {
+                    ext = afterDot;
+                }
+            }
+        }
+        // Bluesky CDN URLs (cdn.bsky.app/img/.../bafkre...) have no extension; default from path
+        if (ext == null || ext.isEmpty()) {
+            String lower = path.toLowerCase();
+            if (lower.contains("/img/") || lower.contains("feed_fullsize")) {
+                ext = "jpg";
+            } else {
+                ext = "mp4";
             }
         }
         String prefix = getPrefix(index);
         String resolvedFileName;
         if (atIdx != -1) {
-            resolvedFileName = fileName.substring(fileName.lastIndexOf('/') + 1, atIdx);
+            resolvedFileName = path.substring(path.lastIndexOf('/') + 1, atIdx);
         } else {
-            resolvedFileName = fileName.substring(fileName.lastIndexOf('/') + 1);
+            resolvedFileName = path.substring(path.lastIndexOf('/') + 1);
         }
 
         boolean countTowardsLimit = true;
@@ -465,10 +473,7 @@ public class BlueskyRipper extends AbstractJSONRipper {
 
         java.util.HashMap<String, String> options = new java.util.HashMap<>();
         options.put("prefix", prefix);
-        if (ext != null) {
-            options.put("extension", ext);
-        }
-        // Remove @ext from the fileName if present
+        options.put("extension", ext);
         options.put("fileName", resolvedFileName);
         boolean added = addURLToDownload(url, options);
         if (added) {
