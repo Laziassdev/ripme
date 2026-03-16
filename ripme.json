@@ -1,7 +1,7 @@
 {
-  "latestVersion": "2.1.200-1-2a81af9",
-  "currentHash": "3467d4b57c5b81efcb19c4ab889560fae475f8c987e3303a4e7eb5b32c0b68db",
+  "latestVersion": "2.1.201-1-d2991a9",
+  "currentHash": "7cfddc40c8843937c5f2fdc0eb5dcc419d388fb1eb7dfe79f81a99d2d52774b8",
   "changeList": [
-    "2.1.200-1-2a81af9: Merge branch 'main' of https://github.com/Laziassdev/ripme", "2.1.200-1-2a81af9: Built at 2026-03-16T12:53:16Z"
+    "2.1.201-1-d2991a9: Refactor UmdRipper to ensure proper file naming by defaulting to .mp4 extension for UMD downloads, enhancing usability when MIME type is not provided. This change improves the handling of video files from UMD endpoints.", "2.1.201-1-d2991a9: Built at 2026-03-16T14:20:57Z"
   ]
 }
