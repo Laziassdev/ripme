@@ -93,6 +93,14 @@ public class UmdRipper extends AbstractHTMLRipper {
         if (path == null || path.isEmpty()) {
             throw new MalformedURLException("Expected umd.net path, got: " + url);
         }
+        // For profile video pages, group all videos for a profile/section into one directory
+        // instead of one folder per individual video URL.
+        String lower = path.toLowerCase();
+        String marker = "/section/videos";
+        int idx = lower.indexOf(marker);
+        if (idx >= 0) {
+            path = path.substring(0, idx + marker.length());
+        }
         path = path.replaceAll("^/+|/+$", "");
         String[] parts = path.split("/");
         StringBuilder gid = new StringBuilder();
@@ -454,8 +462,42 @@ public class UmdRipper extends AbstractHTMLRipper {
         }
     }
 
+    private static boolean isUmdDownloadUrl(URL url) {
+        if (url == null) {
+            return false;
+        }
+        try {
+            String host = url.getHost().toLowerCase();
+            String path = url.getPath();
+            if (path == null) {
+                return false;
+            }
+            boolean fromUmd = host.endsWith("umd.net") || host.endsWith("mucky.umd.net");
+            boolean isDownloadPath = path.toLowerCase().contains("/download/");
+            // Heuristic: treat as special download when there's no obvious file extension
+            boolean hasExt = path.matches(".*\\.[a-zA-Z0-9]{2,4}$");
+            return fromUmd && isDownloadPath && !hasExt;
+        } catch (Exception e) {
+            return false;
+        }
+    }
+
     @Override
     protected void downloadURL(URL url, int index) {
-        addURLToDownload(url, getPrefix(index), "", this.url.toExternalForm(), getUmdCookies());
+        String prefix = getPrefix(index);
+
+        // UMD direct download URLs don't include a file extension; ask the downloader to
+        // derive the extension from the MIME type so files are saved as e.g. .mp4.
+        if (isUmdDownloadUrl(url)) {
+            Map<String, String> options = new LinkedHashMap<>();
+            options.put("prefix", prefix);
+            options.put("subdirectory", "");
+            options.put("referrer", this.url.toExternalForm());
+            options.put("getFileExtFromMIME", "true");
+            addURLToDownload(url, options, getUmdCookies());
+            return;
+        }
+
+        addURLToDownload(url, prefix, "", this.url.toExternalForm(), getUmdCookies());
     }
 }
