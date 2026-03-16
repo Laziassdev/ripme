@@ -400,6 +400,21 @@ public class UmdRipper extends AbstractHTMLRipper {
         if (url == null || url.isBlank() || url.startsWith("data:") || url.startsWith("javascript:")) {
             return false;
         }
+
+        // Direct UMD download endpoints (used for videos) often have no file extension,
+        // e.g. https://mucky.umd.net/download/... – treat them as media.
+        try {
+            URL u = new URL(url);
+            String host = u.getHost().toLowerCase();
+            String path = u.getPath();
+            if (path != null && path.toLowerCase().contains("/download/")
+                    && (host.endsWith("umd.net") || host.endsWith("mucky.umd.net"))) {
+                return !isSiteChromeOrUnwanted(url);
+            }
+        } catch (Exception ignored) {
+            // fall through to extension-based checks
+        }
+
         return (IMAGE_EXT.matcher(url).matches() || VIDEO_EXT.matcher(url).matches())
                 && !isSiteChromeOrUnwanted(url);
     }
