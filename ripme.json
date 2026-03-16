@@ -1,7 +1,7 @@
 {
-  "latestVersion": "2.1.198-1-591ecf7",
-  "currentHash": "b2f8a30b0b710f5daae4e7aaf9b81d648b294a9b396093d0692c95d1d8dd3ae3",
+  "latestVersion": "2.1.199-1-7acf97d",
+  "currentHash": "1bcf5f9dedad492c7348444a43ecf28bf0c6fa7320e6e153c4a07e55fb9f27dc",
   "changeList": [
-    "2.1.198-1-591ecf7: Enhance UmdRipper to support video section queuing and improve path validation for various content types, including forums, groups, galleries, and profile albums. Introduce methods for handling video listings as album indices and queueing video links from profile pages.", "2.1.198-1-591ecf7: Built at 2026-03-16T12:31:43Z"
+    "2.1.199-1-7acf97d: Merge branch 'main' of https://github.com/Laziassdev/ripme", "2.1.199-1-7acf97d: Built at 2026-03-16T12:43:06Z"
   ]
 }
