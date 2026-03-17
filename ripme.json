@@ -1,7 +1,7 @@
 {
-  "latestVersion": "2.1.201-1-d2991a9",
-  "currentHash": "7cfddc40c8843937c5f2fdc0eb5dcc419d388fb1eb7dfe79f81a99d2d52774b8",
+  "latestVersion": "2.1.202-1-5411b85",
+  "currentHash": "60c982050ee1bb96c9e97ef4afd862de04395b3ac59c1ca7b0396242ddfc6fd1",
   "changeList": [
-    "2.1.201-1-d2991a9: Refactor UmdRipper to ensure proper file naming by defaulting to .mp4 extension for UMD downloads, enhancing usability when MIME type is not provided. This change improves the handling of video files from UMD endpoints.", "2.1.201-1-d2991a9: Built at 2026-03-16T14:20:57Z"
+    "2.1.202-1-5411b85: Refactor BlueskyRipper to simplify GID extraction and improve file extension handling. The GID retrieval now directly matches the URL without exception handling, and the download method has been updated to ensure proper file naming and default extensions based on URL path analysis.", "2.1.202-1-5411b85: Built at 2026-03-17T00:00:10Z"
   ]
 }
