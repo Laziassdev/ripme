@@ -22,6 +22,7 @@ public class History {
         "URL",
         "created",
         "modified",
+        "latest",
         "#",
         ""
     };
@@ -61,8 +62,10 @@ public class History {
         case 2:
             return dateToHumanReadable(entry.modifiedDate);
         case 3:
-            return entry.count;
+            return entry.latestCount;
         case 4:
+            return entry.count;
+        case 5:
             return entry.selected;
         default:
             return null;

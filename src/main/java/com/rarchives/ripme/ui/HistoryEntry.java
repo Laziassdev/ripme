@@ -9,7 +9,8 @@ public class HistoryEntry {
     public String  url          = "",
                    title        = "",
                    dir          = "";
-    public int     count        = 0;
+    public int     count        = 0,
+                   latestCount  = 0;
     public Date    startDate    = new Date(),
                    modifiedDate = new Date();
     public boolean selected     = false;
@@ -27,6 +28,9 @@ public class HistoryEntry {
         if (json.has("count")) {
             this.count    = json.getInt("count");
         }
+        if (json.has("latestCount")) {
+            this.latestCount = json.getInt("latestCount");
+        }
         if (json.has("dir")) {
             this.dir      = json.getString("dir");
         }
@@ -43,6 +47,7 @@ public class HistoryEntry {
         json.put("modifiedDate", this.modifiedDate.getTime());
         json.put("title",        this.title);
         json.put("count",        this.count);
+        json.put("latestCount",  this.latestCount);
         json.put("selected",     this.selected);
         return json;
     }

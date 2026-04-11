@@ -804,12 +804,12 @@ public final class MainWindow implements Runnable, RipStatusHandler {
 
             @Override
             public boolean isCellEditable(int row, int col) {
-                return (col == 0 || col == 4);
+                return (col == 0 || col == 5);
             }
 
             @Override
             public void setValueAt(Object value, int row, int col) {
-                if (col == 4) {
+                if (col == 5) {
                     HISTORY.get(row).selected = (Boolean) value;
                     historyTableModel.fireTableDataChanged();
                 }
@@ -831,6 +831,9 @@ public final class MainWindow implements Runnable, RipStatusHandler {
                 width = 40;
                 break;
             case 4:
+                width = 40;
+                break;
+            case 5:
                 width = 15;
                 break;
             }
@@ -2029,6 +2032,13 @@ public final class MainWindow implements Runnable, RipStatusHandler {
                     HISTORY.add(entry);
                     historyTableModel.fireTableDataChanged();
                     saveHistory();
+                } else {
+                    HistoryEntry entry = HISTORY.getEntryByURL(ripUrl);
+                    entry.latestCount = 0;
+                    if (entry.dir == null || entry.dir.isEmpty()) {
+                        entry.dir = ripper.getWorkingDir().getAbsolutePath();
+                    }
+                    historyTableModel.fireTableDataChanged();
                 }
 
                 Thread t = new Thread(ripper);
@@ -2284,6 +2294,7 @@ public final class MainWindow implements Runnable, RipStatusHandler {
             HistoryEntry entry;
             if (HISTORY.containsURL(url)) {
                 entry = HISTORY.getEntryByURL(url);
+                entry.latestCount = rsc.count;
                 entry.count += rsc.count;
                 entry.modifiedDate = new Date();
                 HISTORY.moveToBottom(entry);
@@ -2294,6 +2305,7 @@ public final class MainWindow implements Runnable, RipStatusHandler {
                 entry = new HistoryEntry();
                 entry.url = url;
                 entry.dir = rsc.getDir();
+                entry.latestCount = rsc.count;
                 entry.count = rsc.count;
                 try {
                     entry.title = evt.ripper.getAlbumTitle(evt.ripper.getURL());
