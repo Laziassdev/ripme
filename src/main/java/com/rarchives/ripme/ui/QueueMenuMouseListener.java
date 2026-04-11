@@ -1,7 +1,6 @@
 package com.rarchives.ripme.ui;
 
 import java.awt.event.ActionEvent;
-import java.awt.event.InputEvent;
 import java.awt.event.MouseAdapter;
 import java.awt.event.MouseEvent;
 import java.util.ArrayList;
@@ -143,7 +142,7 @@ class QueueMenuMouseListener extends MouseAdapter {
 
     @SuppressWarnings("unchecked")
     private void checkPopupTrigger(MouseEvent e) {
-        if (e.getModifiersEx() == InputEvent.BUTTON3_DOWN_MASK) {
+        if (e.isPopupTrigger()) {
             if (!(e.getSource() instanceof JList)) {
                 return;
             }
