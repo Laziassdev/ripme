@@ -7,7 +7,9 @@ import java.awt.datatransfer.Clipboard;
 import java.awt.datatransfer.DataFlavor;
 import java.awt.datatransfer.Transferable;
 import java.awt.datatransfer.UnsupportedFlavorException;
-import java.awt.event.*;
+import java.awt.event.ActionEvent;
+import java.awt.event.MouseAdapter;
+import java.awt.event.MouseEvent;
 import java.io.IOException;
 
 import javax.swing.*;
@@ -159,17 +161,6 @@ public class ContextMenuMouseListener extends MouseAdapter {
 
     private void showPopup(MouseEvent e) {
         if (e.isPopupTrigger()) {
-            if(this.popup == null) {
-                popup = new JPopupMenu();
-                generate_popup();
-            }
-            popup.show(e.getComponent(), e.getX(), e.getY());
-        }
-    }
-
-    @Override
-    public void mouseClicked(MouseEvent e) {
-        if (e.getModifiersEx() == InputEvent.BUTTON3_DOWN_MASK) {
             if (!(e.getSource() instanceof JTextComponent)) {
                 return;
             }
@@ -182,7 +173,8 @@ public class ContextMenuMouseListener extends MouseAdapter {
             boolean nonempty = !(textComponent.getText() == null || textComponent.getText().equals(""));
             boolean marked = textComponent.getSelectedText() != null;
 
-            boolean pasteAvailable = Toolkit.getDefaultToolkit().getSystemClipboard().getContents(null).isDataFlavorSupported(DataFlavor.stringFlavor);
+            boolean pasteAvailable = Toolkit.getDefaultToolkit().getSystemClipboard().getContents(null)
+                    .isDataFlavorSupported(DataFlavor.stringFlavor);
 
             undoAction.setEnabled(enabled && editable && (lastActionSelected == Actions.CUT || lastActionSelected == Actions.PASTE));
             cutAction.setEnabled(enabled && editable && marked);
@@ -190,6 +182,10 @@ public class ContextMenuMouseListener extends MouseAdapter {
             pasteAction.setEnabled(enabled && editable && pasteAvailable);
             selectAllAction.setEnabled(enabled && nonempty);
 
+            if(this.popup == null) {
+                popup = new JPopupMenu();
+                generate_popup();
+            }
             int nx = e.getX();
 
             if (nx > 500) {
