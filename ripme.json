@@ -1,7 +1,7 @@
 {
-  "latestVersion": "2.1.202-1-5411b85",
-  "currentHash": "60c982050ee1bb96c9e97ef4afd862de04395b3ac59c1ca7b0396242ddfc6fd1",
+  "latestVersion": "2.1.203-1-fc958c6",
+  "currentHash": "9e6a639929b45e8da38667b0fcc5df7e65f7ba1c9b2677f3bd912d2b65b513c0",
   "changeList": [
-    "2.1.202-1-5411b85: Refactor BlueskyRipper to simplify GID extraction and improve file extension handling. The GID retrieval now directly matches the URL without exception handling, and the download method has been updated to ensure proper file naming and default extensions based on URL path analysis.", "2.1.202-1-5411b85: Built at 2026-03-17T00:00:10Z"
+    "2.1.203-1-fc958c6: Merge pull request #112 from Laziassdev/codex/fix-indexoutofboundsexception-in-history-class", "2.1.203-1-fc958c6: Built at 2026-04-11T14:07:56Z"
   ]
 }
