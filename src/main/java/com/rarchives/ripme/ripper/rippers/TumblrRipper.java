@@ -787,6 +787,13 @@ public class TumblrRipper extends AlbumRipper {
         return super.getCount();
     }
 
+    @Override
+    public int getDownloadedCount() {
+        // Keep UI progress tied to files actually completed by AlbumRipper to
+        // avoid over-reporting when max-download limit tracking is enabled.
+        return super.getDownloadedCount();
+    }
+
     private boolean isDefaultApiKeyInUse() {
         return lastRequestedApiKey == null || DEFAULT_API_KEYS.contains(lastRequestedApiKey);
     }
