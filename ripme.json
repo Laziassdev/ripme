@@ -1,7 +1,7 @@
 {
-  "latestVersion": "2.1.205-1-95dece0",
-  "currentHash": "d4117ebedacf7e845f40e24417c109036cfed70f9ea2525bb930f289ddf53e44",
+  "latestVersion": "2.1.206-1-12b0623",
+  "currentHash": "c642188681d8cb58e00639029f0f9c44128dbd3cc7a0e2400e61fd1480ddf4cf",
   "changeList": [
-    "2.1.205-1-95dece0: Merge pull request #114 from Laziassdev/codex/improve-history-recording-and-search", "2.1.205-1-95dece0: Built at 2026-04-11T14:26:19Z"
+    "2.1.206-1-12b0623: Merge pull request #115 from Laziassdev/codex/add-latest-download-column-to-history-tab", "2.1.206-1-12b0623: Built at 2026-04-11T16:00:44Z"
   ]
 }
