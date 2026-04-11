@@ -7,6 +7,7 @@ import java.io.InputStream;
 import java.io.OutputStream;
 import java.text.SimpleDateFormat;
 import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.Date;
 import java.util.List;
 
@@ -68,8 +69,18 @@ public class History {
         }
     }
     private String dateToHumanReadable(Date date) {
-        SimpleDateFormat sdf = new SimpleDateFormat("yyyy/MM/dd");
+        SimpleDateFormat sdf = new SimpleDateFormat("yyyy/MM/dd HH:mm:ss");
         return sdf.format(date);
+    }
+
+    public void moveToBottom(HistoryEntry entry) {
+        if (list.remove(entry)) {
+            list.add(entry);
+        }
+    }
+
+    public void sortByModifiedDateAscending() {
+        list.sort(Comparator.comparing(entry -> entry.modifiedDate));
     }
 
     public boolean containsURL(String url) {
