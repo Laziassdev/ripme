@@ -42,6 +42,7 @@ import javax.swing.event.DocumentListener;
 import javax.swing.event.ListDataEvent;
 import javax.swing.event.ListDataListener;
 import javax.swing.table.AbstractTableModel;
+import javax.swing.table.TableRowSorter;
 import javax.swing.text.*;
 
 import org.apache.logging.log4j.Level;
@@ -106,7 +107,9 @@ public final class MainWindow implements Runnable, RipStatusHandler {
     private static JPanel historyPanel;
     private static JTable historyTable;
     private static AbstractTableModel historyTableModel;
+    private static TableRowSorter<AbstractTableModel> historyTableSorter;
     private static JButton historyButtonRemove, historyButtonClear, historyButtonRerip;
+    private static JTextField historySearchField;
 
     // Queue
     public static JButton optionQueue;
@@ -191,6 +194,50 @@ public final class MainWindow implements Runnable, RipStatusHandler {
 
     private void updateQueue() {
         updateQueue(null);
+    }
+
+    private static void applyHistoryFilter() {
+        if (historyTableSorter == null || historySearchField == null) {
+            return;
+        }
+        String query = historySearchField.getText();
+        if (query == null || query.trim().isEmpty()) {
+            historyTableSorter.setRowFilter(null);
+            return;
+        }
+        historyTableSorter.setRowFilter(RowFilter.regexFilter("(?i)" + wildcardToRegex(query.trim())));
+    }
+
+    private static String wildcardToRegex(String wildcard) {
+        StringBuilder regex = new StringBuilder();
+        for (char c : wildcard.toCharArray()) {
+            switch (c) {
+            case '*':
+                regex.append(".*");
+                break;
+            case '?':
+                regex.append('.');
+                break;
+            case '\\':
+            case '.':
+            case '^':
+            case '$':
+            case '|':
+            case '(':
+            case ')':
+            case '[':
+            case ']':
+            case '{':
+            case '}':
+            case '+':
+                regex.append('\\').append(c);
+                break;
+            default:
+                regex.append(c);
+                break;
+            }
+        }
+        return regex.toString();
     }
 
     private void refreshActivePanel() {
@@ -771,7 +818,8 @@ public final class MainWindow implements Runnable, RipStatusHandler {
 
         historyTable = new JTable(historyTableModel);
         historyTable.addMouseListener(new HistoryMenuMouseListener());
-        historyTable.setAutoCreateRowSorter(true);
+        historyTableSorter = new TableRowSorter<>(historyTableModel);
+        historyTable.setRowSorter(historyTableSorter);
 
         for (int i = 0; i < historyTable.getColumnModel().getColumnCount(); i++) {
             int width = 130; // Default
@@ -790,12 +838,44 @@ public final class MainWindow implements Runnable, RipStatusHandler {
         }
 
         JScrollPane historyTableScrollPane = new JScrollPane(historyTable);
+        historySearchField = new JTextField(30);
+        historySearchField.getDocument().addDocumentListener(new DocumentListener() {
+            @Override
+            public void insertUpdate(DocumentEvent e) {
+                applyHistoryFilter();
+            }
+
+            @Override
+            public void removeUpdate(DocumentEvent e) {
+                applyHistoryFilter();
+            }
+
+            @Override
+            public void changedUpdate(DocumentEvent e) {
+                applyHistoryFilter();
+            }
+        });
+        JPanel historySearchPanel = new JPanel(new GridBagLayout());
+        GridBagConstraints historySearchGbc = new GridBagConstraints();
+        historySearchGbc.gridx = 0;
+        historySearchGbc.gridy = 0;
+        historySearchGbc.anchor = GridBagConstraints.WEST;
+        historySearchPanel.add(new JLabel("Search (*, ?)"), historySearchGbc);
+        historySearchGbc.gridx = 1;
+        historySearchGbc.weightx = 1;
+        historySearchGbc.fill = GridBagConstraints.HORIZONTAL;
+        historySearchGbc.insets = new Insets(0, 8, 0, 0);
+        historySearchPanel.add(historySearchField, historySearchGbc);
         historyButtonRemove = new JButton(Utils.getLocalizedString("remove"));
         historyButtonClear = new JButton(Utils.getLocalizedString("clear"));
         historyButtonRerip = new JButton(Utils.getLocalizedString("re-rip.checked"));
         gbc.gridx = 0;
         // History List Panel
         JPanel historyTablePanel = new JPanel(new GridBagLayout());
+        gbc.weighty = 0;
+        gbc.fill = GridBagConstraints.HORIZONTAL;
+        historyTablePanel.add(historySearchPanel, gbc);
+        gbc.gridy = 1;
         gbc.fill = GridBagConstraints.BOTH;
         gbc.weighty = 1;
         historyTablePanel.add(historyTableScrollPane, gbc);
@@ -1797,6 +1877,7 @@ public final class MainWindow implements Runnable, RipStatusHandler {
             try {
                 LOGGER.info(Utils.getLocalizedString("loading.history.from") + " " + historyFile.getCanonicalPath());
                 HISTORY.fromFile(historyFile.getCanonicalPath());
+                HISTORY.sortByModifiedDateAscending();
             } catch (IOException e) {
                 LOGGER.error("Failed to load history from file " + historyFile, e);
                 JOptionPane.showMessageDialog(null,
@@ -2205,6 +2286,7 @@ public final class MainWindow implements Runnable, RipStatusHandler {
                 entry = HISTORY.getEntryByURL(url);
                 entry.count += rsc.count;
                 entry.modifiedDate = new Date();
+                HISTORY.moveToBottom(entry);
                 if (entry.dir == null || entry.dir.isEmpty()) {
                     entry.dir = rsc.getDir();
                 }
@@ -2221,6 +2303,7 @@ public final class MainWindow implements Runnable, RipStatusHandler {
                 HISTORY.add(entry);
             }
             historyTableModel.fireTableDataChanged();
+            applyHistoryFilter();
             if (configPlaySound.isSelected()) {
                 Utils.playSound("camera.wav");
             }
