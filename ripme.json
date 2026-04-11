@@ -1,7 +1,7 @@
 {
-  "latestVersion": "2.1.204-1-db75cba",
-  "currentHash": "bfcd4f2d8f40e0b97c021b963f96991622149343c3ba5792f2235a7b6df43921",
+  "latestVersion": "2.1.205-1-95dece0",
+  "currentHash": "d4117ebedacf7e845f40e24417c109036cfed70f9ea2525bb930f289ddf53e44",
   "changeList": [
-    "2.1.204-1-db75cba: Merge pull request #113 from Laziassdev/codex/fix-download-count-calculation-in-ripper", "2.1.204-1-db75cba: Built at 2026-04-11T14:16:36Z"
+    "2.1.205-1-95dece0: Merge pull request #114 from Laziassdev/codex/improve-history-recording-and-search", "2.1.205-1-95dece0: Built at 2026-04-11T14:26:19Z"
   ]
 }
