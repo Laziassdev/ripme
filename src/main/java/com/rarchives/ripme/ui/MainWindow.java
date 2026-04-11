@@ -1390,9 +1390,23 @@ public final class MainWindow implements Runnable, RipStatusHandler {
 
         historyButtonRemove.addActionListener(event -> {
             int[] indices = historyTable.getSelectedRows();
-            for (int i = indices.length - 1; i >= 0; i--) {
-                int modelIndex = historyTable.convertRowIndexToModel(indices[i]);
-                HISTORY.remove(modelIndex);
+            if (indices.length == 0) {
+                return;
+            }
+
+            List<Integer> modelIndices = new ArrayList<>(indices.length);
+            for (int index : indices) {
+                if (index < historyTable.getRowCount()) {
+                    modelIndices.add(historyTable.convertRowIndexToModel(index));
+                }
+            }
+
+            modelIndices.sort(Collections.reverseOrder());
+
+            for (int modelIndex : modelIndices) {
+                if (modelIndex < HISTORY.toList().size()) {
+                    HISTORY.remove(modelIndex);
+                }
             }
             try {
                 historyTableModel.fireTableDataChanged();
