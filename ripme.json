@@ -1,7 +1,7 @@
 {
-  "latestVersion": "2.1.203-1-fc958c6",
-  "currentHash": "9e6a639929b45e8da38667b0fcc5df7e65f7ba1c9b2677f3bd912d2b65b513c0",
+  "latestVersion": "2.1.204-1-db75cba",
+  "currentHash": "bfcd4f2d8f40e0b97c021b963f96991622149343c3ba5792f2235a7b6df43921",
   "changeList": [
-    "2.1.203-1-fc958c6: Merge pull request #112 from Laziassdev/codex/fix-indexoutofboundsexception-in-history-class", "2.1.203-1-fc958c6: Built at 2026-04-11T14:07:56Z"
+    "2.1.204-1-db75cba: Merge pull request #113 from Laziassdev/codex/fix-download-count-calculation-in-ripper", "2.1.204-1-db75cba: Built at 2026-04-11T14:16:36Z"
   ]
 }
