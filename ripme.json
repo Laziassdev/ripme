@@ -1,7 +1,7 @@
 {
-  "latestVersion": "2.1.207-1-d1bb25d",
-  "currentHash": "d30d8a17f823f6a781fea0ce6e3273938d1d36e883d1274fc39452ecd2fb90a5",
+  "latestVersion": "2.1.208-1-fa22a06",
+  "currentHash": "09171be0902a5f67f3a9313ac10a3f8ba1a37fb58013b5ee5a76562e65959d29",
   "changeList": [
-    "2.1.207-1-d1bb25d: Merge pull request #117 from Laziassdev/codex/fix-check-all-and-check-none-functionality", "2.1.207-1-d1bb25d: Built at 2026-04-11T16:41:50Z"
+    "2.1.208-1-fa22a06: Merge pull request #116 from Laziassdev/dependabot/gradle/org.apache.logging.log4j-log4j-core-2.25.4", "2.1.208-1-fa22a06: Built at 2026-04-12T09:41:07Z"
   ]
 }
