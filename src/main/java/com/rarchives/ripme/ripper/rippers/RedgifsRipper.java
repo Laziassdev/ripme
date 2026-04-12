@@ -61,7 +61,7 @@ public class RedgifsRipper extends AbstractJSONRipper {
     private static final Pattern NICHES_PATTERN = Pattern
             .compile("^https?://[a-zA-Z0-9.]*redgifs\\.com/niches/([a-zA-Z0-9_.-]+).*$");
     private static final Pattern SINGLETON_PATTERN = Pattern
-            .compile("^https?://[a-zA-Z0-9.]*redgifs\\.com/(?:watch|ifr)/([a-zA-Z0-9_-]+).*$");
+            .compile("^https?://[a-zA-Z0-9.]*redgifs\\.com/(?:watch|ifr)/([a-zA-Z0-9_-]+)(?:[/?#].*)?$");
     private static final Pattern DIRECT_IMAGE_PATTERN = Pattern
             .compile("^https?://i\\.redgifs\\.com/i/([a-zA-Z0-9_-]+)(?:\\.[a-zA-Z0-9]+)?(?:\\?.*)?$");
     private static final Pattern ACCESS_TOKEN_PATTERN = Pattern
