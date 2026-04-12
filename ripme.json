@@ -1,7 +1,7 @@
 {
-  "latestVersion": "2.1.209-1-ea65729",
-  "currentHash": "696991b4e18c3266d1736a31b3a46de7fa4981c7154b4348715bc843ce5c3ccd",
+  "latestVersion": "2.1.210-1-d054358",
+  "currentHash": "b326d9b7b96521666ec0f0a381c95d8bc6061c618d47ff53854c7be361b6482c",
   "changeList": [
-    "2.1.209-1-ea65729: Merge pull request #118 from Laziassdev/codex/fix-right-click-options-in-history-tab", "2.1.209-1-ea65729: Built at 2026-04-12T09:51:33Z"
+    "2.1.210-1-d054358: Merge pull request #119 from Laziassdev/codex/review-regex-for-redos-vulnerabilities", "2.1.210-1-d054358: Built at 2026-04-12T09:57:24Z"
   ]
 }
