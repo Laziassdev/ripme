@@ -1,7 +1,7 @@
 {
-  "latestVersion": "2.1.208-1-fa22a06",
-  "currentHash": "09171be0902a5f67f3a9313ac10a3f8ba1a37fb58013b5ee5a76562e65959d29",
+  "latestVersion": "2.1.209-1-ea65729",
+  "currentHash": "696991b4e18c3266d1736a31b3a46de7fa4981c7154b4348715bc843ce5c3ccd",
   "changeList": [
-    "2.1.208-1-fa22a06: Merge pull request #116 from Laziassdev/dependabot/gradle/org.apache.logging.log4j-log4j-core-2.25.4", "2.1.208-1-fa22a06: Built at 2026-04-12T09:41:07Z"
+    "2.1.209-1-ea65729: Merge pull request #118 from Laziassdev/codex/fix-right-click-options-in-history-tab", "2.1.209-1-ea65729: Built at 2026-04-12T09:51:33Z"
   ]
 }
