@@ -21,7 +21,7 @@ class HistoryMenuMouseListener extends MouseAdapter {
             @Override
             public void actionPerformed(ActionEvent ae) {
                 for (int row = 0; row < tableComponent.getRowCount(); row++) {
-                    tableComponent.setValueAt(true, row, 4);
+                    tableComponent.setValueAt(true, row, 5);
                 }
             }
         };
@@ -31,7 +31,7 @@ class HistoryMenuMouseListener extends MouseAdapter {
             @Override
             public void actionPerformed(ActionEvent ae) {
                 for (int row = 0; row < tableComponent.getRowCount(); row++) {
-                    tableComponent.setValueAt(false, row, 4);
+                    tableComponent.setValueAt(false, row, 5);
                 }
             }
         };
@@ -43,7 +43,7 @@ class HistoryMenuMouseListener extends MouseAdapter {
             @Override
             public void actionPerformed(ActionEvent ae) {
                 for (int row : tableComponent.getSelectedRows()) {
-                    tableComponent.setValueAt(true, row, 4);
+                    tableComponent.setValueAt(true, row, 5);
                 }
             }
         };
@@ -53,7 +53,7 @@ class HistoryMenuMouseListener extends MouseAdapter {
             @Override
             public void actionPerformed(ActionEvent ae) {
                 for (int row : tableComponent.getSelectedRows()) {
-                    tableComponent.setValueAt(false, row, 4);
+                    tableComponent.setValueAt(false, row, 5);
                 }
             }
         };
