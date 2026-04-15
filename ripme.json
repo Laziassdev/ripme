@@ -1,7 +1,8 @@
 {
-  "latestVersion": "2.1.211-1-5470e3a",
-  "currentHash": "b7ead9f91616e5fd04fe3a0c0a84f9af7ca34749c87d39379d87a3dd73f23d3e",
+  "latestVersion": "2.1.212-1-63ded91",
+  "currentHash": "59a561df1b7d79904d6c3374157b024f6cf537af27404de82193a2f58f510344",
   "changeList": [
-    "2.1.211-1-5470e3a: Merge pull request #120 from Laziassdev/codex/fix-text-wrapping-for-download-urls", "2.1.211-1-5470e3a: Built at 2026-04-15T07:07:10Z"
+    "2.1.212-1-63ded91: PR #121 - Enhance updater changelog entries with pull request context (https://github.com/Laziassdev/ripme/pull/121) — ### Motivation - The updater `ripme.json` changelog currently uses terse commit subjects which often omit useful PR metadata for users.",
+    "2.1.212-1-63ded91: Built at 2026-04-15T08:19:49Z"
   ]
 }
