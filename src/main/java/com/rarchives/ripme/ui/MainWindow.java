@@ -379,15 +379,27 @@ public final class MainWindow implements Runnable, RipStatusHandler {
     }
 
     private static String addSoftWrapPoints(String text) {
-        StringBuilder wrapped = new StringBuilder(text.length() + (text.length() / 4));
+        final int maxUnbrokenRun = 20;
+        StringBuilder wrapped = new StringBuilder(text.length() + (text.length() / 3));
+        int unbrokenRunLength = 0;
         for (int i = 0; i < text.length(); i++) {
             char c = text.charAt(i);
             wrapped.append(c);
-            if (c == '/' || c == '?' || c == '&' || c == '=' || c == '#' || c == '-' || c == '_' || c == '.') {
+            unbrokenRunLength++;
+            if (isNaturalWrapPoint(c)) {
                 wrapped.append("<wbr>");
+                unbrokenRunLength = 0;
+            } else if (unbrokenRunLength >= maxUnbrokenRun) {
+                wrapped.append("<wbr>");
+                unbrokenRunLength = 0;
             }
         }
         return wrapped.toString();
+    }
+
+    private static boolean isNaturalWrapPoint(char c) {
+        return c == '/' || c == '?' || c == '&' || c == '=' || c == '#' || c == '-' || c == '_' || c == '.'
+                || c == ':' || c == '%' || c == '+' || c == '~';
     }
 
     private void addPausedUrl(String url) {
