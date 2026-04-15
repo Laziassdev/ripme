@@ -1,8 +1,8 @@
 {
-  "latestVersion": "2.1.212-1-63ded91",
-  "currentHash": "59a561df1b7d79904d6c3374157b024f6cf537af27404de82193a2f58f510344",
+  "latestVersion": "2.1.213-1-70c6f27",
+  "currentHash": "3f5885d1c70aa9cab886f6390c75c876989035d6db33121c1e54e5c9166ef8c0",
   "changeList": [
-    "2.1.212-1-63ded91: PR #121 - Enhance updater changelog entries with pull request context (https://github.com/Laziassdev/ripme/pull/121) — ### Motivation - The updater `ripme.json` changelog currently uses terse commit subjects which often omit useful PR metadata for users.",
-    "2.1.212-1-63ded91: Built at 2026-04-15T08:19:49Z"
+    "2.1.213-1-70c6f27: PR #122 - Improve URL wrapping to prevent window expansion (https://github.com/Laziassdev/ripme/pull/122) — ### Motivation - Long URLs with few natural separators were causing `JLabel` contents to expand the UI to the full monitor width.",
+    "2.1.213-1-70c6f27: Built at 2026-04-15T18:16:45Z"
   ]
 }
