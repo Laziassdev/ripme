@@ -264,8 +264,7 @@ public final class MainWindow implements Runnable, RipStatusHandler {
                     rowGbc.fill = GridBagConstraints.HORIZONTAL;
                     rowGbc.weightx = 1;
                     String urlText = ripperEntry.getURL().toString();
-                    JLabel urlLabel = new JLabel("<html><body style='width: 280px; word-wrap: break-word'>"
-                            + htmlEscape(urlText) + "</body></html>");
+                    JLabel urlLabel = new JLabel(htmlWithWrap(urlText, 280));
                     urlLabel.setToolTipText(urlText);
                     rowPanel.add(urlLabel, rowGbc);
 
@@ -302,9 +301,9 @@ public final class MainWindow implements Runnable, RipStatusHandler {
                         rowGbc.gridy = 1;
                         rowGbc.gridwidth = 5;
                         rowGbc.insets = new Insets(4, 0, 0, 0);
-                        JLabel currentItemLabel = new JLabel(
+                        JLabel currentItemLabel = new JLabel(htmlWithWrap(
                                 String.format("%s %s", Utils.getLocalizedString("active.current_file"),
-                                        entry.currentItem));
+                                        entry.currentItem), 600));
                         currentItemLabel
                                 .setFont(currentItemLabel.getFont().deriveFont(Font.ITALIC,
                                         currentItemLabel.getFont().getSize2D() - 1f));
@@ -321,8 +320,7 @@ public final class MainWindow implements Runnable, RipStatusHandler {
                 }
                 for (String pausedUrl : urlsCopy) {
                     JPanel pausedRow = new JPanel(new FlowLayout(FlowLayout.LEFT));
-                    JLabel pausedUrlLabel = new JLabel("<html><body style='width: 280px; word-wrap: break-word'>"
-                            + htmlEscape(pausedUrl) + "</body></html>");
+                    JLabel pausedUrlLabel = new JLabel(htmlWithWrap(pausedUrl, 280));
                     pausedUrlLabel.setToolTipText(pausedUrl);
                     pausedRow.add(pausedUrlLabel);
                     JButton resumeButton = new JButton(Utils.getLocalizedString("active.resume"));
@@ -372,6 +370,24 @@ public final class MainWindow implements Runnable, RipStatusHandler {
             return "";
         }
         return s.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;").replace("\"", "&quot;");
+    }
+
+    private static String htmlWithWrap(String text, int widthPx) {
+        return "<html><body style='width: " + widthPx + "px;'>"
+                + addSoftWrapPoints(htmlEscape(text))
+                + "</body></html>";
+    }
+
+    private static String addSoftWrapPoints(String text) {
+        StringBuilder wrapped = new StringBuilder(text.length() + (text.length() / 4));
+        for (int i = 0; i < text.length(); i++) {
+            char c = text.charAt(i);
+            wrapped.append(c);
+            if (c == '/' || c == '?' || c == '&' || c == '=' || c == '#' || c == '-' || c == '_' || c == '.') {
+                wrapped.append("<wbr>");
+            }
+        }
+        return wrapped.toString();
     }
 
     private void addPausedUrl(String url) {
