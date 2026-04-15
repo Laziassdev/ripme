@@ -16,6 +16,7 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: write
+      pull-requests: read
 
     steps:
       - uses: actions/checkout@v4
@@ -122,28 +123,64 @@ jobs:
           file="ripme-${version}.jar"
           hash=$(sha256sum dist/$file | awk '{ print $1 }')
           timestamp=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
+          repo="${GITHUB_REPOSITORY:-laziassdev/ripme}"
+          token="${GITHUB_TOKEN:-${{ secrets.GITHUB_TOKEN }}}"
 
-          # Try to get the latest tag, fallback to initial commit if none exist
-          last_tag=$(git describe --tags --abbrev=0 2>/dev/null || echo "")
-
-          if [[ -n "$last_tag" ]]; then
-            commit_messages=$(git log -n 10 --pretty=format:"%s" | sed 's/"/\\"/g')
+          # Build changelog entries from the latest commits and enrich PR merges with PR details.
+          mapfile -t commits < <(git log -n 10 --pretty=format:'%H%x09%s')
+          change_entries=()
+          if [[ ${#commits[@]} -eq 0 ]]; then
+            change_entries+=("${version}: Some work done to improve for use case.")
           else
-            commit_messages="Some work done to improve for use case."
+            for commit in "${commits[@]}"; do
+              subject="${commit#*$'\t'}"
+
+              pr_number=""
+              if [[ "$subject" =~ \#([0-9]+) ]]; then
+                pr_number="${BASH_REMATCH[1]}"
+              fi
+
+              if [[ -n "$pr_number" ]]; then
+                pr_api_url="https://api.github.com/repos/${repo}/pulls/${pr_number}"
+                if [[ -n "$token" ]]; then
+                  pr_json=$(curl -fsSL \
+                    -H "Accept: application/vnd.github+json" \
+                    -H "Authorization: Bearer ${token}" \
+                    "$pr_api_url" 2>/dev/null || true)
+                else
+                  pr_json=$(curl -fsSL \
+                    -H "Accept: application/vnd.github+json" \
+                    "$pr_api_url" 2>/dev/null || true)
+                fi
+
+                if [[ -n "$pr_json" && "$(jq -r '.number // empty' <<< "$pr_json")" == "$pr_number" ]]; then
+                  pr_title=$(jq -r '.title // ""' <<< "$pr_json")
+                  pr_url=$(jq -r '.html_url // ""' <<< "$pr_json")
+                  pr_body=$(jq -r '.body // ""' <<< "$pr_json")
+                  pr_summary=$(printf '%s' "$pr_body" | sed -e 's/\r//g' | awk 'NF {print; if (++count==2) exit}')
+                  pr_summary=$(printf '%s' "$pr_summary" | tr '\n' ' ' | sed 's/[[:space:]]\+/ /g; s/^ //; s/ $//')
+                  pr_summary="${pr_summary:0:220}"
+
+                  if [[ -n "$pr_summary" ]]; then
+                    change_entries+=("${version}: PR #${pr_number} - ${pr_title} (${pr_url}) — ${pr_summary}")
+                  else
+                    change_entries+=("${version}: PR #${pr_number} - ${pr_title} (${pr_url})")
+                  fi
+                  continue
+                fi
+              fi
+
+              change_entries+=("${version}: ${subject}")
+            done
           fi
+          change_entries+=("${version}: Built at ${timestamp}")
 
-          # Format the changeList as a JSON array of strings
-          changes_json=$(printf '%s\n' "$commit_messages" | sed "s/^/\"${version}: /; s/$/\",/" | sed '$ s/,$//')
-          changes_json="${changes_json}, \"${version}: Built at ${timestamp}\""
-
-          # Write ripme.json
-          echo "{
-            \"latestVersion\": \"${version}\",
-            \"currentHash\": \"${hash}\",
-            \"changeList\": [
-              ${changes_json}
-            ]
-          }" > ripme.json
+          # Write ripme.json with proper JSON escaping.
+          jq -n \
+            --arg latestVersion "$version" \
+            --arg currentHash "$hash" \
+            --argjson changeList "$(printf '%s\n' "${change_entries[@]}" | jq -R . | jq -s .)" \
+            '{latestVersion: $latestVersion, currentHash: $currentHash, changeList: $changeList}' > ripme.json
           echo "Generated ripme.json content:"
           cat ripme.json
         if: github.event_name != 'pull_request'
