@@ -218,7 +218,9 @@ public class RedgifsRipper extends AbstractJSONRipper {
     public void downloadURL(URL url, int index) {
          // redgifs is easy to trigger rate limit, so be a little cautious
         sleep(3000);
-        addURLToDownload(url, getPrefix(index));
+        // Redgifs media hosts increasingly enforce hotlink checks and can return
+        // 403 when the request does not include a Redgifs referer.
+        addURLToDownload(url, getPrefix(index), "", "https://www.redgifs.com/", null);
     }
 
     @Override
