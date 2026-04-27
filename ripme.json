@@ -1,8 +1,8 @@
 {
-  "latestVersion": "2.1.214-1-a09b2d1",
-  "currentHash": "64ac6220d82f6d7b0429211945be9254de91b0cdbb9ea62e07e7da7dbb1c40ce",
+  "latestVersion": "2.1.215-1-5987fbf",
+  "currentHash": "de082566f404070c605f0699d7673158191c5213fa2b570252dca934f5c0fd28",
   "changeList": [
-    "2.1.214-1-a09b2d1: PR #123 - Set Referer for Redgifs media downloads to reduce 403s (https://github.com/Laziassdev/ripme/pull/123) — ### Motivation - Redgifs media endpoints are returning non-retriable `403` errors when requests lack a Redgifs referer, indicating stricter hotlink checks by the CDN.",
-    "2.1.214-1-a09b2d1: Built at 2026-04-27T09:46:44Z"
+    "2.1.215-1-5987fbf: PR #124 - Merge Coomer/OnlyFans outputs into originating Reddit rip folder (https://github.com/Laziassdev/ripme/pull/124) — ### Motivation - When a Reddit rip spawns a Coomer/OnlyFans rip the downloaded files were left in a separate folder which caused duplicate downstream processing (for example duplicate LoRA generation).",
+    "2.1.215-1-5987fbf: Built at 2026-04-27T11:10:58Z"
   ]
 }
