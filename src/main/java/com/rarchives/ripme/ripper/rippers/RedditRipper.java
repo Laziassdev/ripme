@@ -22,7 +22,11 @@ import java.net.URL;
 import java.net.URLDecoder;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
+import java.nio.file.FileVisitResult;
 import java.nio.file.Path;
+import java.nio.file.SimpleFileVisitor;
+import java.nio.file.StandardCopyOption;
+import java.nio.file.attribute.BasicFileAttributes;
 import java.util.Date;
 import java.util.HashSet;
 import java.util.List;
@@ -757,10 +761,59 @@ public class RedditRipper extends AlbumRipper {
             ripper.setObserver(getObserver());
             ripper.setup();
             ripper.run();
+            mergeCoomerOutputIntoRedditFolder(ripper, coomerUrl);
         } catch (Exception e) {
             logger.warn("Failed to rip Coomer profile {} from OnlyFans link {}: {}", coomerUrl, originalURL, e.getMessage());
         }
         return true;
+    }
+
+    private void mergeCoomerOutputIntoRedditFolder(AbstractRipper coomerRipper, URL coomerUrl) {
+        if (coomerRipper == null || coomerRipper.getWorkingDir() == null || this.workingDir == null) {
+            return;
+        }
+        Path coomerOutputDir = coomerRipper.getWorkingDir().toPath();
+        Path redditOutputDir = this.workingDir.toPath();
+        if (coomerOutputDir.equals(redditOutputDir)) {
+            return;
+        }
+        boolean overwrite = Utils.getConfigBoolean("file.overwrite", false);
+        try {
+            Files.walkFileTree(coomerOutputDir, new SimpleFileVisitor<Path>() {
+                @Override
+                public FileVisitResult visitFile(Path file, BasicFileAttributes attrs) throws IOException {
+                    Path relativePath = coomerOutputDir.relativize(file);
+                    Path targetPath = redditOutputDir.resolve(relativePath);
+                    if (targetPath.getParent() != null) {
+                        Files.createDirectories(targetPath.getParent());
+                    }
+
+                    if (overwrite) {
+                        Files.move(file, targetPath, StandardCopyOption.REPLACE_EXISTING);
+                    } else if (Files.exists(targetPath)) {
+                        logger.debug("Skipping Coomer file already present in Reddit output: {}", targetPath);
+                        Files.delete(file);
+                    } else {
+                        Files.move(file, targetPath);
+                    }
+                    return FileVisitResult.CONTINUE;
+                }
+
+                @Override
+                public FileVisitResult postVisitDirectory(Path dir, IOException exc) throws IOException {
+                    if (exc != null) {
+                        throw exc;
+                    }
+                    if (!dir.equals(redditOutputDir)) {
+                        Files.deleteIfExists(dir);
+                    }
+                    return FileVisitResult.CONTINUE;
+                }
+            });
+            logger.info("Merged Coomer output {} into Reddit folder {}", coomerUrl, Utils.removeCWD(redditOutputDir));
+        } catch (IOException e) {
+            logger.warn("Unable to merge Coomer output from {} into {}: {}", coomerUrl, redditOutputDir, e.getMessage());
+        }
     }
 
     private void handleGallery(JSONArray data, JSONObject metadata, String id, String title){
