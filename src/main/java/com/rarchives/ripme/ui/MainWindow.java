@@ -81,6 +81,7 @@ public final class MainWindow implements Runnable, RipStatusHandler {
 
     /* not static! */
     private boolean isRipping = false; // Flag to indicate if we're ripping something
+    private volatile boolean queuePaused = false;
     private final Map<AbstractRipper, ActiveDownloadEntry> activeRippers = new ConcurrentHashMap<>();
     private final Set<String> activeDomains = Collections.newSetFromMap(new ConcurrentHashMap<>());
     private final ExecutorService ripExecutor = Executors.newCachedThreadPool();
@@ -120,7 +121,7 @@ public final class MainWindow implements Runnable, RipStatusHandler {
     private static DefaultListModel<Object> queueListModel;
     private static JList<Object> queueList;
     private static QueueMenuMouseListener queueMenuMouseListener;
-    private static JButton queueButtonTop, queueButtonUp, queueButtonDown;
+    private static JButton queueButtonTop, queueButtonUp, queueButtonDown, queuePauseButton;
 
     // Active downloads
     private static JButton optionActive;
@@ -197,6 +198,20 @@ public final class MainWindow implements Runnable, RipStatusHandler {
 
     private void updateQueue() {
         updateQueue(null);
+    }
+
+    private void updateQueuePauseButtonLabel() {
+        if (queuePauseButton != null) {
+            queuePauseButton.setText(Utils.getLocalizedString(queuePaused ? "queue.resume" : "queue.pause"));
+        }
+    }
+
+    synchronized void setQueuePaused(boolean paused) {
+        queuePaused = paused;
+        updateQueuePauseButtonLabel();
+        if (!queuePaused) {
+            ripNextAlbum();
+        }
     }
 
     private static void applyHistoryFilter() {
@@ -641,6 +656,8 @@ public final class MainWindow implements Runnable, RipStatusHandler {
         queueListModel = new DefaultListModel<>();
         queueList = new JList<>(queueListModel);
         optionQueue = new JButton(Utils.getLocalizedString("queue"));
+        queuePauseButton = new JButton();
+        updateQueuePauseButtonLabel();
         stopButton = new JButton();
         pauseButton = new JButton();
         statusProgress = new JProgressBar();
@@ -1126,6 +1143,11 @@ public final class MainWindow implements Runnable, RipStatusHandler {
         queueButtonPanel.add(queueButtonUp, buttonGbc);
         buttonGbc.gridy = 2;
         queueButtonPanel.add(queueButtonDown, buttonGbc);
+        buttonGbc.gridy = 3;
+        queuePauseButton = new JButton();
+        updateQueuePauseButtonLabel();
+        queuePauseButton.addActionListener(e -> setQueuePaused(!queuePaused));
+        queueButtonPanel.add(queuePauseButton, buttonGbc);
 
         queueGbc.gridx = 1;
         queueGbc.weightx = 0;
@@ -2046,6 +2068,12 @@ public final class MainWindow implements Runnable, RipStatusHandler {
     }
 
     synchronized void ripNextAlbum() {
+        if (queuePaused) {
+            LOGGER.debug("Queue is paused; no queued items will be started");
+            isRipping = !activeDomains.isEmpty();
+            return;
+        }
+
         // Save current state of queue to configuration.
         Utils.setConfigList("queue", queueListModel.elements());
 
@@ -2232,6 +2260,10 @@ public final class MainWindow implements Runnable, RipStatusHandler {
 
     Set<String> getActiveDomains() {
         return activeDomains;
+    }
+
+    boolean isQueuePaused() {
+        return queuePaused;
     }
 
     private static final class RipperRun {
