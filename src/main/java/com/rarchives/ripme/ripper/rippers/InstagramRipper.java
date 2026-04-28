@@ -37,6 +37,7 @@ import java.sql.Statement;
 public class InstagramRipper extends AbstractJSONRipper {
     private static final Logger logger = LogManager.getLogger(InstagramRipper.class);
     private static final int WAIT_TIME = 2000;
+    private static final int RATE_LIMIT_WAIT_TIME = 32000;
     private static final int TIMEOUT = 20000;
     private static final int MAX_RATE_LIMIT_RETRIES = 6;
     private String csrftoken = null;
@@ -419,7 +420,8 @@ public class InstagramRipper extends AbstractJSONRipper {
                 lastException = e;
 
                 boolean isRateLimit = e instanceof HttpStatusException && ((HttpStatusException) e).getStatusCode() == 429;
-                long waitMillis = WAIT_TIME * (1L << (attempt - 1));
+                long initialWait = isRateLimit ? RATE_LIMIT_WAIT_TIME : WAIT_TIME;
+                long waitMillis = initialWait * (1L << (attempt - 1));
 
                 if (attempt < MAX_RATE_LIMIT_RETRIES && (isRateLimit || !(e instanceof HttpStatusException))) {
                     if (isRateLimit) {
