@@ -511,7 +511,36 @@ public final class MainWindow implements Runnable, RipStatusHandler {
     }
 
     public static void addUrlToQueue(String url) {
-        queueListModel.addElement(url);
+        queueListModel.addElement(normalizeQueueUrl(url));
+    }
+
+    static String normalizeQueueUrl(String rawUrl) {
+        if (rawUrl == null) {
+            return null;
+        }
+        String trimmed = rawUrl.trim();
+        if (trimmed.isEmpty()) {
+            return trimmed;
+        }
+        try {
+            String candidate = trimmed.startsWith("http://") || trimmed.startsWith("https://")
+                    ? trimmed
+                    : "http://" + trimmed;
+            URL parsed = new URI(candidate).toURL();
+            String host = parsed.getHost().toLowerCase(Locale.ROOT);
+            if (host.equals("instagram.com") || host.equals("www.instagram.com")) {
+                String path = parsed.getPath();
+                while (path.endsWith("/") && path.length() > 1) {
+                    path = path.substring(0, path.length() - 1);
+                }
+                URL sanitized = new URI(parsed.getProtocol(), parsed.getUserInfo(), parsed.getHost(), parsed.getPort(),
+                        path, null, null).toURL();
+                return sanitized.toExternalForm();
+            }
+        } catch (URISyntaxException | MalformedURLException ignored) {
+            // Fall back to original input for any unparsable values.
+        }
+        return trimmed;
     }
 
     public MainWindow() throws IOException {
@@ -2200,7 +2229,7 @@ public final class MainWindow implements Runnable, RipStatusHandler {
         }
 
         public void actionPerformed(ActionEvent event) {
-            String url = ripTextfield.getText();
+            String url = normalizeQueueUrl(ripTextfield.getText());
             boolean url_not_empty = !url.equals("");
             if (!queueListModel.contains(url) && url_not_empty) {
                 // Check if we're ripping a range of urls
@@ -2211,7 +2240,7 @@ public final class MainWindow implements Runnable, RipStatusHandler {
                         int rangeStart = Integer.parseInt(rangeToParse.split("-")[0]);
                         int rangeEnd = Integer.parseInt(rangeToParse.split("-")[1]);
                         for (int i = rangeStart; i < rangeEnd + 1; i++) {
-                            String realURL = url.replaceAll("\\{\\S*\\}", Integer.toString(i));
+                            String realURL = normalizeQueueUrl(url.replaceAll("\\{\\S*\\}", Integer.toString(i)));
                             if (mainWindow.canRip(realURL)) {
                                 queueListModel.addElement(realURL);
                                 ripTextfield.setText("");
