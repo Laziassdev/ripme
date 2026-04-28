@@ -30,6 +30,12 @@ public class MainWindowQueueUrlNormalizationTest {
         assertEquals(
                 "https://example.com/post?id=42",
                 MainWindow.normalizeQueueUrl("https://example.com/post?id=42&utm_source=twitter&fbclid=abc"));
+        assertEquals(
+                "https://example.com/post?id=42",
+                MainWindow.normalizeQueueUrl("https://example.com/post?id=42&amp;utm_source=twitter&amp;fbclid=abc"));
+        assertEquals(
+                "https://example.com/post?id=42",
+                MainWindow.normalizeQueueUrl("https://example.com/post?id=42&utm%5Fsource=twitter"));
     }
 
     @Test
