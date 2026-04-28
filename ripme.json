@@ -1,8 +1,8 @@
 {
-  "latestVersion": "2.1.220-1-c49e76a",
-  "currentHash": "d213c492969167b3177ab6e22a83900469762598de1ae9ebb715c26a2cfa67b0",
+  "latestVersion": "2.1.219-1-a3dd26c",
+  "currentHash": "e109e94a91594daa19eb932f95472bf87f71a2868a2cabc32205000b719e6992",
   "changeList": [
-    "2.1.220-1-c49e76a: PR #129 - Increase Instagram rate-limit retry initial delay to 32000 ms (https://github.com/Laziassdev/ripme/pull/129) — ### Motivation - Instagram HTTP 429 (rate-limited) responses were being retried from a small base delay and empirically require a much longer initial wait, so start rate-limit backoff at 32000 ms to reduce pointless rapi",
-    "2.1.220-1-c49e76a: Built at 2026-04-28T21:22:14Z"
+    "2.1.219-1-a3dd26c: PR #128 - Add queue pause toggle to prevent starting new queued rips (https://github.com/Laziassdev/ripme/pull/128) — ### Motivation - Provide a way to pause the dispatching of queued downloads so no new rips are started while performing updates or maintenance.",
+    "2.1.219-1-a3dd26c: Built at 2026-04-28T20:53:20Z"
   ]
 }
