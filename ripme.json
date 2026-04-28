@@ -1,8 +1,8 @@
 {
-  "latestVersion": "2.1.217-1-64591f1",
-  "currentHash": "b228e4a88f64ecac3cece0d48abaf4e038f3cd70528692df6904cd5f845bee7e",
+  "latestVersion": "2.1.218-1-f104614",
+  "currentHash": "dd598d74673df1e2c41ba5e36909b699e0b0d42efbbfd096dc48c8d1255cc20e",
   "changeList": [
-    "2.1.217-1-64591f1: PR #126 - Normalize tracked URLs in queue/history and merge history duplicates (https://github.com/Laziassdev/ripme/pull/126) — ### Motivation - Avoid duplicate queue/history entries caused by common tracking query parameters and preserve accurate download totals across runs.",
-    "2.1.217-1-64591f1: Built at 2026-04-28T20:37:58Z"
+    "2.1.218-1-f104614: PR #127 - Normalize HTML-encoded and percent-encoded tracking params in queue/history URLs (https://github.com/Laziassdev/ripme/pull/127) — ### Motivation - Links copied from HTML or other sources could include encoded ampersands (`&amp;`) or percent-encoded query keys which prevented the app from stripping tracking parameters, causing tracking params to app",
+    "2.1.218-1-f104614: Built at 2026-04-28T20:49:37Z"
   ]
 }
