@@ -1,8 +1,8 @@
 {
-  "latestVersion": "2.1.218-1-f104614",
-  "currentHash": "dd598d74673df1e2c41ba5e36909b699e0b0d42efbbfd096dc48c8d1255cc20e",
+  "latestVersion": "2.1.219-1-a3dd26c",
+  "currentHash": "e109e94a91594daa19eb932f95472bf87f71a2868a2cabc32205000b719e6992",
   "changeList": [
-    "2.1.218-1-f104614: PR #127 - Normalize HTML-encoded and percent-encoded tracking params in queue/history URLs (https://github.com/Laziassdev/ripme/pull/127) — ### Motivation - Links copied from HTML or other sources could include encoded ampersands (`&amp;`) or percent-encoded query keys which prevented the app from stripping tracking parameters, causing tracking params to app",
-    "2.1.218-1-f104614: Built at 2026-04-28T20:49:37Z"
+    "2.1.219-1-a3dd26c: PR #128 - Add queue pause toggle to prevent starting new queued rips (https://github.com/Laziassdev/ripme/pull/128) — ### Motivation - Provide a way to pause the dispatching of queued downloads so no new rips are started while performing updates or maintenance.",
+    "2.1.219-1-a3dd26c: Built at 2026-04-28T20:53:20Z"
   ]
 }
