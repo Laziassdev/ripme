@@ -9,7 +9,10 @@ import java.text.SimpleDateFormat;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.Date;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
+import java.util.function.Function;
 
 import org.apache.commons.io.IOUtils;
 import org.json.JSONArray;
@@ -128,6 +131,39 @@ public class History {
             entry.url = item;
             list.add(entry);
         }
+    }
+
+    public void normalizeAndMergeUrls(Function<String, String> normalizer) {
+        Map<String, HistoryEntry> merged = new LinkedHashMap<>();
+        for (HistoryEntry entry : list) {
+            String normalizedUrl = normalizer.apply(entry.url);
+            if (normalizedUrl == null || normalizedUrl.isEmpty()) {
+                continue;
+            }
+            entry.url = normalizedUrl;
+            HistoryEntry existing = merged.get(normalizedUrl);
+            if (existing == null) {
+                merged.put(normalizedUrl, entry);
+                continue;
+            }
+            existing.count += entry.count;
+            existing.latestCount += entry.latestCount;
+            existing.selected = existing.selected || entry.selected;
+            if (existing.startDate.after(entry.startDate)) {
+                existing.startDate = entry.startDate;
+            }
+            if (existing.modifiedDate.before(entry.modifiedDate)) {
+                existing.modifiedDate = entry.modifiedDate;
+            }
+            if ((existing.title == null || existing.title.isEmpty()) && entry.title != null && !entry.title.isEmpty()) {
+                existing.title = entry.title;
+            }
+            if ((existing.dir == null || existing.dir.isEmpty()) && entry.dir != null && !entry.dir.isEmpty()) {
+                existing.dir = entry.dir;
+            }
+        }
+        list.clear();
+        list.addAll(merged.values());
     }
 
     private JSONArray toJSON() {

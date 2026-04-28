@@ -26,6 +26,13 @@ public class MainWindowQueueUrlNormalizationTest {
     }
 
     @Test
+    public void stripsCommonTrackingParametersForNonInstagramUrls() {
+        assertEquals(
+                "https://example.com/post?id=42",
+                MainWindow.normalizeQueueUrl("https://example.com/post?id=42&utm_source=twitter&fbclid=abc"));
+    }
+
+    @Test
     public void addUrlToQueueStoresNormalizedInstagramUrl() throws IOException {
         MainWindow mainWindow = new MainWindow(true);
         MainWindow.getQueueListModel().clear();
@@ -33,5 +40,17 @@ public class MainWindowQueueUrlNormalizationTest {
         MainWindow.addUrlToQueue("https://www.instagram.com/beccapoppyhaigh/?g=5");
 
         assertEquals("https://www.instagram.com/beccapoppyhaigh", MainWindow.getQueueListModel().get(0));
+    }
+
+    @Test
+    public void addUrlToQueueDeduplicatesEquivalentUrls() throws IOException {
+        MainWindow mainWindow = new MainWindow(true);
+        MainWindow.getQueueListModel().clear();
+
+        MainWindow.addUrlToQueue("https://example.com/post?id=42&utm_source=twitter");
+        MainWindow.addUrlToQueue("https://example.com/post?id=42");
+
+        assertEquals(1, MainWindow.getQueueListModel().size());
+        assertEquals("https://example.com/post?id=42", MainWindow.getQueueListModel().get(0));
     }
 }

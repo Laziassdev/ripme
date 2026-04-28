@@ -23,6 +23,7 @@ import java.util.Date;
 import java.util.List;
 import java.util.Arrays;
 import java.util.HashSet;
+import java.util.LinkedHashMap;
 import java.util.Locale;
 import java.util.Set;
 import java.util.Map;
@@ -511,7 +512,11 @@ public final class MainWindow implements Runnable, RipStatusHandler {
     }
 
     public static void addUrlToQueue(String url) {
-        queueListModel.addElement(normalizeQueueUrl(url));
+        String normalized = normalizeQueueUrl(url);
+        if (normalized == null || normalized.isEmpty() || queueListModel.contains(normalized)) {
+            return;
+        }
+        queueListModel.addElement(normalized);
     }
 
     static String normalizeQueueUrl(String rawUrl) {
@@ -537,10 +542,59 @@ public final class MainWindow implements Runnable, RipStatusHandler {
                         path, null, null).toURL();
                 return sanitized.toExternalForm();
             }
+            String strippedQuery = stripTrackingQueryParameters(parsed.getQuery());
+            if ((strippedQuery == null && parsed.getQuery() == null) || parsed.getQuery().equals(strippedQuery)) {
+                return trimmed;
+            }
+            URL sanitized = new URI(parsed.getProtocol(), parsed.getUserInfo(), parsed.getHost(), parsed.getPort(),
+                    parsed.getPath(), strippedQuery, null).toURL();
+            return sanitized.toExternalForm();
         } catch (URISyntaxException | MalformedURLException ignored) {
             // Fall back to original input for any unparsable values.
         }
         return trimmed;
+    }
+
+    private static String stripTrackingQueryParameters(String query) {
+        if (query == null || query.isEmpty()) {
+            return null;
+        }
+
+        Set<String> trackingKeys = new HashSet<>(Arrays.asList(
+                "fbclid", "gclid", "dclid", "yclid", "mc_cid", "mc_eid", "igshid", "ref", "ref_src"));
+        StringBuilder out = new StringBuilder();
+        for (String pair : query.split("&")) {
+            if (pair == null || pair.isEmpty()) {
+                continue;
+            }
+            int equalsIdx = pair.indexOf('=');
+            String key = equalsIdx >= 0 ? pair.substring(0, equalsIdx) : pair;
+            String loweredKey = key.toLowerCase(Locale.ROOT);
+            if (loweredKey.startsWith("utm_") || trackingKeys.contains(loweredKey)) {
+                continue;
+            }
+            if (out.length() > 0) {
+                out.append("&");
+            }
+            out.append(pair);
+        }
+        return out.length() == 0 ? null : out.toString();
+    }
+
+    private void normalizeAndDeduplicateQueue() {
+        LinkedHashMap<String, Object> normalized = new LinkedHashMap<>();
+        for (int i = 0; i < queueListModel.size(); i++) {
+            Object item = queueListModel.get(i);
+            String value = item == null ? null : item.toString();
+            String normalizedUrl = normalizeQueueUrl(value);
+            if (normalizedUrl != null && !normalizedUrl.isEmpty()) {
+                normalized.putIfAbsent(normalizedUrl, normalizedUrl);
+            }
+        }
+        queueListModel.clear();
+        for (Object value : normalized.values()) {
+            queueListModel.addElement(value);
+        }
     }
 
     public MainWindow() throws IOException {
@@ -975,8 +1029,9 @@ public final class MainWindow implements Runnable, RipStatusHandler {
                 JScrollPane.HORIZONTAL_SCROLLBAR_AS_NEEDED);
 
         for (String item : Utils.getConfigList("queue")) {
-            queueListModel.addElement(item);
+            addUrlToQueue(item);
         }
+        normalizeAndDeduplicateQueue();
         updateQueue();
 
         gbc.gridx = 0;
@@ -1610,7 +1665,7 @@ public final class MainWindow implements Runnable, RipStatusHandler {
             for (HistoryEntry entry : historySnapshot) {
                 if (entry.selected) {
                     added++;
-                    queueListModel.addElement(entry.url);
+                    addUrlToQueue(entry.url);
                 }
             }
             if (added == 0) {
@@ -1937,6 +1992,7 @@ public final class MainWindow implements Runnable, RipStatusHandler {
             try {
                 LOGGER.info(Utils.getLocalizedString("loading.history.from") + " " + historyFile.getCanonicalPath());
                 HISTORY.fromFile(historyFile.getCanonicalPath());
+                HISTORY.normalizeAndMergeUrls(MainWindow::normalizeQueueUrl);
                 HISTORY.sortByModifiedDateAscending();
             } catch (IOException e) {
                 LOGGER.error("Failed to load history from file " + historyFile, e);
@@ -1948,6 +2004,7 @@ public final class MainWindow implements Runnable, RipStatusHandler {
         } else {
             LOGGER.info(Utils.getLocalizedString("loading.history.from.configuration"));
             HISTORY.fromList(Utils.getConfigList("download.history"));
+            HISTORY.normalizeAndMergeUrls(MainWindow::normalizeQueueUrl);
             if (HISTORY.toList().isEmpty()) {
                 // Loaded from config, still no entries.
                 // Guess rip history based on rip folder
@@ -2079,7 +2136,7 @@ public final class MainWindow implements Runnable, RipStatusHandler {
                 status("Starting rip...");
                 ripper.setObserver(this);
 
-                String ripUrl = ripper.getURL().toExternalForm();
+                String ripUrl = normalizeQueueUrl(ripper.getURL().toExternalForm());
                 if (!HISTORY.containsURL(ripUrl)) {
                     HistoryEntry entry = new HistoryEntry();
                     entry.url = ripUrl;
@@ -2242,7 +2299,7 @@ public final class MainWindow implements Runnable, RipStatusHandler {
                         for (int i = rangeStart; i < rangeEnd + 1; i++) {
                             String realURL = normalizeQueueUrl(url.replaceAll("\\{\\S*\\}", Integer.toString(i)));
                             if (mainWindow.canRip(realURL)) {
-                                queueListModel.addElement(realURL);
+                                addUrlToQueue(realURL);
                                 ripTextfield.setText("");
                             } else {
                                 mainWindow.displayAndLogError("Can't find ripper for " + realURL, Color.RED);
@@ -2250,7 +2307,7 @@ public final class MainWindow implements Runnable, RipStatusHandler {
                         }
                     }
                 } else {
-                    queueListModel.addElement(url);
+                    addUrlToQueue(url);
                     ripTextfield.setText("");
                 }
             } else if (url_not_empty) {
@@ -2347,7 +2404,7 @@ public final class MainWindow implements Runnable, RipStatusHandler {
 
         case RIP_COMPLETE:
             RipStatusComplete rsc = (RipStatusComplete) msg.getObject();
-            String url = evt.ripper.getURL().toExternalForm();
+            String url = normalizeQueueUrl(evt.ripper.getURL().toExternalForm());
             HistoryEntry entry;
             if (HISTORY.containsURL(url)) {
                 entry = HISTORY.getEntryByURL(url);
