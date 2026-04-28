@@ -14,6 +14,8 @@ import java.net.MalformedURLException;
 import java.net.URI;
 import java.net.URISyntaxException;
 import java.net.URL;
+import java.net.URLDecoder;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
@@ -523,7 +525,7 @@ public final class MainWindow implements Runnable, RipStatusHandler {
         if (rawUrl == null) {
             return null;
         }
-        String trimmed = rawUrl.trim();
+        String trimmed = rawUrl.trim().replace("&amp;", "&");
         if (trimmed.isEmpty()) {
             return trimmed;
         }
@@ -569,8 +571,12 @@ public final class MainWindow implements Runnable, RipStatusHandler {
             }
             int equalsIdx = pair.indexOf('=');
             String key = equalsIdx >= 0 ? pair.substring(0, equalsIdx) : pair;
+            if (key.startsWith("amp;")) {
+                key = key.substring(4);
+            }
             String loweredKey = key.toLowerCase(Locale.ROOT);
-            if (loweredKey.startsWith("utm_") || trackingKeys.contains(loweredKey)) {
+            String decodedKey = URLDecoder.decode(loweredKey, StandardCharsets.UTF_8).toLowerCase(Locale.ROOT);
+            if (decodedKey.startsWith("utm_") || trackingKeys.contains(decodedKey)) {
                 continue;
             }
             if (out.length() > 0) {
