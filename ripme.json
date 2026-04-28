@@ -1,8 +1,8 @@
 {
-  "latestVersion": "2.1.215-1-5987fbf",
-  "currentHash": "de082566f404070c605f0699d7673158191c5213fa2b570252dca934f5c0fd28",
+  "latestVersion": "2.1.216-1-e3be072",
+  "currentHash": "908cc66b8f875972409aa6bf25df7a8430f5335e65f72630ee42be2e6e6ca808",
   "changeList": [
-    "2.1.215-1-5987fbf: PR #124 - Merge Coomer/OnlyFans outputs into originating Reddit rip folder (https://github.com/Laziassdev/ripme/pull/124) — ### Motivation - When a Reddit rip spawns a Coomer/OnlyFans rip the downloaded files were left in a separate folder which caused duplicate downstream processing (for example duplicate LoRA generation).",
-    "2.1.215-1-5987fbf: Built at 2026-04-27T11:10:58Z"
+    "2.1.216-1-e3be072: PR #125 - Normalize Instagram queue URLs by stripping tracking parameters (https://github.com/Laziassdev/ripme/pull/125) — ### Motivation - Prevent duplicate or noisy queue entries caused by Instagram tracking query parameters (for example `?g=5` or `?e=...&g=5`).",
+    "2.1.216-1-e3be072: Built at 2026-04-28T20:14:44Z"
   ]
 }
