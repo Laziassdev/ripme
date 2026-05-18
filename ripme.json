@@ -1,8 +1,8 @@
 {
-  "latestVersion": "2.1.221-1-e6cf84e",
-  "currentHash": "ecb1112fe4a1b0685854f1ebc788f5dad78c88b361820c4561c3d1841649ac7d",
+  "latestVersion": "2.1.222-1-e8078dc",
+  "currentHash": "3a9c9d8714c2dda19a7123a52b23dab976d0e0250156073dc817436270de85c8",
   "changeList": [
-    "2.1.221-1-e6cf84e: Remove RATE_LIMIT_WAIT_TIME and adjust wait logic",
-    "2.1.221-1-e6cf84e: Built at 2026-04-28T22:13:24Z"
+    "2.1.222-1-e8078dc: PR #131 - Retry transient 5xx responses in Http.getWith429Retry (https://github.com/Laziassdev/ripme/pull/131) — ### Motivation - Reddit user JSON endpoints can intermittently return HTTP 500/5xx responses which previously caused immediate rip failure, so server-side transient errors should be retried similarly to 429 rate-limits.",
+    "2.1.222-1-e8078dc: Built at 2026-05-18T18:28:41Z"
   ]
 }
