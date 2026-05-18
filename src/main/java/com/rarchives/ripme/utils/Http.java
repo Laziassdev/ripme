@@ -267,6 +267,20 @@ public class Http {
                 }
             }
 
+            if (responseCode >= 500 && responseCode <= 599) {
+                if (retries < maxRetries) {
+                    long waitTime = calculate429WaitSeconds(retries, baseDelaySeconds, maxDelaySeconds, null, random);
+                    logger.warn("[!] HTTP {} from {} - retrying in {}s (attempt {}/{})",
+                            responseCode, url, waitTime, retries + 1, maxRetries);
+                    Utils.sleep(waitTime * 1000L);
+                    retries++;
+                    continue;
+                } else {
+                    logger.warn("[!] HTTP {} from {} after {} retries - failing request",
+                            responseCode, url, maxRetries);
+                }
+            }
+
             if (responseCode >= 400) {
                 throw new HttpStatusException("HTTP error fetching URL", responseCode, url.toString());
             }
