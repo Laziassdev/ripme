@@ -248,12 +248,15 @@ public class InstagramRipper extends AbstractJSONRipper {
 
             int statusCode = response.statusCode();
             String jsonText = response.body();
+            logger.debug("Instagram feed API {} -> status {} (len={})", url, statusCode, jsonText != null ? jsonText.length() : 0);
 
             if (statusCode == 429) {
+                logger.warn("Instagram feed API rate limited {} body={}", url, summarizeBody(jsonText));
                 throw new IOException("Rate limited by Instagram. Please wait a few minutes before trying again.");
             }
             
             if (statusCode != 200) {
+                logger.warn("Instagram feed API error {} -> status {} body={}", url, statusCode, summarizeBody(jsonText));
                 throw new IOException("HTTP error " + statusCode + " while fetching " + url);
             }
 
@@ -410,7 +413,14 @@ public class InstagramRipper extends AbstractJSONRipper {
                 }
 
                 Response response = request.response();
-                if (response.statusCode() == 429) {
+                int statusCode = response.statusCode();
+                String responseBody = response.body();
+                logger.debug("Instagram API {} -> status {} (len={})", requestUrl, statusCode, responseBody != null ? responseBody.length() : 0);
+                if (statusCode >= 400) {
+                    logger.warn("Instagram API error {} -> status {} body={} ", requestUrl, statusCode, summarizeBody(responseBody));
+                }
+
+                if (statusCode == 429) {
                     throw new HttpStatusException("HTTP error fetching URL", 429, requestUrl);
                 }
 
@@ -440,6 +450,15 @@ public class InstagramRipper extends AbstractJSONRipper {
         }
 
         throw new IOException("Failed to " + actionDescription + " after " + MAX_RATE_LIMIT_RETRIES + " attempts", lastException);
+    }
+
+
+    private String summarizeBody(String body) {
+        if (body == null) {
+            return "<null>";
+        }
+        String normalized = body.replaceAll("\\s+", " ").trim();
+        return normalized.substring(0, Math.min(normalized.length(), 300));
     }
 
     private String fetchUserIdFromProfile(String username) throws IOException {
