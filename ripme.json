@@ -1,8 +1,8 @@
 {
-  "latestVersion": "2.1.222-1-e8078dc",
-  "currentHash": "3a9c9d8714c2dda19a7123a52b23dab976d0e0250156073dc817436270de85c8",
+  "latestVersion": "2.1.223-1-06a2a73",
+  "currentHash": "18fc7e7272099f7d885ca0bb9800682a22f965f851a28dc40cec3ccaff9095d4",
   "changeList": [
-    "2.1.222-1-e8078dc: PR #131 - Retry transient 5xx responses in Http.getWith429Retry (https://github.com/Laziassdev/ripme/pull/131) — ### Motivation - Reddit user JSON endpoints can intermittently return HTTP 500/5xx responses which previously caused immediate rip failure, so server-side transient errors should be retried similarly to 429 rate-limits.",
-    "2.1.222-1-e8078dc: Built at 2026-05-18T18:28:41Z"
+    "2.1.223-1-06a2a73: PR #132 - Improve Instagram API rate-limit diagnostics logging (https://github.com/Laziassdev/ripme/pull/132) — ### Motivation - Users observed unexpected Instagram rate-limiting and existing logs lacked enough context to diagnose why requests were being limited.",
+    "2.1.223-1-06a2a73: Built at 2026-05-23T11:47:11Z"
   ]
 }
