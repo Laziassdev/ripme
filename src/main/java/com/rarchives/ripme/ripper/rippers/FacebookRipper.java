@@ -5,6 +5,7 @@ import com.rarchives.ripme.utils.FirefoxCookieUtils;
 import com.rarchives.ripme.utils.Http;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
+import org.jsoup.HttpStatusException;
 import org.jsoup.Jsoup;
 import org.jsoup.nodes.Document;
 import org.jsoup.nodes.Element;
@@ -76,15 +77,35 @@ public class FacebookRipper extends AbstractHTMLRipper {
         Http request = Http.url(this.url).userAgent(USER_AGENT).referrer("https://www.facebook.com/").ignoreContentType();
         if (!facebookCookies.isEmpty()) {
             request.cookies(facebookCookies);
-            if (facebookCookies.containsKey("c_user")) {
-                request.header("X-Requested-With", "XMLHttpRequest");
+        }
+
+        String body;
+        try {
+            body = request.get().html();
+        } catch (HttpStatusException ex) {
+            if (ex.getStatusCode() == 400) {
+                URL fallback = toMbasicUrl(this.url);
+                logger.warn("Facebook returned HTTP 400 for {}, retrying with {}", this.url, fallback);
+                Http fallbackRequest = Http.url(fallback).userAgent(USER_AGENT).referrer("https://mbasic.facebook.com/").ignoreContentType();
+                if (!facebookCookies.isEmpty()) {
+                    fallbackRequest.cookies(facebookCookies);
+                }
+                body = fallbackRequest.get().html();
+            } else {
+                throw ex;
             }
         }
-        String body = request.get().html();
         if (body == null || body.isBlank()) {
             throw new IOException("Facebook returned an empty response");
         }
         return Jsoup.parse(body, this.url.toExternalForm());
+    }
+
+    private URL toMbasicUrl(URL source) throws MalformedURLException {
+        String target = source.toExternalForm()
+                .replaceFirst("(?i)://(?:www\\.|m\\.)?facebook\\.com", "://mbasic.facebook.com")
+                .replaceFirst("(?i)://(?:www\\.)?fb\\.com", "://mbasic.facebook.com");
+        return new URL(target);
     }
 
     @Override
