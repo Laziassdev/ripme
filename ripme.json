@@ -1,8 +1,8 @@
 {
-  "latestVersion": "2.1.223-1-06a2a73",
-  "currentHash": "18fc7e7272099f7d885ca0bb9800682a22f965f851a28dc40cec3ccaff9095d4",
+  "latestVersion": "2.1.224-1-7d1e226",
+  "currentHash": "d72d97f741318badcf30b1050f34476a176ff1ff8254922a17de7f14f4719bde",
   "changeList": [
-    "2.1.223-1-06a2a73: PR #132 - Improve Instagram API rate-limit diagnostics logging (https://github.com/Laziassdev/ripme/pull/132) — ### Motivation - Users observed unexpected Instagram rate-limiting and existing logs lacked enough context to diagnose why requests were being limited.",
-    "2.1.223-1-06a2a73: Built at 2026-05-23T11:47:11Z"
+    "2.1.224-1-7d1e226: PR #133 - Add FacebookRipper for extracting and downloading media from Facebook pages (https://github.com/Laziassdev/ripme/pull/133) — ### Motivation - Add support for ripping media from Facebook pages and posts, including handling logged-in content via browser cookies.",
+    "2.1.224-1-7d1e226: Built at 2026-05-26T19:31:38Z"
   ]
 }
