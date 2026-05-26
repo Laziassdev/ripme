@@ -1,8 +1,8 @@
 {
-  "latestVersion": "2.1.224-1-7d1e226",
-  "currentHash": "d72d97f741318badcf30b1050f34476a176ff1ff8254922a17de7f14f4719bde",
+  "latestVersion": "2.1.225-1-47044b2",
+  "currentHash": "7cf2fb5f758821ff2e43cbbb165508c11d77d978d27859fdad66cb67cd4b2183",
   "changeList": [
-    "2.1.224-1-7d1e226: PR #133 - Add FacebookRipper for extracting and downloading media from Facebook pages (https://github.com/Laziassdev/ripme/pull/133) — ### Motivation - Add support for ripping media from Facebook pages and posts, including handling logged-in content via browser cookies.",
-    "2.1.224-1-7d1e226: Built at 2026-05-26T19:31:38Z"
+    "2.1.225-1-47044b2: PR #134 - Facebook ripper: retry via mbasic host when main host returns HTTP 400 (https://github.com/Laziassdev/ripme/pull/134) — ### Motivation - Facebook profile/reels pages sometimes return HTTP 400 when requested from the standard web host, causing rip failures as shown by repeated `Status=400` errors in logs.",
+    "2.1.225-1-47044b2: Built at 2026-05-26T19:41:18Z"
   ]
 }
