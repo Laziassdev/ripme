@@ -1,8 +1,8 @@
 {
-  "latestVersion": "2.1.229-1-090ee53",
-  "currentHash": "e75a3a6ce0c410e741da059e78886e63c1116385da99aea658f6b7cfd61f03ad",
+  "latestVersion": "2.1.230-1-dc9863e",
+  "currentHash": "972ad736f32e5fe77d342284416b94f7e246f541bd6225d78c447c2b559284bc",
   "changeList": [
-    "2.1.229-1-090ee53: PR #138 - Fix Reddit DASH direct video URL resolution (https://github.com/Laziassdev/ripme/pull/138) — ### Motivation - Reddit sometimes returns direct `v.redd.it/.../DASH_*.mp4` URLs that point to a specific rendition which may no longer exist, causing downloads to fail.",
-    "2.1.229-1-090ee53: Built at 2026-05-27T17:03:12Z"
+    "2.1.230-1-dc9863e: PR #139 - Handle failing v.redd.it CMAF downloads with DASH fallback (https://github.com/Laziassdev/ripme/pull/139) — ### Motivation - Some Reddit posts expose `v.redd.it` CMAF renditions (`CMAF_*.mp4`) that intermittently return non-2xx responses even though the post is viewable, causing downloads to fail.",
+    "2.1.230-1-dc9863e: Built at 2026-05-27T17:19:18Z"
   ]
 }
