@@ -1,8 +1,8 @@
 {
-  "latestVersion": "2.1.232-1-601ab26",
-  "currentHash": "2966eb2e140b5d7fd0b2988b1702b80f31218b37a21f7c12e383a918cdab72bc",
+  "latestVersion": "2.1.233-1-110ed4b",
+  "currentHash": "76acdd17f4c04194eb102567ff9c8fb914b5138a6c3852a15092a66af1761433",
   "changeList": [
-    "2.1.232-1-601ab26: PR #141 - docs: add troubleshooting guidance for partial social profile downloads (https://github.com/Laziassdev/ripme/pull/141) — ### Motivation - Users report profile rips (e.g. Facebook profile home pages) returning only a few images because profile/home feeds expose thumbnails and many small UI assets which RipMe filters out by minimum-size chec",
-    "2.1.232-1-601ab26: Built at 2026-05-27T17:31:07Z"
+    "2.1.233-1-110ed4b: PR #142 - Prefer direct video streams and manifest fallback in FacebookRipper (https://github.com/Laziassdev/ripme/pull/142) — ### Motivation - Prefer direct video stream URLs when available and fall back to media manifest URLs to improve reliability for video downloads and downstream frame-extraction workflows.",
+    "2.1.233-1-110ed4b: Built at 2026-05-27T17:41:11Z"
   ]
 }
