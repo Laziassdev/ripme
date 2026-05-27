@@ -32,6 +32,8 @@ public class FacebookRipper extends AbstractHTMLRipper {
     private static final Logger logger = LogManager.getLogger(FacebookRipper.class);
     private static final String DOMAIN = "facebook.com";
     private static final Pattern MEDIA_URL_PATTERN = Pattern.compile("https?:\\/\\/[^\"'\\s<>]+\\.(?:jpe?g|png|webp|gif|mp4)(?:\\?[^\"'\\s<>]*)?", Pattern.CASE_INSENSITIVE);
+    private static final Pattern VIDEO_URL_PATTERN = Pattern.compile("\\.(?:mp4|m4v)(?:$|\\?)", Pattern.CASE_INSENSITIVE);
+    private static final Pattern MANIFEST_URL_PATTERN = Pattern.compile("\\.(?:mpd|m3u8)(?:$|\\?)", Pattern.CASE_INSENSITIVE);
 
     private Map<String, String> facebookCookies = new LinkedHashMap<>();
 
@@ -159,6 +161,28 @@ public class FacebookRipper extends AbstractHTMLRipper {
 
         if (found.isEmpty()) {
             throw new IllegalStateException("No downloadable Facebook media URLs were discovered on page");
+        }
+
+        List<String> videoOnly = new ArrayList<>();
+        List<String> manifestFallback = new ArrayList<>();
+        for (String mediaUrl : found) {
+            if (mediaUrl == null) {
+                continue;
+            }
+            if (VIDEO_URL_PATTERN.matcher(mediaUrl).find()) {
+                videoOnly.add(mediaUrl);
+            } else if (MANIFEST_URL_PATTERN.matcher(mediaUrl).find()) {
+                manifestFallback.add(mediaUrl);
+            }
+        }
+
+        // Prefer direct video streams when available. This is useful for frame-extraction workflows
+        // where audio is not needed.
+        if (!videoOnly.isEmpty()) {
+            return videoOnly;
+        }
+        if (!manifestFallback.isEmpty()) {
+            return manifestFallback;
         }
 
         return new ArrayList<>(found);
