@@ -1,8 +1,8 @@
 {
-  "latestVersion": "2.1.227-1-ff0261f",
-  "currentHash": "c0882b55811cfb9b628469a5b0cbf61fd4814eae41ddb65b7cececae68f08d6c",
+  "latestVersion": "2.1.228-1-e668cea",
+  "currentHash": "2e4cf5487aca60f8efee0cd56b1b62af60e66c28c05c3b458669f593d272cb05",
   "changeList": [
-    "2.1.227-1-ff0261f: PR #136 - Fix Reddit DASH/CMAF video resolution and naming (https://github.com/Laziassdev/ripme/pull/136) — ### Motivation - Reddit-hosted video variants like `DASH_###.mp4` and `CMAF_###.mp4` can be unavailable or cause non-unique filenames, so the ripper should resolve the correct rendition and produce a stable, unique outpu",
-    "2.1.227-1-ff0261f: Built at 2026-05-27T16:51:50Z"
+    "2.1.228-1-e668cea: PR #137 - Fix Facebook media URL entity decoding (https://github.com/Laziassdev/ripme/pull/137) — ### Motivation - Facebook media URLs embedded in pages are HTML-encoded (e.g. `&amp;`) which can leave query parameters malformed and cause CDN 403s when downloaded.",
+    "2.1.228-1-e668cea: Built at 2026-05-27T17:00:22Z"
   ]
 }
