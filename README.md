@@ -113,6 +113,21 @@ The list of supported rippers includes:
 - xvideos
 - ... and [more](https://github.com/ripmeapp/ripme/wiki/Supported-Sites)!
 
+
+## Troubleshooting social media profile rips
+
+If a profile URL (for example, a Facebook profile home page) downloads only a handful of images, this is usually expected:
+
+- Profile/home feeds are heavily dynamic and often expose only thumbnails or a small initial batch to scraper tools.
+- RipMe may see many tiny asset URLs (icons, emoji, and low-resolution thumbnails) that are filtered out by minimum-size checks.
+- On Facebook specifically, a profile root URL is often not the best source for "all photos". Album-specific or photo-section URLs are typically more complete than the top-level profile page.
+
+What to try:
+
+- Use a direct album/photos URL instead of the profile home URL.
+- Ensure your browser session is logged in and that cookies can be read by RipMe (close browser fully before running if cookie DB is locked).
+- Re-run with update mode so newly visible media can be captured later as the page content changes.
+
 ## Site Not Supported?
 
 Request support for more sites by adding a comment to [this Github issue](https://github.com/RipMeApp/ripme/issues/2068).
