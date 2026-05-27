@@ -74,37 +74,68 @@ public class FacebookRipper extends AbstractHTMLRipper {
     @Override
     protected Document getFirstPage() throws IOException {
         loadFacebookCookies();
-        Http request = Http.url(this.url).userAgent(USER_AGENT).referrer("https://www.facebook.com/").ignoreContentType();
-        if (!facebookCookies.isEmpty()) {
-            request.cookies(facebookCookies);
-        }
-
-        String body;
-        try {
-            body = request.get().html();
-        } catch (HttpStatusException ex) {
-            if (ex.getStatusCode() == 400) {
-                URL fallback = toMbasicUrl(this.url);
-                logger.warn("Facebook returned HTTP 400 for {}, retrying with {}", this.url, fallback);
-                Http fallbackRequest = Http.url(fallback).userAgent(USER_AGENT).referrer("https://mbasic.facebook.com/").ignoreContentType();
-                if (!facebookCookies.isEmpty()) {
-                    fallbackRequest.cookies(facebookCookies);
-                }
-                body = fallbackRequest.get().html();
-            } else {
-                throw ex;
-            }
-        }
+        String body = fetchWithFallbacks();
         if (body == null || body.isBlank()) {
             throw new IOException("Facebook returned an empty response");
         }
         return Jsoup.parse(body, this.url.toExternalForm());
     }
 
+    private String fetchWithFallbacks() throws IOException {
+        List<URL> candidates = Arrays.asList(this.url, toMobileUrl(this.url), toMbasicUrl(this.url));
+        List<String> referrers = Arrays.asList("https://www.facebook.com/", "https://m.facebook.com/", "https://mbasic.facebook.com/");
+        HttpStatusException last400 = null;
+
+        for (int i = 0; i < candidates.size(); i++) {
+            URL candidate = candidates.get(i);
+            Http request = newFacebookRequest(candidate, referrers.get(i));
+            if (!facebookCookies.isEmpty()) {
+                request.cookies(facebookCookies);
+            }
+            try {
+                return request.get().html();
+            } catch (HttpStatusException ex) {
+                if (ex.getStatusCode() == 400 && i < candidates.size() - 1) {
+                    logger.warn("Facebook returned HTTP 400 for {}, retrying with {}", candidate, candidates.get(i + 1));
+                    last400 = ex;
+                    continue;
+                }
+                throw ex;
+            }
+        }
+
+        if (last400 != null) {
+            throw last400;
+        }
+        throw new IOException("Failed to load Facebook page from all fallback URLs");
+    }
+
+    private Http newFacebookRequest(URL targetUrl, String referrer) {
+        return Http.url(targetUrl)
+                .userAgent(USER_AGENT)
+                .referrer(referrer)
+                .ignoreContentType()
+                .header("Accept", "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8")
+                .header("Accept-Language", "en-US,en;q=0.9")
+                .header("Cache-Control", "no-cache")
+                .header("Pragma", "no-cache")
+                .header("Sec-Fetch-Dest", "document")
+                .header("Sec-Fetch-Mode", "navigate")
+                .header("Sec-Fetch-Site", "same-origin")
+                .header("Upgrade-Insecure-Requests", "1");
+    }
+
     private URL toMbasicUrl(URL source) throws MalformedURLException {
         String target = source.toExternalForm()
                 .replaceFirst("(?i)://(?:www\\.|m\\.)?facebook\\.com", "://mbasic.facebook.com")
                 .replaceFirst("(?i)://(?:www\\.)?fb\\.com", "://mbasic.facebook.com");
+        return new URL(target);
+    }
+
+    private URL toMobileUrl(URL source) throws MalformedURLException {
+        String target = source.toExternalForm()
+                .replaceFirst("(?i)://(?:www\\.|mbasic\\.)?facebook\\.com", "://m.facebook.com")
+                .replaceFirst("(?i)://(?:www\\.)?fb\\.com", "://m.facebook.com");
         return new URL(target);
     }
 
