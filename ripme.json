@@ -1,8 +1,8 @@
 {
-  "latestVersion": "2.1.226-1-44fc261",
-  "currentHash": "bf3399c70b4873a40851ec678caa40911fd409b773581002c87f3c3786d8ac11",
+  "latestVersion": "2.1.227-1-ff0261f",
+  "currentHash": "c0882b55811cfb9b628469a5b0cbf61fd4814eae41ddb65b7cececae68f08d6c",
   "changeList": [
-    "2.1.226-1-44fc261: PR #135 - FacebookRipper: add robust fetch fallbacks with mobile/mbasic variants and request headers (https://github.com/Laziassdev/ripme/pull/135) — ### Motivation - Improve resilience when loading Facebook pages by trying alternate URL variants and handling HTTP 400 responses.",
-    "2.1.226-1-44fc261: Built at 2026-05-27T16:49:26Z"
+    "2.1.227-1-ff0261f: PR #136 - Fix Reddit DASH/CMAF video resolution and naming (https://github.com/Laziassdev/ripme/pull/136) — ### Motivation - Reddit-hosted video variants like `DASH_###.mp4` and `CMAF_###.mp4` can be unavailable or cause non-unique filenames, so the ripper should resolve the correct rendition and produce a stable, unique outpu",
+    "2.1.227-1-ff0261f: Built at 2026-05-27T16:51:50Z"
   ]
 }
