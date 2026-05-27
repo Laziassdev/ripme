@@ -1,8 +1,8 @@
 {
-  "latestVersion": "2.1.228-1-e668cea",
-  "currentHash": "2e4cf5487aca60f8efee0cd56b1b62af60e66c28c05c3b458669f593d272cb05",
+  "latestVersion": "2.1.229-1-090ee53",
+  "currentHash": "e75a3a6ce0c410e741da059e78886e63c1116385da99aea658f6b7cfd61f03ad",
   "changeList": [
-    "2.1.228-1-e668cea: PR #137 - Fix Facebook media URL entity decoding (https://github.com/Laziassdev/ripme/pull/137) — ### Motivation - Facebook media URLs embedded in pages are HTML-encoded (e.g. `&amp;`) which can leave query parameters malformed and cause CDN 403s when downloaded.",
-    "2.1.228-1-e668cea: Built at 2026-05-27T17:00:22Z"
+    "2.1.229-1-090ee53: PR #138 - Fix Reddit DASH direct video URL resolution (https://github.com/Laziassdev/ripme/pull/138) — ### Motivation - Reddit sometimes returns direct `v.redd.it/.../DASH_*.mp4` URLs that point to a specific rendition which may no longer exist, causing downloads to fail.",
+    "2.1.229-1-090ee53: Built at 2026-05-27T17:03:12Z"
   ]
 }
