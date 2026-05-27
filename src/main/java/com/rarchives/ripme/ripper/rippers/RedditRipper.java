@@ -619,18 +619,14 @@ public class RedditRipper extends AlbumRipper {
 
     private URL parseRedditVideoMPD(String vidURL) {
         String manifestBaseUrl = vidURL;
-        // Reddit can return direct URLs like /DASH_720.mp4 where the requested
-        // rendition no longer exists. Resolve those from DASHPlaylist.mpd.
-        if (vidURL.matches("^https?://v\\.redd\\.it/[^/]+/DASH_[^/?]+\\.mp4($|\\?.*)")) {
-            manifestBaseUrl = vidURL.substring(0, vidURL.lastIndexOf('/'));
-        } else if (vidURL.matches("^https?://v\\.redd\\.it/.+\\.mp4($|\\?.*)")) {
+        if (vidURL.matches("^https?://v\\.redd\\.it/.+\\.mp4($|\\?.*)")) {
             try {
                 URL directUrl = new URI(vidURL).toURL();
-                if (!vidURL.contains("/CMAF_")) {
+                // Prefer the direct URL first for both CMAF and DASH. If it fails,
+                // fall back to DASHPlaylist.mpd and choose a working rendition.
+                if (!vidURL.contains("/CMAF_") && !vidURL.contains("/DASH_")) {
                     return directUrl;
                 }
-                // CMAF renditions can intermittently 403/404 even when the post is still
-                // available. Validate first, then fall back to DASHPlaylist.mpd if needed.
                 int status = Http.url(directUrl)
                         .ignoreHttpErrors()
                         .ignoreContentType()
@@ -655,20 +651,40 @@ public class RedditRipper extends AlbumRipper {
         org.jsoup.nodes.Document doc;
         try {
             doc = Http.url(manifestBaseUrl + "/DASHPlaylist.mpd").ignoreContentType().get();
-            int largestHeight = 0;
-            String baseURL = null;
-            // Loops over all the videos and finds the one with the largest height and sets baseURL to the base url of that video
+            URL bestCandidate = null;
+            int bestHeight = -1;
+            // Try highest-quality video representations first and return the first
+            // reachable one. This avoids stale CMAF/DASH entries in some manifests.
             for (org.jsoup.nodes.Element e : doc.select("MPD > Period > AdaptationSet > Representation")) {
                 String height = e.attr("height");
                 if (height.equals("")) {
-                    height = "0";
+                    continue;
                 }
-                if (largestHeight < Integer.parseInt(height)) {
-                    largestHeight = Integer.parseInt(height);
-                    baseURL = doc.select("MPD > Period > AdaptationSet > Representation[height=" + height + "]").select("BaseURL").text();
+                int parsedHeight = Integer.parseInt(height);
+                String baseURL = e.select("BaseURL").text();
+                if (baseURL.isEmpty()) {
+                    continue;
+                }
+                URL candidate = new URI(manifestBaseUrl + "/" + baseURL).toURL();
+                if (parsedHeight > bestHeight) {
+                    bestHeight = parsedHeight;
+                    bestCandidate = candidate;
+                }
+
+                int candidateStatus = Http.url(candidate)
+                        .ignoreHttpErrors()
+                        .ignoreContentType()
+                        .timeout(10_000)
+                        .connection()
+                        .execute()
+                        .statusCode();
+                if (candidateStatus >= 200 && candidateStatus < 300) {
+                    return candidate;
                 }
             }
-            return new URI(manifestBaseUrl + "/" + baseURL).toURL();
+
+            // Fallback to highest known rendition even if probes failed.
+            return bestCandidate;
         } catch (IOException | URISyntaxException e) {
             e.printStackTrace();
         }
