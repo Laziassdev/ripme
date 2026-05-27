@@ -1,8 +1,8 @@
 {
-  "latestVersion": "2.1.231-1-04a6b8a",
-  "currentHash": "e5908ae6a672834ae9eeeb9059937b2552a7a087a8f117f5bd184c3dfb373a06",
+  "latestVersion": "2.1.232-1-601ab26",
+  "currentHash": "2966eb2e140b5d7fd0b2988b1702b80f31218b37a21f7c12e383a918cdab72bc",
   "changeList": [
-    "2.1.231-1-04a6b8a: PR #140 - Improve Reddit video URL resolution and manifest fallback (https://github.com/Laziassdev/ripme/pull/140) — ### Motivation - Direct Reddit video links can be stale or point to missing renditions, so prefer working direct URLs but fall back to DASH manifests when needed.",
-    "2.1.231-1-04a6b8a: Built at 2026-05-27T17:28:26Z"
+    "2.1.232-1-601ab26: PR #141 - docs: add troubleshooting guidance for partial social profile downloads (https://github.com/Laziassdev/ripme/pull/141) — ### Motivation - Users report profile rips (e.g. Facebook profile home pages) returning only a few images because profile/home feeds expose thumbnails and many small UI assets which RipMe filters out by minimum-size chec",
+    "2.1.232-1-601ab26: Built at 2026-05-27T17:31:07Z"
   ]
 }
