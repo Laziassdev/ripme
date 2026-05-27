@@ -625,8 +625,28 @@ public class RedditRipper extends AlbumRipper {
             manifestBaseUrl = vidURL.substring(0, vidURL.lastIndexOf('/'));
         } else if (vidURL.matches("^https?://v\\.redd\\.it/.+\\.mp4($|\\?.*)")) {
             try {
-                return new URI(vidURL).toURL();
-            } catch (MalformedURLException | URISyntaxException e) {
+                URL directUrl = new URI(vidURL).toURL();
+                if (!vidURL.contains("/CMAF_")) {
+                    return directUrl;
+                }
+                // CMAF renditions can intermittently 403/404 even when the post is still
+                // available. Validate first, then fall back to DASHPlaylist.mpd if needed.
+                int status = Http.url(directUrl)
+                        .ignoreHttpErrors()
+                        .ignoreContentType()
+                        .timeout(10_000)
+                        .connection()
+                        .execute()
+                        .statusCode();
+                if (status >= 200 && status < 300) {
+                    return directUrl;
+                }
+                logger.info("Direct Reddit video URL {} returned HTTP {}, falling back to DASH playlist", vidURL, status);
+                manifestBaseUrl = vidURL.substring(0, vidURL.lastIndexOf('/'));
+            } catch (IOException | URISyntaxException e) {
+                logger.info("Unable to fetch direct Reddit video URL {}, falling back to DASH playlist: {}", vidURL, e.getMessage());
+                manifestBaseUrl = vidURL.substring(0, vidURL.lastIndexOf('/'));
+            } catch (IllegalArgumentException e) {
                 logger.warn("Unable to parse direct Reddit video URL {}: {}", vidURL, e.getMessage());
                 return null;
             }

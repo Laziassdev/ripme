@@ -79,14 +79,14 @@ class RedditRipperTest {
     }
 
     @Test
-    void parsesDirectRedditCmafVideoUrlWithoutManifestLookup() throws Exception {
+    void parsesDirectRedditVideoUrlWithoutManifestLookup() throws Exception {
         RedditRipper ripper = new RedditRipper(new URL("https://www.reddit.com/r/test"));
         Method parseRedditVideoMPD = RedditRipper.class.getDeclaredMethod("parseRedditVideoMPD", String.class);
         parseRedditVideoMPD.setAccessible(true);
 
-        URL parsed = (URL) parseRedditVideoMPD.invoke(ripper, "https://v.redd.it/hdohowvhfslg1/CMAF_360.mp4");
+        URL parsed = (URL) parseRedditVideoMPD.invoke(ripper, "https://v.redd.it/hdohowvhfslg1/fallback.mp4");
 
-        assertEquals("https://v.redd.it/hdohowvhfslg1/CMAF_360.mp4", parsed.toExternalForm());
+        assertEquals("https://v.redd.it/hdohowvhfslg1/fallback.mp4", parsed.toExternalForm());
     }
 
     private DownloadLimitTracker downloadLimitTrackerOf(RedditRipper ripper) throws Exception {
