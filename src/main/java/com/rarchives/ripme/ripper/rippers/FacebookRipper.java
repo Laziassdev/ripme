@@ -7,6 +7,7 @@ import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.jsoup.HttpStatusException;
 import org.jsoup.Jsoup;
+import org.jsoup.parser.Parser;
 import org.jsoup.nodes.Document;
 import org.jsoup.nodes.Element;
 
@@ -181,7 +182,8 @@ public class FacebookRipper extends AbstractHTMLRipper {
         if (value == null) {
             return null;
         }
-        return value.replace("\\u0025", "%")
+        return Parser.unescapeEntities(value, false)
+                .replace("\\u0025", "%")
                 .replace("\\u0026", "&")
                 .replace("\\/", "/")
                 .replace("\\u003D", "=")
