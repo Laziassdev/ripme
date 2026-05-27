@@ -618,10 +618,12 @@ public class RedditRipper extends AlbumRipper {
     }
 
     private URL parseRedditVideoMPD(String vidURL) {
-        // Some Reddit API responses already contain a direct CMAF mp4 URL.
-        // In that case we can download the file directly instead of trying to
-        // resolve a DASH manifest from a non-container path.
-        if (vidURL.matches("^https?://v\\.redd\\.it/.+\\.mp4($|\\?.*)")) {
+        String manifestBaseUrl = vidURL;
+        // Reddit can return direct URLs like /DASH_720.mp4 where the requested
+        // rendition no longer exists. Resolve those from DASHPlaylist.mpd.
+        if (vidURL.matches("^https?://v\\.redd\\.it/[^/]+/DASH_[^/?]+\\.mp4($|\\?.*)")) {
+            manifestBaseUrl = vidURL.substring(0, vidURL.lastIndexOf('/'));
+        } else if (vidURL.matches("^https?://v\\.redd\\.it/.+\\.mp4($|\\?.*)")) {
             try {
                 return new URI(vidURL).toURL();
             } catch (MalformedURLException | URISyntaxException e) {
@@ -632,7 +634,7 @@ public class RedditRipper extends AlbumRipper {
 
         org.jsoup.nodes.Document doc;
         try {
-            doc = Http.url(vidURL + "/DASHPlaylist.mpd").ignoreContentType().get();
+            doc = Http.url(manifestBaseUrl + "/DASHPlaylist.mpd").ignoreContentType().get();
             int largestHeight = 0;
             String baseURL = null;
             // Loops over all the videos and finds the one with the largest height and sets baseURL to the base url of that video
@@ -646,7 +648,7 @@ public class RedditRipper extends AlbumRipper {
                     baseURL = doc.select("MPD > Period > AdaptationSet > Representation[height=" + height + "]").select("BaseURL").text();
                 }
             }
-            return new URI(vidURL + "/" + baseURL).toURL();
+            return new URI(manifestBaseUrl + "/" + baseURL).toURL();
         } catch (IOException | URISyntaxException e) {
             e.printStackTrace();
         }
