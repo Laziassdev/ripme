@@ -1,8 +1,8 @@
 {
-  "latestVersion": "2.1.225-1-47044b2",
-  "currentHash": "7cf2fb5f758821ff2e43cbbb165508c11d77d978d27859fdad66cb67cd4b2183",
+  "latestVersion": "2.1.226-1-44fc261",
+  "currentHash": "bf3399c70b4873a40851ec678caa40911fd409b773581002c87f3c3786d8ac11",
   "changeList": [
-    "2.1.225-1-47044b2: PR #134 - Facebook ripper: retry via mbasic host when main host returns HTTP 400 (https://github.com/Laziassdev/ripme/pull/134) — ### Motivation - Facebook profile/reels pages sometimes return HTTP 400 when requested from the standard web host, causing rip failures as shown by repeated `Status=400` errors in logs.",
-    "2.1.225-1-47044b2: Built at 2026-05-26T19:41:18Z"
+    "2.1.226-1-44fc261: PR #135 - FacebookRipper: add robust fetch fallbacks with mobile/mbasic variants and request headers (https://github.com/Laziassdev/ripme/pull/135) — ### Motivation - Improve resilience when loading Facebook pages by trying alternate URL variants and handling HTTP 400 responses.",
+    "2.1.226-1-44fc261: Built at 2026-05-27T16:49:26Z"
   ]
 }
