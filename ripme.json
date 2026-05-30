@@ -1,8 +1,8 @@
 {
-  "latestVersion": "2.1.238-1-2a3724e",
-  "currentHash": "8768dadae5543560f1949477876079373767cb413bbf3da3f231027f1b58ff42",
+  "latestVersion": "2.1.239-1-9a905da",
+  "currentHash": "e798248092dc35f7d439ce97b9963170ed3009234e20e45e1a3f8e8bebda2239",
   "changeList": [
-    "2.1.238-1-2a3724e: Merge branch 'main' of https://github.com/Laziassdev/ripme",
-    "2.1.238-1-2a3724e: Built at 2026-05-30T13:57:39Z"
+    "2.1.239-1-9a905da: Implement GraphQL pagination support in FacebookRipper for photo albums, allowing full extraction of images. Added methods to handle GraphQL requests and updated configuration properties for pagination settings. Enhanced tests to verify correct functionality of the new pagination logic.",
+    "2.1.239-1-9a905da: Built at 2026-05-30T14:29:24Z"
   ]
 }
