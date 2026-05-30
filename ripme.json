@@ -1,8 +1,8 @@
 {
-  "latestVersion": "2.1.233-1-110ed4b",
-  "currentHash": "76acdd17f4c04194eb102567ff9c8fb914b5138a6c3852a15092a66af1761433",
+  "latestVersion": "2.1.234-1-e0ac680",
+  "currentHash": "04826327ca2bb50e08435a9a8f1d0dca51167b548cff95b91e3d5b474ffae54a",
   "changeList": [
-    "2.1.233-1-110ed4b: PR #142 - Prefer direct video streams and manifest fallback in FacebookRipper (https://github.com/Laziassdev/ripme/pull/142) — ### Motivation - Prefer direct video stream URLs when available and fall back to media manifest URLs to improve reliability for video downloads and downstream frame-extraction workflows.",
-    "2.1.233-1-110ed4b: Built at 2026-05-27T17:41:11Z"
+    "2.1.234-1-e0ac680: Enhance FacebookRipper to extract media from JSON blobs and prioritize HD video sources. Added patterns for HD/SD video keys and filtered out non-media URLs. Updated tests to verify extraction from escaped JSON and ensure proper handling of video quality.",
+    "2.1.234-1-e0ac680: Built at 2026-05-30T12:16:47Z"
   ]
 }
