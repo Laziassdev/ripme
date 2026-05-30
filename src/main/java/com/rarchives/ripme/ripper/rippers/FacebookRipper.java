@@ -308,7 +308,12 @@ public class FacebookRipper extends AbstractHTMLRipper {
      * skipped so one bad photo can't abort the whole rip.
      */
     private void crawlPhotoPages(Document listingPage, Set<String> allMedia) {
-        Set<String> fbids = extractFbids(listingPage);
+        // The desktop (www) listing only server-renders the first screenful of photos; the rest are
+        // lazy-loaded by JavaScript we can't run. mbasic.facebook.com renders the whole album as plain
+        // HTML with real pagination, so we use it to enumerate every photo id, then resolve each to a
+        // full-resolution image via the proven www photo page.
+        Set<String> fbids = new LinkedHashSet<>(extractFbids(listingPage));
+        fbids.addAll(enumerateAlbumFbids());
         if (fbids.isEmpty()) {
             return;
         }
@@ -355,12 +360,112 @@ public class FacebookRipper extends AbstractHTMLRipper {
     }
 
     /**
+     * Walks the mbasic.facebook.com version of the listing, following its "See more photos"
+     * pagination links, and collects every photo id across all pages. mbasic is server-rendered
+     * (no JavaScript), so unlike the desktop site it exposes the entire album. Returns an empty set
+     * if mbasic is unavailable, in which case the caller falls back to the desktop page's own ids.
+     */
+    private Set<String> enumerateAlbumFbids() {
+        Set<String> ids = new LinkedHashSet<>();
+        int pageCap = Utils.getConfigInteger("facebook.max_listing_pages", 50);
+        long delay = Utils.getConfigInteger("facebook.photo_page_delay_ms", 300);
+        URL listing;
+        try {
+            listing = toMbasicUrl(this.url);
+        } catch (MalformedURLException e) {
+            return ids;
+        }
+
+        Set<String> seenPages = new LinkedHashSet<>();
+        int pages = 0;
+        while (listing != null && pages < pageCap) {
+            if (isStopped() || !seenPages.add(listing.toExternalForm())) {
+                break;
+            }
+            pages++;
+            Document doc;
+            try {
+                doc = fetchPhotoListingPage(listing);
+            } catch (IOException e) {
+                logger.warn("mbasic photo enumeration stopped at page {} ({})", pages, e.getMessage());
+                break;
+            }
+            if (doc == null) {
+                break;
+            }
+            ids.addAll(extractFbids(doc));
+            listing = findMbasicNextPage(doc);
+            if (listing != null && delay > 0) {
+                try {
+                    Thread.sleep(delay);
+                } catch (InterruptedException ie) {
+                    Thread.currentThread().interrupt();
+                    break;
+                }
+            }
+        }
+        if (!ids.isEmpty()) {
+            logger.info("Enumerated {} photo id(s) from mbasic across {} page(s)", ids.size(), pages);
+        }
+        return ids;
+    }
+
+    /**
+     * Finds the "See more photos" / "Show more" pagination link on an mbasic listing page.
+     */
+    private URL findMbasicNextPage(Document doc) {
+        for (Element a : doc.select("a[href]")) {
+            String text = a.text().toLowerCase();
+            if (text.contains("see more") || text.contains("show more") || text.contains("more photos")) {
+                URL resolved = toUrl(a.attr("abs:href"));
+                if (resolved != null) {
+                    return resolved;
+                }
+            }
+        }
+        // Fallback: any cursor-based pagination link that points back at a photos listing.
+        for (Element a : doc.select("a[href*=cursor]")) {
+            String href = a.attr("abs:href").toLowerCase();
+            if (href.contains("photo")) {
+                URL resolved = toUrl(a.attr("abs:href"));
+                if (resolved != null) {
+                    return resolved;
+                }
+            }
+        }
+        return null;
+    }
+
+    private static URL toUrl(String value) {
+        if (value == null || value.isBlank()) {
+            return null;
+        }
+        try {
+            return new URL(value);
+        } catch (MalformedURLException e) {
+            return null;
+        }
+    }
+
+    /**
      * Fetches a single Facebook photo page. Exposed (protected) so tests can supply a local document
      * without performing network I/O.
      */
     protected Document fetchPhotoPage(String fbid) throws IOException {
         URL photoUrl = new URL("https://www.facebook.com/photo/?fbid=" + fbid);
         Http request = newFacebookRequest(photoUrl, this.url.toExternalForm());
+        if (!facebookCookies.isEmpty()) {
+            request.cookies(facebookCookies);
+        }
+        return request.get();
+    }
+
+    /**
+     * Fetches a single mbasic photo-listing page. Exposed (protected) so tests can supply a local
+     * document without performing network I/O.
+     */
+    protected Document fetchPhotoListingPage(URL listingUrl) throws IOException {
+        Http request = newFacebookRequest(listingUrl, "https://mbasic.facebook.com/");
         if (!facebookCookies.isEmpty()) {
             request.cookies(facebookCookies);
         }

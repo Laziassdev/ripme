@@ -26,6 +26,17 @@ public class FacebookRipperTest {
         List<String> extract(Document doc) throws java.io.UnsupportedEncodingException {
             return super.getURLsFromPage(doc);
         }
+
+        // Keep tests hermetic by default: never touch the network unless a subclass supplies pages.
+        @Override
+        protected Document fetchPhotoPage(String fbid) {
+            return null;
+        }
+
+        @Override
+        protected Document fetchPhotoListingPage(URL listingUrl) {
+            return null;
+        }
     }
 
     @Test
@@ -164,17 +175,74 @@ public class FacebookRipperTest {
         assertTrue(urls.stream().noneMatch(u -> u.contains("s74x74")), "Thumbnails must not be downloaded");
     }
 
+    @Test
+    public void testMbasicPaginationEnumeratesEntireAlbum() throws Exception {
+        // The desktop listing only exposes a couple of photos; mbasic must be walked (following its
+        // "See more photos" link) so every photo in the album is discovered and resolved full-res.
+        String listingHtml = "<html><body><script>"
+                + "\"https:\\/\\/www.facebook.com\\/photo\\/?fbid=900001&set=a.1\""
+                + "</script></body></html>";
+        Document listing = Jsoup.parse(listingHtml, "https://www.facebook.com/example/photos");
+
+        Map<String, Document> listingPages = new HashMap<>();
+        // mbasic page 1: two photos + a "See more photos" link to page 2.
+        listingPages.put("https://mbasic.facebook.com/example/photos", Jsoup.parse(
+                "<html><body>"
+                        + "<a href=\"/photo.php?fbid=900001&id=1\">img</a>"
+                        + "<a href=\"/photo.php?fbid=900002&id=1\">img</a>"
+                        + "<a href=\"/example/photos?cursor=PAGE2\">See more photos</a>"
+                        + "</body></html>",
+                "https://mbasic.facebook.com/example/photos"));
+        // mbasic page 2: one more photo, no further pagination link.
+        listingPages.put("https://mbasic.facebook.com/example/photos?cursor=PAGE2", Jsoup.parse(
+                "<html><body>"
+                        + "<a href=\"/photo.php?fbid=900003&id=1\">img</a>"
+                        + "</body></html>",
+                "https://mbasic.facebook.com/example/photos?cursor=PAGE2"));
+
+        Map<String, Document> photoPages = new HashMap<>();
+        for (String fbid : new String[] {"900001", "900002", "900003"}) {
+            photoPages.put(fbid, Jsoup.parse(
+                    "<html><head><meta property=\"og:image\" "
+                            + "content=\"https://scontent.xx.fbcdn.net/v/t39.30808-1/" + fbid + "_n.jpg?_nc_cat=1\">"
+                            + "</head><body></body></html>",
+                    "https://www.facebook.com/photo/?fbid=" + fbid));
+        }
+
+        CrawlingFacebookRipper ripper =
+                new CrawlingFacebookRipper(new URL("https://www.facebook.com/example/photos"), photoPages, listingPages);
+        List<String> urls = ripper.extract(listing);
+
+        assertEquals(3, urls.size(), "Both mbasic pages plus the desktop page should be merged");
+        assertTrue(urls.contains("https://scontent.xx.fbcdn.net/v/t39.30808-1/900001_n.jpg?_nc_cat=1"));
+        assertTrue(urls.contains("https://scontent.xx.fbcdn.net/v/t39.30808-1/900002_n.jpg?_nc_cat=1"));
+        assertTrue(urls.contains("https://scontent.xx.fbcdn.net/v/t39.30808-1/900003_n.jpg?_nc_cat=1"));
+    }
+
     private static class CrawlingFacebookRipper extends TestableFacebookRipper {
         private final Map<String, Document> photoPages;
+        private final Map<String, Document> listingPages;
 
         CrawlingFacebookRipper(URL url, Map<String, Document> photoPages) throws java.io.IOException {
+            this(url, photoPages, null);
+        }
+
+        CrawlingFacebookRipper(URL url, Map<String, Document> photoPages, Map<String, Document> listingPages)
+                throws java.io.IOException {
             super(url);
             this.photoPages = photoPages;
+            this.listingPages = listingPages;
         }
 
         @Override
         protected Document fetchPhotoPage(String fbid) {
             return photoPages.get(fbid);
+        }
+
+        @Override
+        protected Document fetchPhotoListingPage(URL listingUrl) {
+            // When no mbasic pages are supplied, behave as if mbasic is unavailable (no network).
+            return listingPages == null ? null : listingPages.get(listingUrl.toExternalForm());
         }
     }
 
