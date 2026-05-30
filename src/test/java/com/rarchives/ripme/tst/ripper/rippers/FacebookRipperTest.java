@@ -6,8 +6,12 @@ import org.jsoup.nodes.Document;
 import org.junit.jupiter.api.Test;
 
 import java.net.URL;
+import java.net.URLEncoder;
+import java.nio.charset.StandardCharsets;
+import java.util.Base64;
 import java.util.List;
 
+import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 public class FacebookRipperTest {
@@ -82,5 +86,51 @@ public class FacebookRipperTest {
 
         assertTrue(urls.contains("https://scontent.xx.fbcdn.net/real.jpg"));
         assertTrue(urls.stream().noneMatch(u -> u.contains("rsrc.php")));
+    }
+
+    @Test
+    public void testImageSizeVariantsCollapseToLargest() throws Exception {
+        // Same photo served at several sizes must collapse to a single, largest variant.
+        String base = "https://scontent.xx.fbcdn.net/v/t39.30808-1/123_456_n.jpg";
+        String html = "<html><body><script>"
+                + "\"" + base + "?stp=cp0_dst-jpg_s80x80_tt6&_nc_cat=1\""
+                + "\"" + base + "?stp=dst-jpg_s480x480_tt6&_nc_cat=1\""
+                + "\"" + base + "?stp=dst-jpg_s320x320_tt6&_nc_cat=1\""
+                + "</script></body></html>";
+        Document doc = Jsoup.parse(html, "https://www.facebook.com/example/photos");
+
+        TestableFacebookRipper ripper = new TestableFacebookRipper(new URL("https://www.facebook.com/example/photos"));
+        List<String> urls = ripper.extract(doc);
+
+        assertEquals(1, urls.size(), "All size-variants of one photo should collapse to a single URL");
+        assertTrue(urls.get(0).contains("s480x480"), "The largest available rendition should be kept");
+    }
+
+    @Test
+    public void testReelRenditionsCollapseToOnePerVideoId() throws Exception {
+        // One reel exposed as several renditions plus an audio-only track must collapse to a
+        // single file: the highest-resolution rendition.
+        String hd = videoUrl("dash.mp4", "{\"vencode_tag\":\"dash_vp9-basic-gen2_1080p\",\"video_id\":42,\"bitrate\":2000000}");
+        String sd = videoUrl("dash2.mp4", "{\"vencode_tag\":\"dash_vp9-basic-gen2_360p\",\"video_id\":42,\"bitrate\":300000}");
+        String prog = videoUrl("prog.mp4", "{\"vencode_tag\":\"progressive_h264-basic-gen2_360p\",\"video_id\":42,\"bitrate\":400000}");
+        String audio = videoUrl("audio.mp4", "{\"vencode_tag\":\"dash_ln_heaac_vbr3_audio\",\"video_id\":42,\"bitrate\":50000}");
+
+        String html = "<html><body><script>"
+                + "\"" + hd + "\"\"" + sd + "\"\"" + prog + "\"\"" + audio + "\""
+                + "</script></body></html>";
+        Document doc = Jsoup.parse(html, "https://www.facebook.com/reel/42");
+
+        TestableFacebookRipper ripper = new TestableFacebookRipper(new URL("https://www.facebook.com/reel/42"));
+        List<String> urls = ripper.extract(doc);
+
+        assertEquals(1, urls.size(), "One reel should produce exactly one downloadable file");
+        assertTrue(urls.get(0).contains("dash.mp4"), "The highest-resolution (1080p) rendition should be preferred");
+    }
+
+    private static String videoUrl(String name, String efgJson) {
+        String efg = URLEncoder.encode(
+                Base64.getEncoder().encodeToString(efgJson.getBytes(StandardCharsets.UTF_8)),
+                StandardCharsets.UTF_8);
+        return "https://video.xx.fbcdn.net/o1/v/t2/f2/m367/" + name + "?_nc_cat=1&efg=" + efg + "&ccb=17-1";
     }
 }
