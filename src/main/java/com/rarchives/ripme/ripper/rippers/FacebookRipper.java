@@ -6,6 +6,7 @@ import com.rarchives.ripme.utils.Http;
 import com.rarchives.ripme.utils.Utils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
+import org.jsoup.Connection;
 import org.jsoup.HttpStatusException;
 import org.jsoup.Jsoup;
 import org.jsoup.parser.Parser;
@@ -70,6 +71,26 @@ public class FacebookRipper extends AbstractHTMLRipper {
     // listing page. Each links to a single photo page whose og:image is the full-resolution image.
     private static final Pattern FBID_PATTERN = Pattern.compile(
             "(?:[?&]fbid=|\"fbid\"\\s*:\\s*\"?)(\\d{6,})");
+
+    // ---- Facebook GraphQL "Photos" pagination ----
+    // A profile's /photos tab server-renders only the first ~8 photos; the rest are fetched as the
+    // user scrolls via a GraphQL query (ProfileCometAppCollectionPhotosRendererPaginationQuery). We
+    // replicate that query to walk the whole album. The doc_id and friendly name occasionally change
+    // when Facebook ships a new build, so both are overridable from rip.properties.
+    private static final String DEFAULT_PHOTOS_QUERY = "ProfileCometAppCollectionPhotosRendererPaginationQuery";
+    private static final String DEFAULT_PHOTOS_DOC_ID = "27028962643386672";
+    // Tokens needed to authenticate/replay the GraphQL request, all embedded in the initial page HTML.
+    private static final Pattern DTSG_PATTERN = Pattern.compile("\"DTSGInitialData\",\\[\\],\\{\"token\":\"([^\"]+)\"");
+    private static final Pattern LSD_PATTERN = Pattern.compile("\"LSD\",\\[\\],\\{\"token\":\"([^\"]+)\"");
+    private static final Pattern USER_ID_PATTERN = Pattern.compile("\"USER_ID\":\"(\\d+)\"");
+    private static final Pattern CLIENT_REVISION_PATTERN = Pattern.compile("\"client_revision\":(\\d+)");
+    // The base64 "app_collection:..." token identifying the main Photos collection. The reliable anchor
+    // is the collection whose url ends in /photos_by ("<Name>'s Photos"); fall back to the first token.
+    private static final Pattern PHOTOS_COLLECTION_PATTERN = Pattern.compile(
+            "\"(YXBwX2NvbGxlY3Rpb246[^\"]+)\",\"name\":\"[^\"]*\",\"url\":\"[^\"]*/photos_by\"");
+    private static final Pattern ANY_COLLECTION_PATTERN = Pattern.compile("(YXBwX2NvbGxlY3Rpb246[A-Za-z0-9_+/=-]+)");
+    private static final Pattern END_CURSOR_PATTERN = Pattern.compile("\"end_cursor\":\"([^\"]+)\"");
+    private static final Pattern HAS_NEXT_PAGE_PATTERN = Pattern.compile("\"has_next_page\":(true|false)");
 
     private Map<String, String> facebookCookies = new LinkedHashMap<>();
 
@@ -184,10 +205,10 @@ public class FacebookRipper extends AbstractHTMLRipper {
         collectMediaFromDocument(page, allMedia);
 
         // A photos/album listing page only embeds full-resolution URLs for the first handful of
-        // photos; the rest are present solely as tiny thumbnails. Visit each photo's permalink to
-        // pull its full-resolution image so the whole album is downloaded, not just the first screen.
+        // photos; the rest are loaded by JavaScript as the user scrolls. Replay Facebook's own
+        // GraphQL pagination to pull the whole album, not just the first screen.
         if (isPhotoListingPage()) {
-            crawlPhotoPages(page, allMedia);
+            harvestAlbumPhotos(page, allMedia);
         }
 
         // Facebook exposes the same photo at many sizes and the same reel at many renditions.
@@ -303,17 +324,208 @@ public class FacebookRipper extends AbstractHTMLRipper {
     }
 
     /**
-     * Visits each photo permalink referenced on a listing page and merges the full-resolution image
-     * from that photo's page into {@code allMedia}. Failures on individual photos are logged and
-     * skipped so one bad photo can't abort the whole rip.
+     * Pulls every photo from an album/photos listing. Facebook lazy-loads all but the first screenful
+     * via its private GraphQL pagination endpoint, so we replay that query (which returns each photo's
+     * full-resolution {@code viewer_image} URL) to walk the entire album. If the required tokens can't
+     * be scraped from the page (e.g. not logged in), fall back to resolving the photo permalinks that
+     * are embedded on the listing page itself.
+     */
+    private void harvestAlbumPhotos(Document listingPage, Set<String> allMedia) {
+        if (!paginatePhotosViaGraphql(listingPage, allMedia)) {
+            crawlPhotoPages(listingPage, allMedia);
+        }
+    }
+
+    /**
+     * Walks the Facebook "Photos" collection via its GraphQL pagination query, adding every image URL
+     * found across all pages to {@code allMedia}.
+     *
+     * @return {@code true} if the GraphQL context could be built and pagination was attempted;
+     *         {@code false} if the tokens needed to issue the query were not present (caller should
+     *         fall back to crawling individual photo permalinks).
+     */
+    private boolean paginatePhotosViaGraphql(Document listingPage, Set<String> allMedia) {
+        GraphqlContext ctx = buildGraphqlContext(listingPage.html());
+        if (ctx == null) {
+            return false;
+        }
+        String friendly = Utils.getConfigString("facebook.photos_query_name", DEFAULT_PHOTOS_QUERY);
+        String docId = Utils.getConfigString("facebook.photos_doc_id", DEFAULT_PHOTOS_DOC_ID);
+        int pageSize = Utils.getConfigInteger("facebook.photos_page_size", 8);
+        int pageCap = Utils.getConfigInteger("facebook.max_listing_pages", 400);
+        long delay = Utils.getConfigInteger("facebook.photo_page_delay_ms", 300);
+
+        String cursor = ctx.initialCursor;
+        boolean hasNext = ctx.hasNextPage;
+        int pages = 0;
+        int newUrls = 0;
+        while (hasNext && cursor != null && !cursor.isBlank() && pages < pageCap && !isStopped()) {
+            pages++;
+            Map<String, String> form = buildGraphqlForm(ctx, docId, friendly,
+                    buildPhotosVariables(pageSize, cursor, ctx.collectionId));
+            String body;
+            try {
+                body = executeGraphqlQuery(friendly, ctx.lsd, form);
+            } catch (IOException e) {
+                logger.warn("Facebook photo pagination stopped at page {} ({})", pages, e.getMessage());
+                break;
+            }
+            if (body == null || body.isBlank()) {
+                break;
+            }
+            String unescaped = jsonUnescape(body);
+            int before = allMedia.size();
+            Matcher m = MEDIA_URL_PATTERN.matcher(unescaped);
+            while (m.find()) {
+                String mediaUrl = unescapeJsonUrl(m.group());
+                if (mediaUrl != null && !JUNK_URL_PATTERN.matcher(mediaUrl).find()) {
+                    allMedia.add(mediaUrl);
+                }
+            }
+            newUrls += allMedia.size() - before;
+
+            cursor = firstMatch(unescaped, END_CURSOR_PATTERN);
+            hasNext = "true".equals(firstMatch(unescaped, HAS_NEXT_PAGE_PATTERN));
+            if (hasNext && cursor != null && delay > 0) {
+                try {
+                    Thread.sleep(delay);
+                } catch (InterruptedException ie) {
+                    Thread.currentThread().interrupt();
+                    break;
+                }
+            }
+        }
+        logger.info("Facebook GraphQL photo pagination fetched {} page(s), {} image URL(s)", pages, newUrls);
+        return true;
+    }
+
+    /**
+     * Extracts the tokens needed to replay Facebook's photos pagination query from the initial page
+     * HTML. Returns {@code null} if any required token is missing.
+     */
+    private GraphqlContext buildGraphqlContext(String html) {
+        String unescaped = jsonUnescape(html);
+        GraphqlContext ctx = new GraphqlContext();
+        ctx.fbDtsg = firstMatch(html, DTSG_PATTERN);
+        ctx.lsd = firstMatch(html, LSD_PATTERN);
+        ctx.userId = firstMatch(html, USER_ID_PATTERN);
+        ctx.clientRevision = firstMatch(html, CLIENT_REVISION_PATTERN);
+        ctx.collectionId = firstMatch(unescaped, PHOTOS_COLLECTION_PATTERN);
+        if (ctx.collectionId == null) {
+            ctx.collectionId = firstMatch(unescaped, ANY_COLLECTION_PATTERN);
+        }
+        // The first pagination request continues from the cursor of the batch already rendered in the
+        // page. Anchor on the photos renderer so we read the photos collection's cursor, not another.
+        int rendererIdx = unescaped.indexOf("TimelineAppCollectionPhotosRenderer");
+        String scope = rendererIdx >= 0 ? unescaped.substring(rendererIdx) : unescaped;
+        ctx.initialCursor = firstMatch(scope, END_CURSOR_PATTERN);
+        ctx.hasNextPage = "true".equals(firstMatch(scope, HAS_NEXT_PAGE_PATTERN));
+
+        if (ctx.fbDtsg == null || ctx.lsd == null || ctx.userId == null
+                || ctx.collectionId == null || ctx.initialCursor == null) {
+            logger.info("Facebook GraphQL pagination unavailable (dtsg={}, lsd={}, user={}, collection={}, "
+                            + "cursor={}); falling back to photo-permalink crawl",
+                    ctx.fbDtsg != null, ctx.lsd != null, ctx.userId != null,
+                    ctx.collectionId != null, ctx.initialCursor != null);
+            return null;
+        }
+        return ctx;
+    }
+
+    private static String buildPhotosVariables(int count, String cursor, String collectionId) {
+        return "{\"count\":" + count
+                + ",\"created_time_end\":null,\"created_time_start\":null"
+                + ",\"cursor\":\"" + cursor + "\""
+                + ",\"scale\":2,\"tagged_user_ids\":null"
+                + ",\"id\":\"" + collectionId + "\"}";
+    }
+
+    private static Map<String, String> buildGraphqlForm(GraphqlContext ctx, String docId, String friendly,
+                                                        String variables) {
+        Map<String, String> form = new LinkedHashMap<>();
+        form.put("av", ctx.userId);
+        form.put("__user", ctx.userId);
+        form.put("__a", "1");
+        form.put("__comet_req", "15");
+        form.put("fb_dtsg", ctx.fbDtsg);
+        form.put("jazoest", computeJazoest(ctx.fbDtsg));
+        form.put("lsd", ctx.lsd);
+        form.put("dpr", "1");
+        form.put("fb_api_caller_class", "RelayModern");
+        form.put("fb_api_req_friendly_name", friendly);
+        form.put("variables", variables);
+        form.put("server_timestamps", "true");
+        form.put("doc_id", docId);
+        if (ctx.clientRevision != null) {
+            form.put("__rev", ctx.clientRevision);
+        }
+        return form;
+    }
+
+    /**
+     * jazoest is a trivial checksum Facebook expects alongside fb_dtsg: the literal "2" concatenated
+     * with the sum of the UTF-16 code units of the fb_dtsg token.
+     */
+    private static String computeJazoest(String fbDtsg) {
+        long sum = 0;
+        for (int i = 0; i < fbDtsg.length(); i++) {
+            sum += fbDtsg.charAt(i);
+        }
+        return "2" + sum;
+    }
+
+    private static String firstMatch(String text, Pattern pattern) {
+        if (text == null) {
+            return null;
+        }
+        Matcher m = pattern.matcher(text);
+        return m.find() ? m.group(1) : null;
+    }
+
+    /**
+     * Issues a single Facebook GraphQL POST and returns the raw response body. Exposed (protected) so
+     * tests can supply canned responses without performing network I/O.
+     */
+    protected String executeGraphqlQuery(String friendlyName, String lsd, Map<String, String> formData)
+            throws IOException {
+        Http request = Http.url("https://www.facebook.com/api/graphql/")
+                .userAgent(USER_AGENT)
+                .referrer(this.url)
+                .ignoreContentType()
+                .header("X-FB-Friendly-Name", friendlyName)
+                .header("X-FB-LSD", lsd)
+                .header("X-ASBD-ID", "359341")
+                .header("Origin", "https://www.facebook.com")
+                .header("Accept", "*/*")
+                .header("Sec-Fetch-Dest", "empty")
+                .header("Sec-Fetch-Mode", "cors")
+                .header("Sec-Fetch-Site", "same-origin")
+                .data(formData);
+        if (!facebookCookies.isEmpty()) {
+            request.cookies(facebookCookies);
+        }
+        request.connection().method(Connection.Method.POST);
+        return request.response().body();
+    }
+
+    /** Holds the per-page tokens required to replay Facebook's photos pagination query. */
+    private static final class GraphqlContext {
+        String fbDtsg;
+        String lsd;
+        String userId;
+        String clientRevision;
+        String collectionId;
+        String initialCursor;
+        boolean hasNextPage;
+    }
+
+    /**
+     * Fallback used only when GraphQL tokens can't be scraped: visits each photo permalink referenced
+     * on the listing page and merges that photo page's full-resolution image into {@code allMedia}.
+     * Failures on individual photos are logged and skipped so one bad photo can't abort the rip.
      */
     private void crawlPhotoPages(Document listingPage, Set<String> allMedia) {
-        // The desktop (www) listing only server-renders the first screenful of photos; the rest are
-        // lazy-loaded by JavaScript we can't run. mbasic.facebook.com renders the whole album as plain
-        // HTML with real pagination, so we use it to enumerate every photo id, then resolve each to a
-        // full-resolution image via the proven www photo page.
         Set<String> fbids = new LinkedHashSet<>(extractFbids(listingPage));
-        fbids.addAll(enumerateAlbumFbids());
         if (fbids.isEmpty()) {
             return;
         }
@@ -360,112 +572,12 @@ public class FacebookRipper extends AbstractHTMLRipper {
     }
 
     /**
-     * Walks the mbasic.facebook.com version of the listing, following its "See more photos"
-     * pagination links, and collects every photo id across all pages. mbasic is server-rendered
-     * (no JavaScript), so unlike the desktop site it exposes the entire album. Returns an empty set
-     * if mbasic is unavailable, in which case the caller falls back to the desktop page's own ids.
-     */
-    private Set<String> enumerateAlbumFbids() {
-        Set<String> ids = new LinkedHashSet<>();
-        int pageCap = Utils.getConfigInteger("facebook.max_listing_pages", 50);
-        long delay = Utils.getConfigInteger("facebook.photo_page_delay_ms", 300);
-        URL listing;
-        try {
-            listing = toMbasicUrl(this.url);
-        } catch (MalformedURLException e) {
-            return ids;
-        }
-
-        Set<String> seenPages = new LinkedHashSet<>();
-        int pages = 0;
-        while (listing != null && pages < pageCap) {
-            if (isStopped() || !seenPages.add(listing.toExternalForm())) {
-                break;
-            }
-            pages++;
-            Document doc;
-            try {
-                doc = fetchPhotoListingPage(listing);
-            } catch (IOException e) {
-                logger.warn("mbasic photo enumeration stopped at page {} ({})", pages, e.getMessage());
-                break;
-            }
-            if (doc == null) {
-                break;
-            }
-            ids.addAll(extractFbids(doc));
-            listing = findMbasicNextPage(doc);
-            if (listing != null && delay > 0) {
-                try {
-                    Thread.sleep(delay);
-                } catch (InterruptedException ie) {
-                    Thread.currentThread().interrupt();
-                    break;
-                }
-            }
-        }
-        if (!ids.isEmpty()) {
-            logger.info("Enumerated {} photo id(s) from mbasic across {} page(s)", ids.size(), pages);
-        }
-        return ids;
-    }
-
-    /**
-     * Finds the "See more photos" / "Show more" pagination link on an mbasic listing page.
-     */
-    private URL findMbasicNextPage(Document doc) {
-        for (Element a : doc.select("a[href]")) {
-            String text = a.text().toLowerCase();
-            if (text.contains("see more") || text.contains("show more") || text.contains("more photos")) {
-                URL resolved = toUrl(a.attr("abs:href"));
-                if (resolved != null) {
-                    return resolved;
-                }
-            }
-        }
-        // Fallback: any cursor-based pagination link that points back at a photos listing.
-        for (Element a : doc.select("a[href*=cursor]")) {
-            String href = a.attr("abs:href").toLowerCase();
-            if (href.contains("photo")) {
-                URL resolved = toUrl(a.attr("abs:href"));
-                if (resolved != null) {
-                    return resolved;
-                }
-            }
-        }
-        return null;
-    }
-
-    private static URL toUrl(String value) {
-        if (value == null || value.isBlank()) {
-            return null;
-        }
-        try {
-            return new URL(value);
-        } catch (MalformedURLException e) {
-            return null;
-        }
-    }
-
-    /**
      * Fetches a single Facebook photo page. Exposed (protected) so tests can supply a local document
      * without performing network I/O.
      */
     protected Document fetchPhotoPage(String fbid) throws IOException {
         URL photoUrl = new URL("https://www.facebook.com/photo/?fbid=" + fbid);
         Http request = newFacebookRequest(photoUrl, this.url.toExternalForm());
-        if (!facebookCookies.isEmpty()) {
-            request.cookies(facebookCookies);
-        }
-        return request.get();
-    }
-
-    /**
-     * Fetches a single mbasic photo-listing page. Exposed (protected) so tests can supply a local
-     * document without performing network I/O.
-     */
-    protected Document fetchPhotoListingPage(URL listingUrl) throws IOException {
-        Http request = newFacebookRequest(listingUrl, "https://mbasic.facebook.com/");
         if (!facebookCookies.isEmpty()) {
             request.cookies(facebookCookies);
         }

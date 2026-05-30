@@ -34,7 +34,7 @@ public class FacebookRipperTest {
         }
 
         @Override
-        protected Document fetchPhotoListingPage(URL listingUrl) {
+        protected String executeGraphqlQuery(String friendlyName, String lsd, Map<String, String> formData) {
             return null;
         }
     }
@@ -176,73 +176,73 @@ public class FacebookRipperTest {
     }
 
     @Test
-    public void testMbasicPaginationEnumeratesEntireAlbum() throws Exception {
-        // The desktop listing only exposes a couple of photos; mbasic must be walked (following its
-        // "See more photos" link) so every photo in the album is discovered and resolved full-res.
-        String listingHtml = "<html><body><script>"
-                + "\"https:\\/\\/www.facebook.com\\/photo\\/?fbid=900001&set=a.1\""
+    public void testPhotoListingPaginatesEntireAlbumViaGraphql() throws Exception {
+        // A /photos listing embeds the tokens needed to replay Facebook's GraphQL pagination. The
+        // ripper must walk every page (following end_cursor/has_next_page) and collect each photo's
+        // full-resolution viewer_image, merged with the first batch already rendered in the page.
+        String listingHtml = "<html><head>"
+                + "<meta property=\"og:image\" content=\"https://scontent.xx.fbcdn.net/v/p0.jpg\">"
+                + "</head><body><script type=\"application/json\">"
+                + "[\"DTSGInitialData\",[],{\"token\":\"DTSGTOKEN123\"}]"
+                + "[\"LSD\",[],{\"token\":\"LSDTOKEN456\"}]"
+                + "\"USER_ID\":\"123456\""
+                + "\"YXBwX2NvbGxlY3Rpb246VEVTVENPTExFQ1RJT04=\",\"name\":\"Test's Photos\","
+                + "\"url\":\"https:\\/\\/www.facebook.com\\/example\\/photos_by\""
+                + "\"__typename\":\"TimelineAppCollectionPhotosRenderer\","
+                + "\"page_info\":{\"end_cursor\":\"C1\",\"has_next_page\":true}"
                 + "</script></body></html>";
         Document listing = Jsoup.parse(listingHtml, "https://www.facebook.com/example/photos");
 
-        Map<String, Document> listingPages = new HashMap<>();
-        // mbasic page 1: two photos + a "See more photos" link to page 2.
-        listingPages.put("https://mbasic.facebook.com/example/photos", Jsoup.parse(
-                "<html><body>"
-                        + "<a href=\"/photo.php?fbid=900001&id=1\">img</a>"
-                        + "<a href=\"/photo.php?fbid=900002&id=1\">img</a>"
-                        + "<a href=\"/example/photos?cursor=PAGE2\">See more photos</a>"
-                        + "</body></html>",
-                "https://mbasic.facebook.com/example/photos"));
-        // mbasic page 2: one more photo, no further pagination link.
-        listingPages.put("https://mbasic.facebook.com/example/photos?cursor=PAGE2", Jsoup.parse(
-                "<html><body>"
-                        + "<a href=\"/photo.php?fbid=900003&id=1\">img</a>"
-                        + "</body></html>",
-                "https://mbasic.facebook.com/example/photos?cursor=PAGE2"));
+        Map<String, String> graphqlPages = new HashMap<>();
+        graphqlPages.put("C1",
+                "{\"data\":{\"node\":{\"pageItems\":{\"edges\":["
+                        + "{\"node\":{\"node\":{\"viewer_image\":{\"uri\":\"https:\\/\\/scontent.xx.fbcdn.net\\/v\\/p1.jpg?stp=cp6_tt6\"}}}},"
+                        + "{\"node\":{\"node\":{\"viewer_image\":{\"uri\":\"https:\\/\\/scontent.xx.fbcdn.net\\/v\\/p2.jpg?stp=cp6_tt6\"}}}}"
+                        + "],\"page_info\":{\"end_cursor\":\"C2\",\"has_next_page\":true}}}}}");
+        graphqlPages.put("C2",
+                "{\"data\":{\"node\":{\"pageItems\":{\"edges\":["
+                        + "{\"node\":{\"node\":{\"viewer_image\":{\"uri\":\"https:\\/\\/scontent.xx.fbcdn.net\\/v\\/p3.jpg?stp=cp6_tt6\"}}}}"
+                        + "],\"page_info\":{\"end_cursor\":\"C3\",\"has_next_page\":false}}}}}");
 
-        Map<String, Document> photoPages = new HashMap<>();
-        for (String fbid : new String[] {"900001", "900002", "900003"}) {
-            photoPages.put(fbid, Jsoup.parse(
-                    "<html><head><meta property=\"og:image\" "
-                            + "content=\"https://scontent.xx.fbcdn.net/v/t39.30808-1/" + fbid + "_n.jpg?_nc_cat=1\">"
-                            + "</head><body></body></html>",
-                    "https://www.facebook.com/photo/?fbid=" + fbid));
-        }
-
-        CrawlingFacebookRipper ripper =
-                new CrawlingFacebookRipper(new URL("https://www.facebook.com/example/photos"), photoPages, listingPages);
+        GraphqlFacebookRipper ripper =
+                new GraphqlFacebookRipper(new URL("https://www.facebook.com/example/photos"), graphqlPages);
         List<String> urls = ripper.extract(listing);
 
-        assertEquals(3, urls.size(), "Both mbasic pages plus the desktop page should be merged");
-        assertTrue(urls.contains("https://scontent.xx.fbcdn.net/v/t39.30808-1/900001_n.jpg?_nc_cat=1"));
-        assertTrue(urls.contains("https://scontent.xx.fbcdn.net/v/t39.30808-1/900002_n.jpg?_nc_cat=1"));
-        assertTrue(urls.contains("https://scontent.xx.fbcdn.net/v/t39.30808-1/900003_n.jpg?_nc_cat=1"));
+        assertEquals(4, urls.size(), "First batch plus every paginated photo should be collected");
+        assertTrue(urls.contains("https://scontent.xx.fbcdn.net/v/p0.jpg"));
+        assertTrue(urls.contains("https://scontent.xx.fbcdn.net/v/p1.jpg?stp=cp6_tt6"));
+        assertTrue(urls.contains("https://scontent.xx.fbcdn.net/v/p2.jpg?stp=cp6_tt6"));
+        assertTrue(urls.contains("https://scontent.xx.fbcdn.net/v/p3.jpg?stp=cp6_tt6"));
     }
 
     private static class CrawlingFacebookRipper extends TestableFacebookRipper {
         private final Map<String, Document> photoPages;
-        private final Map<String, Document> listingPages;
 
         CrawlingFacebookRipper(URL url, Map<String, Document> photoPages) throws java.io.IOException {
-            this(url, photoPages, null);
-        }
-
-        CrawlingFacebookRipper(URL url, Map<String, Document> photoPages, Map<String, Document> listingPages)
-                throws java.io.IOException {
             super(url);
             this.photoPages = photoPages;
-            this.listingPages = listingPages;
         }
 
         @Override
         protected Document fetchPhotoPage(String fbid) {
             return photoPages.get(fbid);
         }
+    }
+
+    private static class GraphqlFacebookRipper extends TestableFacebookRipper {
+        private static final java.util.regex.Pattern CURSOR =
+                java.util.regex.Pattern.compile("\"cursor\":\"([^\"]+)\"");
+        private final Map<String, String> graphqlPages;
+
+        GraphqlFacebookRipper(URL url, Map<String, String> graphqlPages) throws java.io.IOException {
+            super(url);
+            this.graphqlPages = graphqlPages;
+        }
 
         @Override
-        protected Document fetchPhotoListingPage(URL listingUrl) {
-            // When no mbasic pages are supplied, behave as if mbasic is unavailable (no network).
-            return listingPages == null ? null : listingPages.get(listingUrl.toExternalForm());
+        protected String executeGraphqlQuery(String friendlyName, String lsd, Map<String, String> formData) {
+            java.util.regex.Matcher m = CURSOR.matcher(formData.getOrDefault("variables", ""));
+            return m.find() ? graphqlPages.get(m.group(1)) : null;
         }
     }
 
