@@ -338,11 +338,11 @@ public class RedditRipper extends AlbumRipper {
                         maxDownloadLimitReached = true;
                         break;
                     }
-                    if (children.getJSONObject(j).getString("kind").equals("t3") &&
+                    if (Utils.getConfigBoolean("descriptions.save", false) &&
+                            children.getJSONObject(j).getString("kind").equals("t3") &&
                             children.getJSONObject(j).getJSONObject("data").getBoolean("is_self")
                     ) {
                         URL selfPostURL = new URI(children.getJSONObject(j).getJSONObject("data").getString("url")).toURL();
-                        System.out.println(selfPostURL.toExternalForm());
                         saveText(getJsonArrayFromURL(getJsonURL(selfPostURL)));
                     }
                 } catch (Exception e) {
@@ -546,10 +546,11 @@ public class RedditRipper extends AlbumRipper {
         ).renderFormatted();
 
         try {
-            saveFileAs = Utils.getPath(workingDir
-                    + "/"
-                    + id + "_" + Utils.filesystemSafe(title)
-                    + ".html");
+            // Resolve the file name against the (absolute) working directory. Building the full path
+            // as a string and running it through Utils.getPath() would replace the ':' and '\' of a
+            // Windows path with '_', turning it into a relative folder created under the CWD.
+            saveFileAs = workingDir.toPath().resolve(
+                    Utils.sanitizeSaveAs(id + "_" + Utils.filesystemSafe(title) + ".html"));
             OutputStream out = Files.newOutputStream(saveFileAs);
             out.write(html.getBytes());
             out.close();
@@ -735,9 +736,9 @@ public class RedditRipper extends AlbumRipper {
             String url = urls.get(0).toExternalForm();
             Matcher m = Pattern.compile("https?://i.reddituploads.com/([a-zA-Z0-9]+)\\?.*").matcher(url);
             if (m.matches()) {
-                String savePath = this.workingDir + "/" + id + "-" + m.group(1) + Utils.filesystemSafe(title) + ".jpg";
+                String fileName = Utils.sanitizeSaveAs(id + "-" + m.group(1) + Utils.filesystemSafe(title) + ".jpg");
                 final URL singleUrl = urls.get(0);
-                final Path targetPath = Utils.getPath(savePath);
+                final Path targetPath = this.workingDir.toPath().resolve(fileName);
                 tryQueueDownload(singleUrl, () -> addURLToDownload(singleUrl, targetPath), () -> targetPath);
             } else if (url.contains("v.redd.it")) {
                 // Extract the actual v.redd.it id (e.g. "abc123") rather than the host.
@@ -747,11 +748,11 @@ public class RedditRipper extends AlbumRipper {
                 if (videoId.isBlank()) {
                     videoId = "video";
                 }
-                String savePath = this.workingDir + "/" + id + "-" + videoId + Utils.filesystemSafe(title) + ".mp4";
+                String fileName = Utils.sanitizeSaveAs(id + "-" + videoId + Utils.filesystemSafe(title) + ".mp4");
                 URL urlToDownload = parseRedditVideoMPD(urls.get(0).toExternalForm());
                 if (urlToDownload != null) {
                     final URL downloadUrl = urlToDownload;
-                    final Path videoPath = Utils.getPath(savePath);
+                    final Path videoPath = this.workingDir.toPath().resolve(fileName);
                     final String refUrl = theUrl;
                     tryQueueDownload(downloadUrl,
                             () -> addURLToDownload(downloadUrl, videoPath, refUrl, null, false),
