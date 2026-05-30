@@ -1,8 +1,8 @@
 {
-  "latestVersion": "2.1.235-1-fd56070",
-  "currentHash": "ca43098270f82a57f5cd37a8f89187c45c465b18f429ad58e45209703fca9c69",
+  "latestVersion": "2.1.236-1-c4c643c",
+  "currentHash": "ee6ba3bb15815b86ca19468d876cd91d982bbaed5cf454c50c7f9501c8187685",
   "changeList": [
-    "2.1.235-1-fd56070: Refactor DownloadFileThread and enhance RedditRipper for improved video URL handling. Updated HTTP request setup to handle redirects more robustly and added error logging for missing Location headers. In RedditRipper, implemented a lightweight reachability check for video URLs and improved parsing of DASH playlists, ensuring higher quality video renditions are prioritized.",
-    "2.1.235-1-fd56070: Built at 2026-05-30T12:32:21Z"
+    "2.1.236-1-c4c643c: Merge branch 'main' of https://github.com/Laziassdev/ripme",
+    "2.1.236-1-c4c643c: Built at 2026-05-30T12:55:56Z"
   ]
 }
