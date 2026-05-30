@@ -1,8 +1,8 @@
 {
-  "latestVersion": "2.1.236-1-c4c643c",
-  "currentHash": "ee6ba3bb15815b86ca19468d876cd91d982bbaed5cf454c50c7f9501c8187685",
+  "latestVersion": "2.1.237-1-f21e500",
+  "currentHash": "bd3fee8ef2d80cd4df677f091a517bd70c818fb231928eaab375b048e9b7054b",
   "changeList": [
-    "2.1.236-1-c4c643c: Merge branch 'main' of https://github.com/Laziassdev/ripme",
-    "2.1.236-1-c4c643c: Built at 2026-05-30T12:55:56Z"
+    "2.1.237-1-f21e500: Enhance FacebookRipper to support crawling photo listing pages for full-resolution images. Implemented logic to follow permalinks for photos, ensuring thumbnails are excluded from downloads. Added tests to verify correct extraction of full-resolution images from photo listings.",
+    "2.1.237-1-f21e500: Built at 2026-05-30T13:42:47Z"
   ]
 }
