@@ -31,9 +31,21 @@ public class FacebookRipper extends AbstractHTMLRipper {
 
     private static final Logger logger = LogManager.getLogger(FacebookRipper.class);
     private static final String DOMAIN = "facebook.com";
-    private static final Pattern MEDIA_URL_PATTERN = Pattern.compile("https?:\\/\\/[^\"'\\s<>]+\\.(?:jpe?g|png|webp|gif|mp4)(?:\\?[^\"'\\s<>]*)?", Pattern.CASE_INSENSITIVE);
+    private static final Pattern MEDIA_URL_PATTERN = Pattern.compile("https?:\\/\\/[^\"'\\s<>\\\\]+\\.(?:jpe?g|png|webp|gif|mp4)(?:\\?[^\"'\\s<>\\\\]*)?", Pattern.CASE_INSENSITIVE);
     private static final Pattern VIDEO_URL_PATTERN = Pattern.compile("\\.(?:mp4|m4v)(?:$|\\?)", Pattern.CASE_INSENSITIVE);
     private static final Pattern MANIFEST_URL_PATTERN = Pattern.compile("\\.(?:mpd|m3u8)(?:$|\\?)", Pattern.CASE_INSENSITIVE);
+    // Facebook stores video/reel sources in JSON keys rather than as plain links. HD-quality keys
+    // are extracted first so we prefer the highest available quality.
+    private static final Pattern HD_VIDEO_KEY_PATTERN = Pattern.compile(
+            "\"(?:playable_url_quality_hd|browser_native_hd_url|hd_src(?:_no_ratelimit)?)\"\\s*:\\s*\"(https?:[^\"]+?\\.(?:mp4|m4v)[^\"]*)\"",
+            Pattern.CASE_INSENSITIVE);
+    private static final Pattern SD_VIDEO_KEY_PATTERN = Pattern.compile(
+            "\"(?:playable_url|browser_native_sd_url|sd_src(?:_no_ratelimit)?)\"\\s*:\\s*\"(https?:[^\"]+?\\.(?:mp4|m4v)[^\"]*)\"",
+            Pattern.CASE_INSENSITIVE);
+    // UI chrome / sprites / emoji that are not actual post media.
+    private static final Pattern JUNK_URL_PATTERN = Pattern.compile(
+            "rsrc\\.php|/emoji\\.php|/images/emoji|static\\.[^/]*fbcdn\\.net|/rsrc\\.php|sprite|spaceball",
+            Pattern.CASE_INSENSITIVE);
 
     private Map<String, String> facebookCookies = new LinkedHashMap<>();
 
@@ -144,8 +156,18 @@ public class FacebookRipper extends AbstractHTMLRipper {
 
     @Override
     protected List<String> getURLsFromPage(Document page) throws UnsupportedEncodingException {
-        Set<String> found = new LinkedHashSet<>();
+        String rawHtml = page.html();
+        // Facebook embeds almost all media inside JSON blobs in <script> tags where slashes are
+        // escaped (https:\/\/...). Unescaping first is what allows the regex to actually match them.
+        String unescapedHtml = jsonUnescape(rawHtml);
 
+        // Highest-priority video sources come from explicit JSON keys, HD before SD, so that a reel
+        // downloads in the best quality available.
+        List<String> videoOnly = new ArrayList<>();
+        extractVideoKeys(rawHtml, HD_VIDEO_KEY_PATTERN, videoOnly);
+        extractVideoKeys(rawHtml, SD_VIDEO_KEY_PATTERN, videoOnly);
+
+        Set<String> found = new LinkedHashSet<>();
         addMetaMedia(page, found, "meta[property=og:image]");
         addMetaMedia(page, found, "meta[property=og:image:secure_url]");
         addMetaMedia(page, found, "meta[property=og:video]");
@@ -153,27 +175,30 @@ public class FacebookRipper extends AbstractHTMLRipper {
         addMetaMedia(page, found, "meta[property=twitter:image]");
         addMetaMedia(page, found, "meta[property=twitter:player:stream]");
 
-        String html = page.html();
-        Matcher m = MEDIA_URL_PATTERN.matcher(html);
+        Matcher m = MEDIA_URL_PATTERN.matcher(unescapedHtml);
         while (m.find()) {
-            found.add(unescapeJsonUrl(m.group()));
+            String mediaUrl = unescapeJsonUrl(m.group());
+            if (mediaUrl != null && !JUNK_URL_PATTERN.matcher(mediaUrl).find()) {
+                found.add(mediaUrl);
+            }
         }
 
-        if (found.isEmpty()) {
-            throw new IllegalStateException("No downloadable Facebook media URLs were discovered on page");
-        }
-
-        List<String> videoOnly = new ArrayList<>();
         List<String> manifestFallback = new ArrayList<>();
         for (String mediaUrl : found) {
             if (mediaUrl == null) {
                 continue;
             }
             if (VIDEO_URL_PATTERN.matcher(mediaUrl).find()) {
-                videoOnly.add(mediaUrl);
+                if (!videoOnly.contains(mediaUrl)) {
+                    videoOnly.add(mediaUrl);
+                }
             } else if (MANIFEST_URL_PATTERN.matcher(mediaUrl).find()) {
                 manifestFallback.add(mediaUrl);
             }
+        }
+
+        if (found.isEmpty() && videoOnly.isEmpty() && manifestFallback.isEmpty()) {
+            throw new IllegalStateException("No downloadable Facebook media URLs were discovered on page");
         }
 
         // Prefer direct video streams when available. This is useful for frame-extraction workflows
@@ -188,6 +213,16 @@ public class FacebookRipper extends AbstractHTMLRipper {
         return new ArrayList<>(found);
     }
 
+    private void extractVideoKeys(String html, Pattern keyPattern, List<String> target) {
+        Matcher matcher = keyPattern.matcher(html);
+        while (matcher.find()) {
+            String videoUrl = unescapeJsonUrl(matcher.group(1));
+            if (videoUrl != null && !videoUrl.isBlank() && !target.contains(videoUrl)) {
+                target.add(videoUrl);
+            }
+        }
+    }
+
     @Override
     protected void downloadURL(URL url, int index) {
         addURLToDownload(url, getPrefix(index));
@@ -200,6 +235,20 @@ public class FacebookRipper extends AbstractHTMLRipper {
                 found.add(unescapeJsonUrl(content.trim()));
             }
         }
+    }
+
+    private String jsonUnescape(String body) {
+        if (body == null) {
+            return "";
+        }
+        // Turn JSON-escaped slashes/unicode sequences back into a normal URL form so the media
+        // regex can match URLs that Facebook stores inside <script> JSON.
+        return body
+                .replace("\\/", "/")
+                .replace("\\u0025", "%")
+                .replace("\\u0026", "&")
+                .replace("\\u003D", "=")
+                .replace("\\u003d", "=");
     }
 
     private String unescapeJsonUrl(String value) {
