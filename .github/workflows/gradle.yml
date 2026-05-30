@@ -175,11 +175,21 @@ jobs:
           fi
           change_entries+=("${version}: Built at ${timestamp}")
 
+          # Preserve the running backlog: read the changeList already committed in ripme.json and
+          # prepend this build's entries to it (newest first) instead of overwriting it. Exact
+          # duplicate lines are collapsed so rebuilds of the same commit don't pile up.
+          existing_changes=$(jq -c '.changeList // []' ripme.json 2>/dev/null || echo '[]')
+          new_changes=$(printf '%s\n' "${change_entries[@]}" | jq -R . | jq -s .)
+          merged_changes=$(jq -n \
+            --argjson new "$new_changes" \
+            --argjson old "$existing_changes" \
+            '($new + $old) | reduce .[] as $e ([]; if index($e) == null then . + [$e] else . end)')
+
           # Write ripme.json with proper JSON escaping.
           jq -n \
             --arg latestVersion "$version" \
             --arg currentHash "$hash" \
-            --argjson changeList "$(printf '%s\n' "${change_entries[@]}" | jq -R . | jq -s .)" \
+            --argjson changeList "$merged_changes" \
             '{latestVersion: $latestVersion, currentHash: $currentHash, changeList: $changeList}' > ripme.json
           echo "Generated ripme.json content:"
           cat ripme.json
