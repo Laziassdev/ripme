@@ -3,6 +3,7 @@ package com.rarchives.ripme.ripper.rippers;
 import com.rarchives.ripme.ripper.AbstractHTMLRipper;
 import com.rarchives.ripme.utils.FirefoxCookieUtils;
 import com.rarchives.ripme.utils.Http;
+import com.rarchives.ripme.utils.Utils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.jsoup.HttpStatusException;
@@ -45,10 +46,16 @@ public class FacebookRipper extends AbstractHTMLRipper {
     private static final Pattern SD_VIDEO_KEY_PATTERN = Pattern.compile(
             "\"(?:playable_url|browser_native_sd_url|sd_src(?:_no_ratelimit)?)\"\\s*:\\s*\"(https?:[^\"]+?\\.(?:mp4|m4v)[^\"]*)\"",
             Pattern.CASE_INSENSITIVE);
-    // UI chrome / sprites / emoji that are not actual post media.
+    // UI chrome / sprites / emoji / hard-coded asset icons that are not actual post media.
     private static final Pattern JUNK_URL_PATTERN = Pattern.compile(
-            "rsrc\\.php|/emoji\\.php|/images/emoji|static\\.[^/]*fbcdn\\.net|/rsrc\\.php|sprite|spaceball",
+            "rsrc\\.php|/emoji\\.php|/images/emoji|static\\.[^/]*fbcdn\\.net|/rsrc\\.php|sprite|spaceball"
+                    + "|assets_DO_NOT_HARDCODE|facebook\\.com/images/|facebook\\.com/rsrc"
+                    + "|/images/assets_|fbcdn\\.net/rsrc",
             Pattern.CASE_INSENSITIVE);
+    // Photos embedded on profile/timeline pages are frequently only present as tiny grid thumbnails
+    // (e.g. stp=..._s74x74_... or s206x206). Those download as <10 KB files that immediately get
+    // deleted, so anything whose largest known dimension is below this is dropped before queueing.
+    private static final long MIN_IMAGE_DIMENSION = 320L;
     // Facebook serves the same photo at many sizes; the size is encoded in the stp parameter
     // (e.g. stp=..._s480x480_... or p960x960). These let us collapse size-variants to one best image.
     private static final Pattern STP_PARAM_PATTERN = Pattern.compile("[?&]stp=([^&]+)");
@@ -59,6 +66,10 @@ public class FacebookRipper extends AbstractHTMLRipper {
     private static final Pattern VENCODE_TAG_PATTERN = Pattern.compile("\"vencode_tag\"\\s*:\\s*\"([^\"]+)\"");
     private static final Pattern BITRATE_PATTERN = Pattern.compile("\"bitrate\"\\s*:\\s*(\\d+)");
     private static final Pattern RESOLUTION_PATTERN = Pattern.compile("(\\d{2,4})p");
+    // Photo permalinks (e.g. /photo/?fbid=123, photo.php?fbid=123, "fbid":"123") found on a photos
+    // listing page. Each links to a single photo page whose og:image is the full-resolution image.
+    private static final Pattern FBID_PATTERN = Pattern.compile(
+            "(?:[?&]fbid=|\"fbid\"\\s*:\\s*\"?)(\\d{6,})");
 
     private Map<String, String> facebookCookies = new LinkedHashMap<>();
 
@@ -169,30 +180,14 @@ public class FacebookRipper extends AbstractHTMLRipper {
 
     @Override
     protected List<String> getURLsFromPage(Document page) throws UnsupportedEncodingException {
-        String rawHtml = page.html();
-        // Facebook embeds almost all media inside JSON blobs in <script> tags where slashes are
-        // escaped (https:\/\/...). Unescaping first is what allows the regex to actually match them.
-        String unescapedHtml = jsonUnescape(rawHtml);
-
         Set<String> allMedia = new LinkedHashSet<>();
+        collectMediaFromDocument(page, allMedia);
 
-        // Explicit FB video keys (HD before SD).
-        extractVideoKeys(rawHtml, HD_VIDEO_KEY_PATTERN, allMedia);
-        extractVideoKeys(rawHtml, SD_VIDEO_KEY_PATTERN, allMedia);
-
-        addMetaMedia(page, allMedia, "meta[property=og:image]");
-        addMetaMedia(page, allMedia, "meta[property=og:image:secure_url]");
-        addMetaMedia(page, allMedia, "meta[property=og:video]");
-        addMetaMedia(page, allMedia, "meta[property=og:video:secure_url]");
-        addMetaMedia(page, allMedia, "meta[property=twitter:image]");
-        addMetaMedia(page, allMedia, "meta[property=twitter:player:stream]");
-
-        Matcher m = MEDIA_URL_PATTERN.matcher(unescapedHtml);
-        while (m.find()) {
-            String mediaUrl = unescapeJsonUrl(m.group());
-            if (mediaUrl != null && !JUNK_URL_PATTERN.matcher(mediaUrl).find()) {
-                allMedia.add(mediaUrl);
-            }
+        // A photos/album listing page only embeds full-resolution URLs for the first handful of
+        // photos; the rest are present solely as tiny thumbnails. Visit each photo's permalink to
+        // pull its full-resolution image so the whole album is downloaded, not just the first screen.
+        if (isPhotoListingPage()) {
+            crawlPhotoPages(page, allMedia);
         }
 
         // Facebook exposes the same photo at many sizes and the same reel at many renditions.
@@ -236,6 +231,14 @@ public class FacebookRipper extends AbstractHTMLRipper {
         }
         List<String> images = new ArrayList<>();
         for (ScoredUrl scored : bestImageByKey.values()) {
+            // scored.score holds the largest dimension we could find for this photo (Long.MAX_VALUE
+            // when the URL carries no size token, i.e. a full-resolution image). Skip thumbnail-only
+            // photos whose best available size is below the floor; they would just be downloaded and
+            // deleted for being under the minimum file size.
+            if (scored.score < MIN_IMAGE_DIMENSION) {
+                logger.debug("Skipping Facebook thumbnail-only image (max dim " + scored.score + "): " + scored.url);
+                continue;
+            }
             images.add(scored.url);
         }
 
@@ -251,6 +254,117 @@ public class FacebookRipper extends AbstractHTMLRipper {
             return manifestFallback;
         }
         return images;
+    }
+
+    /**
+     * Scrapes every media URL embedded in a single Facebook document (video keys, OpenGraph/Twitter
+     * meta tags and any media URL embedded in the page's escaped JSON) into {@code allMedia}.
+     */
+    private void collectMediaFromDocument(Document page, Set<String> allMedia) {
+        String rawHtml = page.html();
+        // Facebook embeds almost all media inside JSON blobs in <script> tags where slashes are
+        // escaped (https:\/\/...). Unescaping first is what allows the regex to actually match them.
+        String unescapedHtml = jsonUnescape(rawHtml);
+
+        // Explicit FB video keys (HD before SD).
+        extractVideoKeys(rawHtml, HD_VIDEO_KEY_PATTERN, allMedia);
+        extractVideoKeys(rawHtml, SD_VIDEO_KEY_PATTERN, allMedia);
+
+        addMetaMedia(page, allMedia, "meta[property=og:image]");
+        addMetaMedia(page, allMedia, "meta[property=og:image:secure_url]");
+        addMetaMedia(page, allMedia, "meta[property=og:video]");
+        addMetaMedia(page, allMedia, "meta[property=og:video:secure_url]");
+        addMetaMedia(page, allMedia, "meta[property=twitter:image]");
+        addMetaMedia(page, allMedia, "meta[property=twitter:player:stream]");
+
+        Matcher m = MEDIA_URL_PATTERN.matcher(unescapedHtml);
+        while (m.find()) {
+            String mediaUrl = unescapeJsonUrl(m.group());
+            if (mediaUrl != null && !JUNK_URL_PATTERN.matcher(mediaUrl).find()) {
+                allMedia.add(mediaUrl);
+            }
+        }
+    }
+
+    /**
+     * @return true when the URL being ripped is a photo/album listing (e.g. {@code /name/photos} or
+     *         a {@code /media/set/} album) rather than a single photo/video/reel permalink.
+     */
+    private boolean isPhotoListingPage() {
+        String full = this.url.toExternalForm().toLowerCase();
+        String path = this.url.getPath() == null ? "" : this.url.getPath().toLowerCase();
+        // Single-media permalinks already expose the full image/video directly, so don't crawl them.
+        if (full.contains("fbid=") || full.contains("story_fbid=")
+                || full.contains("/watch") || full.contains("/reel")
+                || path.matches(".*/videos?(/.*|$)") || path.matches(".*/photo(/.*|$)")) {
+            return false;
+        }
+        return path.contains("/photos") || full.contains("sk=photos") || full.contains("/media/set");
+    }
+
+    /**
+     * Visits each photo permalink referenced on a listing page and merges the full-resolution image
+     * from that photo's page into {@code allMedia}. Failures on individual photos are logged and
+     * skipped so one bad photo can't abort the whole rip.
+     */
+    private void crawlPhotoPages(Document listingPage, Set<String> allMedia) {
+        Set<String> fbids = extractFbids(listingPage);
+        if (fbids.isEmpty()) {
+            return;
+        }
+        int cap = Utils.getConfigInteger("facebook.max_photo_pages", 1000);
+        long delay = Utils.getConfigInteger("facebook.photo_page_delay_ms", 300);
+        logger.info("Found {} Facebook photo permalink(s); fetching full-resolution images", fbids.size());
+
+        int fetched = 0;
+        for (String fbid : fbids) {
+            if (isStopped()) {
+                break;
+            }
+            if (fetched >= cap) {
+                logger.warn("Reached facebook.max_photo_pages cap ({}); stopping photo crawl", cap);
+                break;
+            }
+            try {
+                Document photoDoc = fetchPhotoPage(fbid);
+                if (photoDoc != null) {
+                    collectMediaFromDocument(photoDoc, allMedia);
+                }
+            } catch (IOException e) {
+                logger.warn("Failed to fetch Facebook photo page fbid={}: {}", fbid, e.getMessage());
+            }
+            fetched++;
+            if (delay > 0 && fetched < fbids.size()) {
+                try {
+                    Thread.sleep(delay);
+                } catch (InterruptedException ie) {
+                    Thread.currentThread().interrupt();
+                    break;
+                }
+            }
+        }
+    }
+
+    private Set<String> extractFbids(Document page) {
+        Set<String> ids = new LinkedHashSet<>();
+        Matcher matcher = FBID_PATTERN.matcher(jsonUnescape(page.html()));
+        while (matcher.find()) {
+            ids.add(matcher.group(1));
+        }
+        return ids;
+    }
+
+    /**
+     * Fetches a single Facebook photo page. Exposed (protected) so tests can supply a local document
+     * without performing network I/O.
+     */
+    protected Document fetchPhotoPage(String fbid) throws IOException {
+        URL photoUrl = new URL("https://www.facebook.com/photo/?fbid=" + fbid);
+        Http request = newFacebookRequest(photoUrl, this.url.toExternalForm());
+        if (!facebookCookies.isEmpty()) {
+            request.cookies(facebookCookies);
+        }
+        return request.get();
     }
 
     private void extractVideoKeys(String html, Pattern keyPattern, Set<String> target) {

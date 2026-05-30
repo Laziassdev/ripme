@@ -9,7 +9,9 @@ import java.net.URL;
 import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
 import java.util.Base64;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -125,6 +127,55 @@ public class FacebookRipperTest {
 
         assertEquals(1, urls.size(), "One reel should produce exactly one downloadable file");
         assertTrue(urls.get(0).contains("dash.mp4"), "The highest-resolution (1080p) rendition should be preferred");
+    }
+
+    @Test
+    public void testPhotoListingCrawlsPermalinksForFullResolution() throws Exception {
+        // A /photos listing only embeds tiny thumbnails for most photos. The ripper must follow each
+        // photo permalink (fbid) and pull the full-resolution image from that photo's page.
+        String listingHtml = "<html><body><script>"
+                + "\"https:\\/\\/www.facebook.com\\/photo\\/?fbid=700001&set=a.1\""
+                + "\"https:\\/\\/www.facebook.com\\/photo\\/?fbid=700002&set=a.1\""
+                // Only thumbnails for those photos are present on the listing itself.
+                + "\"https:\\/\\/scontent.xx.fbcdn.net\\/v\\/t39.30808-1\\/700001_n.jpg?stp=cp0_dst-jpg_s74x74_tt6&_nc_cat=1\""
+                + "\"https:\\/\\/scontent.xx.fbcdn.net\\/v\\/t39.30808-1\\/700002_n.jpg?stp=cp0_dst-jpg_s74x74_tt6&_nc_cat=1\""
+                + "</script></body></html>";
+        Document listing = Jsoup.parse(listingHtml, "https://www.facebook.com/example/photos");
+
+        Map<String, Document> photoPages = new HashMap<>();
+        photoPages.put("700001", Jsoup.parse(
+                "<html><head><meta property=\"og:image\" "
+                        + "content=\"https://scontent.xx.fbcdn.net/v/t39.30808-1/700001_n.jpg?_nc_cat=1\">"
+                        + "</head><body></body></html>",
+                "https://www.facebook.com/photo/?fbid=700001"));
+        photoPages.put("700002", Jsoup.parse(
+                "<html><head><meta property=\"og:image\" "
+                        + "content=\"https://scontent.xx.fbcdn.net/v/t39.30808-1/700002_n.jpg?_nc_cat=1\">"
+                        + "</head><body></body></html>",
+                "https://www.facebook.com/photo/?fbid=700002"));
+
+        CrawlingFacebookRipper ripper =
+                new CrawlingFacebookRipper(new URL("https://www.facebook.com/example/photos"), photoPages);
+        List<String> urls = ripper.extract(listing);
+
+        assertEquals(2, urls.size(), "Each photo should resolve to one full-resolution image");
+        assertTrue(urls.contains("https://scontent.xx.fbcdn.net/v/t39.30808-1/700001_n.jpg?_nc_cat=1"));
+        assertTrue(urls.contains("https://scontent.xx.fbcdn.net/v/t39.30808-1/700002_n.jpg?_nc_cat=1"));
+        assertTrue(urls.stream().noneMatch(u -> u.contains("s74x74")), "Thumbnails must not be downloaded");
+    }
+
+    private static class CrawlingFacebookRipper extends TestableFacebookRipper {
+        private final Map<String, Document> photoPages;
+
+        CrawlingFacebookRipper(URL url, Map<String, Document> photoPages) throws java.io.IOException {
+            super(url);
+            this.photoPages = photoPages;
+        }
+
+        @Override
+        protected Document fetchPhotoPage(String fbid) {
+            return photoPages.get(fbid);
+        }
     }
 
     private static String videoUrl(String name, String efgJson) {
