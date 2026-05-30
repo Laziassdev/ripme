@@ -1,7 +1,9 @@
 {
-  "latestVersion": "2.1.240-1-bae2733",
-  "currentHash": "b5c20ce5c7a842968b9fa761af58d93a96adc562724b7f31a7485d732a885d2d",
+  "latestVersion": "2.1.241-1-b0d2a2f",
+  "currentHash": "567ed72b6d0fd4023dd4045a67991beebdc8866f3ae7565348be172e409aad89",
   "changeList": [
+    "2.1.241-1-b0d2a2f: Refactor RedditRipper to improve file path handling and add support for saving self-post descriptions. Updated file naming logic to ensure compatibility with Windows paths and enhanced URL handling for image and video downloads.",
+    "2.1.241-1-b0d2a2f: Built at 2026-05-30T16:50:43Z",
     "2.1.240-1-bae2733: Update ripme.json to merge change entries from the latest build, preserving existing entries and ensuring no duplicates. This enhances the change tracking for future builds.",
     "2.1.240-1-bae2733: Built at 2026-05-30T15:12:03Z",
     "2.1.239-1-9a905da: Implement GraphQL pagination support in FacebookRipper for photo albums, allowing full extraction of images. Added methods to handle GraphQL requests and updated configuration properties for pagination settings. Enhanced tests to verify correct functionality of the new pagination logic.",
