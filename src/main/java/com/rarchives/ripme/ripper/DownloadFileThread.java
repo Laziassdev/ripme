@@ -121,12 +121,15 @@ class DownloadFileThread implements Runnable {
                 logger.info("    Downloading file: " + urlToDownload + (tries > 0 ? " Retry #" + tries : ""));
                 observer.sendUpdate(STATUS.DOWNLOAD_STARTED, url.toExternalForm());
 
-                // Setup HTTP request
+                // Setup HTTP request. Decide the connection type from the URL we are actually
+                // fetching (which may differ from the original after a redirect) so that a
+                // redirect that switches protocol/host does not cause a ClassCastException.
                 HttpURLConnection huc;
-                if (this.url.toString().startsWith("https")) {
-                    huc = (HttpsURLConnection) urlToDownload.openConnection();
+                URLConnection rawConnection = urlToDownload.openConnection();
+                if (rawConnection instanceof HttpsURLConnection) {
+                    huc = (HttpsURLConnection) rawConnection;
                 } else {
-                    huc = (HttpURLConnection) urlToDownload.openConnection();
+                    huc = (HttpURLConnection) rawConnection;
                 }
                 huc.setInstanceFollowRedirects(true);
                 // It is important to set both ConnectTimeout and ReadTimeout. If you don't then
@@ -164,13 +167,19 @@ class DownloadFileThread implements Runnable {
                     throw new IOException(Utils.getLocalizedString("server.doesnt.support.resuming.downloads"));
                 }
                 if (statusCode / 100 == 3) { // 3xx Redirect
+                    String location = huc.getHeaderField("Location");
+                    if (location == null || location.isBlank()) {
+                        logger.error("[!] Redirect status code " + statusCode + " without a Location header while downloading " + urlToDownload);
+                        observer.downloadErrored(url, "Redirect (" + statusCode + ") without Location header while downloading " + url.toExternalForm());
+                        return;
+                    }
                     if (!redirected) {
                         // Don't increment retries on the first redirect
                         tries--;
                         redirected = true;
                     }
-                    String location = huc.getHeaderField("Location");
-                    urlToDownload = new URI(location).toURL();
+                    // Resolve relative redirects against the current URL.
+                    urlToDownload = new URI(urlToDownload.toString()).resolve(location).toURL();
                     // Throw exception so download can be retried
                     throw new IOException("Redirect status code " + statusCode + " - redirect to " + location);
                 }
@@ -261,8 +270,9 @@ class DownloadFileThread implements Runnable {
                     try {
                         fos = new FileOutputStream(workingFile);
                     } catch (FileNotFoundException e) {
+                        String fnfMessage = e.getMessage() == null ? "" : e.getMessage();
                         // We do this because some filesystems have a max name length
-                        if (e.getMessage().contains("File name too long")) {
+                        if (fnfMessage.contains("File name too long")) {
                             logger.error("The filename " + saveAs.getName()
                                     + " is to long to be saved on this file system.");
                             logger.info("Shortening filename");
@@ -288,7 +298,11 @@ class DownloadFileThread implements Runnable {
                                     Utils.shortenSaveAsWindows(targetFile.getParentFile().getPath(), targetFile.getName()));
                             assert fos != null: "After shortenSaveAsWindows: " + targetFile.getAbsolutePath();
                         }
-                        assert fos != null: e.getStackTrace();
+                        if (fos == null) {
+                            // Re-throw so the failure is surfaced/retried instead of causing a
+                            // later NullPointerException when we try to write to a null stream.
+                            throw e;
+                        }
                     }
                 }
                 byte[] data = new byte[1024 * 256];
@@ -368,12 +382,9 @@ class DownloadFileThread implements Runnable {
                 logger.error("[!] " + Utils.getLocalizedString("exception.while.downloading.file") + ": " + url + " - "
                         + e.getMessage());
             } catch (NullPointerException npe){
-
-                logger.error("[!] " + Utils.getLocalizedString("failed.to.download") + " for URL " + url);
-                observer.downloadErrored(url,
-                        Utils.getLocalizedString("failed.to.download") + " " + url.toExternalForm());
-                return;
-
+                // Log the actual stack trace so the real cause is diagnosable instead of being
+                // silently swallowed, and fall through to the retry logic below.
+                logger.error("[!] " + Utils.getLocalizedString("failed.to.download") + " for URL " + url, npe);
             }
             if (tries > this.retries) {
                 logger.error("[!] " + Utils.getLocalizedString("exceeded.maximum.retries") + " (" + this.retries

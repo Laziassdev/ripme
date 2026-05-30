@@ -627,69 +627,87 @@ public class RedditRipper extends AlbumRipper {
                 if (!vidURL.contains("/CMAF_") && !vidURL.contains("/DASH_")) {
                     return directUrl;
                 }
-                int status = Http.url(directUrl)
-                        .ignoreHttpErrors()
-                        .ignoreContentType()
-                        .timeout(10_000)
-                        .connection()
-                        .execute()
-                        .statusCode();
+                int status = probeRedditVideoStatus(directUrl);
                 if (status >= 200 && status < 300) {
                     return directUrl;
                 }
                 logger.info("Direct Reddit video URL {} returned HTTP {}, falling back to DASH playlist", vidURL, status);
                 manifestBaseUrl = vidURL.substring(0, vidURL.lastIndexOf('/'));
-            } catch (IOException | URISyntaxException e) {
-                logger.info("Unable to fetch direct Reddit video URL {}, falling back to DASH playlist: {}", vidURL, e.getMessage());
-                manifestBaseUrl = vidURL.substring(0, vidURL.lastIndexOf('/'));
             } catch (IllegalArgumentException e) {
                 logger.warn("Unable to parse direct Reddit video URL {}: {}", vidURL, e.getMessage());
                 return null;
+            } catch (MalformedURLException | URISyntaxException e) {
+                logger.info("Unable to parse direct Reddit video URL {}, falling back to DASH playlist: {}", vidURL, e.getMessage());
+                manifestBaseUrl = vidURL.substring(0, vidURL.lastIndexOf('/'));
             }
         }
 
-        org.jsoup.nodes.Document doc;
         try {
-            doc = Http.url(manifestBaseUrl + "/DASHPlaylist.mpd").ignoreContentType().get();
-            URL bestCandidate = null;
-            int bestHeight = -1;
-            // Try highest-quality video representations first and return the first
-            // reachable one. This avoids stale CMAF/DASH entries in some manifests.
+            org.jsoup.nodes.Document doc = Http.url(manifestBaseUrl + "/DASHPlaylist.mpd")
+                    .referrer("https://www.reddit.com/")
+                    .ignoreContentType()
+                    .get();
+
+            // Collect every video rendition keyed by height, highest quality first.
+            java.util.TreeMap<Integer, URL> renditions = new java.util.TreeMap<>(java.util.Collections.reverseOrder());
             for (org.jsoup.nodes.Element e : doc.select("MPD > Period > AdaptationSet > Representation")) {
                 String height = e.attr("height");
-                if (height.equals("")) {
+                if (height.isEmpty()) {
                     continue;
                 }
-                int parsedHeight = Integer.parseInt(height);
                 String baseURL = e.select("BaseURL").text();
                 if (baseURL.isEmpty()) {
                     continue;
                 }
-                URL candidate = new URI(manifestBaseUrl + "/" + baseURL).toURL();
-                if (parsedHeight > bestHeight) {
-                    bestHeight = parsedHeight;
-                    bestCandidate = candidate;
-                }
-
-                int candidateStatus = Http.url(candidate)
-                        .ignoreHttpErrors()
-                        .ignoreContentType()
-                        .timeout(10_000)
-                        .connection()
-                        .execute()
-                        .statusCode();
-                if (candidateStatus >= 200 && candidateStatus < 300) {
-                    return candidate;
+                try {
+                    URL candidate = new URI(manifestBaseUrl + "/" + baseURL).toURL();
+                    renditions.putIfAbsent(Integer.parseInt(height), candidate);
+                } catch (IllegalArgumentException | URISyntaxException | MalformedURLException ex) {
+                    logger.debug("Skipping unparseable DASH rendition '{}': {}", baseURL, ex.getMessage());
                 }
             }
 
-            // Fallback to highest known rendition even if probes failed.
-            return bestCandidate;
-        } catch (IOException | URISyntaxException e) {
-            e.printStackTrace();
+            // Return the highest-quality rendition that actually responds.
+            for (Map.Entry<Integer, URL> entry : renditions.entrySet()) {
+                if (isStopped()) {
+                    break;
+                }
+                int candidateStatus = probeRedditVideoStatus(entry.getValue());
+                if (candidateStatus >= 200 && candidateStatus < 300) {
+                    return entry.getValue();
+                }
+            }
+
+            // Fall back to the highest known rendition even if probing failed; the
+            // downloader will follow redirects and surface a clear error if it is gone.
+            return renditions.isEmpty() ? null : renditions.firstEntry().getValue();
+        } catch (IOException e) {
+            logger.warn("Unable to parse Reddit DASH playlist at {}: {}", manifestBaseUrl, e.getMessage());
         }
         return null;
+    }
 
+    /**
+     * Lightweight reachability check for a Reddit video URL. Caps the body size so we don't
+     * download the whole video into memory just to read the status code, and sends a Referer
+     * so the CDN does not reject the request.
+     *
+     * @return the HTTP status code, or -1 if the request could not be made.
+     */
+    private int probeRedditVideoStatus(URL candidate) {
+        try {
+            org.jsoup.Connection connection = Http.url(candidate)
+                    .referrer("https://www.reddit.com/")
+                    .ignoreHttpErrors()
+                    .ignoreContentType()
+                    .timeout(10_000)
+                    .connection();
+            connection.maxBodySize(2048);
+            return connection.execute().statusCode();
+        } catch (IOException e) {
+            logger.debug("Reddit video probe failed for {}: {}", candidate, e.getMessage());
+            return -1;
+        }
     }
 
     private void handleURL(String theUrl, String id, String title) {
@@ -722,7 +740,13 @@ public class RedditRipper extends AlbumRipper {
                 final Path targetPath = Utils.getPath(savePath);
                 tryQueueDownload(singleUrl, () -> addURLToDownload(singleUrl, targetPath), () -> targetPath);
             } else if (url.contains("v.redd.it")) {
-                String videoId = url.split("/")[2];
+                // Extract the actual v.redd.it id (e.g. "abc123") rather than the host.
+                String videoId = url.replaceFirst("^https?://", "")
+                        .replaceFirst("^v\\.redd\\.it/", "")
+                        .split("[/?#]")[0];
+                if (videoId.isBlank()) {
+                    videoId = "video";
+                }
                 String savePath = this.workingDir + "/" + id + "-" + videoId + Utils.filesystemSafe(title) + ".mp4";
                 URL urlToDownload = parseRedditVideoMPD(urls.get(0).toExternalForm());
                 if (urlToDownload != null) {
