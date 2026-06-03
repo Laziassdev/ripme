@@ -1,7 +1,9 @@
 {
-  "latestVersion": "2.1.241-1-b0d2a2f",
-  "currentHash": "567ed72b6d0fd4023dd4045a67991beebdc8866f3ae7565348be172e409aad89",
+  "latestVersion": "2.1.242-1-d0f1a79",
+  "currentHash": "c8a3d26ab737ef9e57705d49a73a7c5fa9486238a3858aa61d7b520093b66525",
   "changeList": [
+    "2.1.242-1-d0f1a79: Add configuration option to enable/disable Coomer video downloads",
+    "2.1.242-1-d0f1a79: Built at 2026-06-03T13:36:54Z",
     "2.1.241-1-b0d2a2f: Refactor RedditRipper to improve file path handling and add support for saving self-post descriptions. Updated file naming logic to ensure compatibility with Windows paths and enhanced URL handling for image and video downloads.",
     "2.1.241-1-b0d2a2f: Built at 2026-05-30T16:50:43Z",
     "2.1.240-1-bae2733: Update ripme.json to merge change entries from the latest build, preserving existing entries and ensuring no duplicates. This enhances the change tracking for future builds.",
