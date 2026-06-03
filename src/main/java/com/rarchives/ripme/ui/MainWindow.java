@@ -76,6 +76,7 @@ public final class MainWindow implements Runnable, RipStatusHandler {
             "threads.size", "download.timeout", "download.retries", "download.retry.sleep", "file.overwrite",
             "auto.update", "play.sound", "download.show_popup", "download.save_order", "log.save",
             "urls_only.save", "album_titles.save", "clipboard.autorip", "descriptions.save", "prefer.mp4",
+            "coomer.download.videos",
             "window.position", "remember.url_history", "ssl.verify.off", "lang", "log.level",
             "rips.directory"));
 
@@ -166,6 +167,7 @@ public final class MainWindow implements Runnable, RipStatusHandler {
     private static JCheckBox configClipboardAutorip;
     private static JCheckBox configSaveDescriptions;
     private static JCheckBox configPreferMp4;
+    private static JCheckBox configCoomerDownloadVideos;
     private static JCheckBox configWindowPosition;
     private static JComboBox<String> configSelectLangComboBox;
     private static JLabel configThreadsLabel;
@@ -694,6 +696,7 @@ public final class MainWindow implements Runnable, RipStatusHandler {
         Utils.setConfigBoolean("clipboard.autorip", configClipboardAutorip.isSelected());
         Utils.setConfigBoolean("descriptions.save", configSaveDescriptions.isSelected());
         Utils.setConfigBoolean("prefer.mp4", configPreferMp4.isSelected());
+        Utils.setConfigBoolean("coomer.download.videos", configCoomerDownloadVideos.isSelected());
         Utils.setConfigBoolean("remember.url_history", configURLHistoryCheckbox.isSelected());
         Utils.setConfigBoolean("ssl.verify.off", configSSLVerifyOff.isSelected());
         Utils.setConfigString("lang", configSelectLangComboBox.getSelectedItem().toString());
@@ -1207,6 +1210,8 @@ public final class MainWindow implements Runnable, RipStatusHandler {
         configSaveDescriptions = addNewCheckbox(Utils.getLocalizedString("save.descriptions"), "descriptions.save",
                 true);
         configPreferMp4 = addNewCheckbox(Utils.getLocalizedString("prefer.mp4.over.gif"), "prefer.mp4", false);
+        configCoomerDownloadVideos = addNewCheckbox(Utils.getLocalizedString("coomer.download.videos"),
+                "coomer.download.videos", true);
         configWindowPosition = addNewCheckbox(Utils.getLocalizedString("restore.window.position"), "window.position",
                 true);
         configURLHistoryCheckbox = addNewCheckbox(Utils.getLocalizedString("remember.url.history"),
@@ -1248,7 +1253,7 @@ public final class MainWindow implements Runnable, RipStatusHandler {
         addItemToConfigGridBagConstraints(gbc, idx++, configClipboardAutorip, configSaveAlbumTitles);
         addItemToConfigGridBagConstraints(gbc, idx++, configSaveDescriptions, configPreferMp4);
         addItemToConfigGridBagConstraints(gbc, idx++, configWindowPosition, configURLHistoryCheckbox);
-        addItemToConfigGridBagConstraints(gbc, idx++, configSSLVerifyOff, configSSLVerifyOff);
+        addItemToConfigGridBagConstraints(gbc, idx++, configSSLVerifyOff, configCoomerDownloadVideos);
         addItemToConfigGridBagConstraints(gbc, idx++, configSelectLangComboBox, configUrlFileChooserButton);
         addItemToConfigGridBagConstraints(gbc, idx++, configSaveDirLabel, configSaveDirButton);
 
@@ -1442,6 +1447,7 @@ public final class MainWindow implements Runnable, RipStatusHandler {
         configUrlFileChooserButton.setText(Utils.getLocalizedString("download.url.list"));
         configSaveDirButton.setText(Utils.getLocalizedString("select.save.dir") + "...");
         configPreferMp4.setText(Utils.getLocalizedString("prefer.mp4.over.gif"));
+        configCoomerDownloadVideos.setText(Utils.getLocalizedString("coomer.download.videos"));
         configWindowPosition.setText(Utils.getLocalizedString("restore.window.position"));
         configURLHistoryCheckbox.setText(Utils.getLocalizedString("remember.url.history"));
         configSSLVerifyOff.setText(Utils.getLocalizedString("ssl.verify.off"));
@@ -1793,6 +1799,7 @@ public final class MainWindow implements Runnable, RipStatusHandler {
         addCheckboxListener(configSaveAlbumTitles, "album_titles.save");
         addCheckboxListener(configSaveDescriptions, "descriptions.save");
         addCheckboxListener(configPreferMp4, "prefer.mp4");
+        addCheckboxListener(configCoomerDownloadVideos, "coomer.download.videos");
         addCheckboxListener(configWindowPosition, "window.position");
 
         configClipboardAutorip.addActionListener(arg0 -> {

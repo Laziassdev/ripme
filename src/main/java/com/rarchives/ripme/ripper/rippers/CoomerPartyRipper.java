@@ -618,9 +618,17 @@ public class CoomerPartyRipper extends AbstractJSONRipper {
                     logger.warn("Unsupported media extension in path: " + trimmedPath);
                     continue;
                 }
+                if (isVideo(url) && !coomerVideosEnabled()) {
+                    logger.debug("Skipping Coomer video (coomer.download.videos=false): {}", trimmedPath);
+                    continue;
+                }
             } else if (isImage(trimmedPath)) {
                 url = buildMediaUrl(IMG_URL_BASE, trimmedPath, false);
             } else if (isVideo(trimmedPath)) {
+                if (!coomerVideosEnabled()) {
+                    logger.debug("Skipping Coomer video (coomer.download.videos=false): {}", trimmedPath);
+                    continue;
+                }
                 url = buildMediaUrl(VID_URL_BASE, trimmedPath, true);
             } else {
                 logger.warn("Unsupported media extension in path: " + trimmedPath);
@@ -853,5 +861,9 @@ public class CoomerPartyRipper extends AbstractJSONRipper {
     private boolean isVideo(String path) {
         Matcher matcher = VID_PATTERN.matcher(path);
         return matcher.matches();
+    }
+
+    private static boolean coomerVideosEnabled() {
+        return Utils.getConfigBoolean("coomer.download.videos", true);
     }
 }
