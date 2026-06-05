@@ -176,6 +176,93 @@ public class FacebookRipperTest {
     }
 
     @Test
+    public void testPhotoListingFallsBackWhenGraphqlPaginationFails() throws Exception {
+        String listingHtml = "<html><body><script type=\"application/json\">"
+                + "[\"DTSGInitialData\",[],{\"token\":\"DTSGTOKEN123\"}]"
+                + "[\"LSD\",[],{\"token\":\"LSDTOKEN456\"}]"
+                + "\"USER_ID\":\"123456\""
+                + "\"YXBwX2NvbGxlY3Rpb246VEVTVENPTExFQ1RJT04=\",\"name\":\"Test's Photos\","
+                + "\"url\":\"https:\\/\\/www.facebook.com\\/example\\/photos_by\""
+                + "\"__typename\":\"TimelineAppCollectionPhotosRenderer\","
+                + "\"page_info\":{\"end_cursor\":\"C1\",\"has_next_page\":true}"
+                + "\"https:\\/\\/www.facebook.com\\/photo\\/?fbid=800001&set=a.1\""
+                + "\"https:\\/\\/scontent.xx.fbcdn.net\\/v\\/t39.30808-1\\/800001_n.jpg?stp=cp0_dst-jpg_s74x74_tt6&_nc_cat=1\""
+                + "</script></body></html>";
+        Document listing = Jsoup.parse(listingHtml, "https://www.facebook.com/example/photos");
+
+        Map<String, Document> photoPages = new HashMap<>();
+        photoPages.put("800001", Jsoup.parse(
+                "<html><head><meta property=\"og:image\" "
+                        + "content=\"https://scontent.xx.fbcdn.net/v/t39.30808-1/800001_n.jpg?_nc_cat=1\">"
+                        + "</head><body></body></html>",
+                "https://www.facebook.com/photo/?fbid=800001"));
+
+        FailingGraphqlFacebookRipper ripper =
+                new FailingGraphqlFacebookRipper(new URL("https://www.facebook.com/example/photos"), photoPages);
+        List<String> urls = ripper.extract(listing);
+
+        assertEquals(1, urls.size(), "Should fall back to permalink crawl when GraphQL pagination fails");
+        assertTrue(urls.contains("https://scontent.xx.fbcdn.net/v/t39.30808-1/800001_n.jpg?_nc_cat=1"));
+    }
+
+    @Test
+    public void testPhotoListingFallsBackFromPhotosOfToPhotosBy() throws Exception {
+        String photosOfId = "YXBwX2NvbGxlY3Rpb246UEhPVE9TT0Y=";
+        String photosById = "YXBwX2NvbGxlY3Rpb246UEhPVE9TQlk=";
+        String listingHtml = "<html><body><script type=\"application/json\">"
+                + "[\"DTSGInitialData\",[],{\"token\":\"DTSGTOKEN123\"}]"
+                + "[\"LSD\",[],{\"token\":\"LSDTOKEN456\"}]"
+                + "\"USER_ID\":\"123456\""
+                + "\"all_collections\":{\"nodes\":[{\"tab_key\":\"photos_of\",\"id\":\"" + photosOfId + "\"},"
+                + "{\"tab_key\":\"photos_by\",\"id\":\"" + photosById + "\"}]}"
+                + "</script></body></html>";
+        Document listing = Jsoup.parse(listingHtml, "https://www.facebook.com/example/photos");
+
+        Map<String, String> graphqlByCollection = new HashMap<>();
+        graphqlByCollection.put(photosOfId, "{\"errors\":[{\"message\":\"collection unavailable\"}]}");
+        graphqlByCollection.put(photosById,
+                "{\"data\":{\"node\":{\"pageItems\":{\"edges\":["
+                        + "{\"node\":{\"node\":{\"viewer_image\":{\"uri\":\"https:\\/\\/scontent.xx.fbcdn.net\\/v\\/by1.jpg\"}}}}"
+                        + "],\"page_info\":{\"end_cursor\":\"C2\",\"has_next_page\":false}}}}}");
+
+        CollectionAwareGraphqlFacebookRipper ripper =
+                new CollectionAwareGraphqlFacebookRipper(new URL("https://www.facebook.com/example/photos"),
+                        graphqlByCollection);
+        List<String> urls = ripper.extract(listing);
+
+        assertEquals(1, urls.size(), "Should fall back to photos_by when photos_of pagination fails");
+        assertTrue(urls.contains("https://scontent.xx.fbcdn.net/v/by1.jpg"));
+    }
+
+    @Test
+    public void testPhotoListingPaginatesCometTabKeyCollectionWithoutCursor() throws Exception {
+        // Current Comet /photos pages expose collection ids via tab_key and often omit end_cursor in HTML.
+        String collectionId = "YXBwX2NvbGxlY3Rpb246VEVTVENPTExFQ1RJT04=";
+        String listingHtml = "<html><body><script type=\"application/json\">"
+                + "[\"DTSGInitialData\",[],{\"token\":\"DTSGTOKEN123\"}]"
+                + "[\"LSD\",[],{\"token\":\"LSDTOKEN456\"}]"
+                + "\"USER_ID\":\"123456\""
+                + "\"section_type\":\"PHOTOS\",\"tab_key\":\"photos\",\"url\":\"https:\\/\\/www.facebook.com\\/example\\/photos\","
+                + "\"all_collections\":{\"nodes\":[{\"tab_key\":\"photos_of\",\"id\":\"" + collectionId + "\"},"
+                + "{\"tab_key\":\"photos_by\",\"id\":\"YXBwX2NvbGxlY3Rpb246V1JPTkdPQkxFQ1RJT04=\"}]}"
+                + "</script></body></html>";
+        Document listing = Jsoup.parse(listingHtml, "https://www.facebook.com/example/photos");
+
+        Map<String, String> graphqlPages = new HashMap<>();
+        graphqlPages.put(null,
+                "{\"data\":{\"node\":{\"pageItems\":{\"edges\":["
+                        + "{\"node\":{\"node\":{\"viewer_image\":{\"uri\":\"https:\\/\\/scontent.xx.fbcdn.net\\/v\\/p1.jpg\"}}}}"
+                        + "],\"page_info\":{\"end_cursor\":\"C2\",\"has_next_page\":false}}}}}");
+
+        NullCursorGraphqlFacebookRipper ripper =
+                new NullCursorGraphqlFacebookRipper(new URL("https://www.facebook.com/example/photos"), graphqlPages);
+        List<String> urls = ripper.extract(listing);
+
+        assertEquals(1, urls.size(), "Should paginate using photos_of tab_key even without an HTML cursor");
+        assertTrue(urls.contains("https://scontent.xx.fbcdn.net/v/p1.jpg"));
+    }
+
+    @Test
     public void testPhotoListingPaginatesEntireAlbumViaGraphql() throws Exception {
         // A /photos listing embeds the tokens needed to replay Facebook's GraphQL pagination. The
         // ripper must walk every page (following end_cursor/has_next_page) and collect each photo's
@@ -229,6 +316,17 @@ public class FacebookRipperTest {
         }
     }
 
+    private static class FailingGraphqlFacebookRipper extends CrawlingFacebookRipper {
+        FailingGraphqlFacebookRipper(URL url, Map<String, Document> photoPages) throws java.io.IOException {
+            super(url, photoPages);
+        }
+
+        @Override
+        protected String executeGraphqlQuery(String friendlyName, String lsd, Map<String, String> formData) {
+            return "{\"errors\":[{\"message\":\"Invalid doc_id\"}]}";
+        }
+    }
+
     private static class GraphqlFacebookRipper extends TestableFacebookRipper {
         private static final java.util.regex.Pattern CURSOR =
                 java.util.regex.Pattern.compile("\"cursor\":\"([^\"]+)\"");
@@ -241,8 +339,37 @@ public class FacebookRipperTest {
 
         @Override
         protected String executeGraphqlQuery(String friendlyName, String lsd, Map<String, String> formData) {
-            java.util.regex.Matcher m = CURSOR.matcher(formData.getOrDefault("variables", ""));
-            return m.find() ? graphqlPages.get(m.group(1)) : null;
+            String variables = formData.getOrDefault("variables", "");
+            java.util.regex.Matcher m = CURSOR.matcher(variables);
+            String key = m.find() ? m.group(1) : null;
+            if (key == null && variables.contains("\"cursor\":null")) {
+                key = null;
+            }
+            return graphqlPages.get(key);
+        }
+    }
+
+    private static class NullCursorGraphqlFacebookRipper extends GraphqlFacebookRipper {
+        NullCursorGraphqlFacebookRipper(URL url, Map<String, String> graphqlPages) throws java.io.IOException {
+            super(url, graphqlPages);
+        }
+    }
+
+    private static class CollectionAwareGraphqlFacebookRipper extends TestableFacebookRipper {
+        private static final java.util.regex.Pattern COLLECTION_ID =
+                java.util.regex.Pattern.compile("\"id\":\"(YXBwX2NvbGxlY3Rpb246[^\"]+)\"");
+        private final Map<String, String> responsesByCollection;
+
+        CollectionAwareGraphqlFacebookRipper(URL url, Map<String, String> responsesByCollection)
+                throws java.io.IOException {
+            super(url);
+            this.responsesByCollection = responsesByCollection;
+        }
+
+        @Override
+        protected String executeGraphqlQuery(String friendlyName, String lsd, Map<String, String> formData) {
+            java.util.regex.Matcher m = COLLECTION_ID.matcher(formData.getOrDefault("variables", ""));
+            return m.find() ? responsesByCollection.get(m.group(1)) : null;
         }
     }
 

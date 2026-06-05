@@ -81,16 +81,29 @@ public class FacebookRipper extends AbstractHTMLRipper {
     private static final String DEFAULT_PHOTOS_DOC_ID = "27028962643386672";
     // Tokens needed to authenticate/replay the GraphQL request, all embedded in the initial page HTML.
     private static final Pattern DTSG_PATTERN = Pattern.compile("\"DTSGInitialData\",\\[\\],\\{\"token\":\"([^\"]+)\"");
+    private static final Pattern DTSG_ASYNC_PATTERN = Pattern.compile("\"async_get_token\":\"([^\"]+)\"");
     private static final Pattern LSD_PATTERN = Pattern.compile("\"LSD\",\\[\\],\\{\"token\":\"([^\"]+)\"");
     private static final Pattern USER_ID_PATTERN = Pattern.compile("\"USER_ID\":\"(\\d+)\"");
     private static final Pattern CLIENT_REVISION_PATTERN = Pattern.compile("\"client_revision\":(\\d+)");
-    // The base64 "app_collection:..." token identifying the main Photos collection. The reliable anchor
-    // is the collection whose url ends in /photos_by ("<Name>'s Photos"); fall back to the first token.
+    // Facebook rotates doc_id when it ships a new site build; the current value is often embedded in HTML.
+    private static final Pattern PHOTOS_DOC_ID_PATTERN = Pattern.compile(
+            "ProfileCometAppCollectionPhotosRendererPaginationQuery.{0,400}?\"id\"\\s*:\\s*\"(\\d{8,})\"",
+            Pattern.DOTALL);
+    // The base64 "app_collection:..." token identifying a Photos sub-tab. Comet now exposes these as
+    // {"tab_key":"photos_of|photos_by|...","id":"YXBwX2NvbGxlY3Rpb246..."} rather than a /photos_by url.
+    private static final Pattern TAB_KEY_PHOTOS_OF_PATTERN = Pattern.compile(
+            "\"tab_key\":\"photos_of\",\"id\":\"(YXBwX2NvbGxlY3Rpb246[^\"]+)\"");
+    private static final Pattern TAB_KEY_PHOTOS_BY_PATTERN = Pattern.compile(
+            "\"tab_key\":\"photos_by\",\"id\":\"(YXBwX2NvbGxlY3Rpb246[^\"]+)\"");
+    // Legacy layout: collection object carried a name + /photos_by url.
     private static final Pattern PHOTOS_COLLECTION_PATTERN = Pattern.compile(
             "\"(YXBwX2NvbGxlY3Rpb246[^\"]+)\",\"name\":\"[^\"]*\",\"url\":\"[^\"]*/photos_by\"");
+    private static final Pattern PHOTOS_OF_COLLECTION_PATTERN = Pattern.compile(
+            "\"(YXBwX2NvbGxlY3Rpb246[^\"]+)\",\"name\":\"[^\"]*\",\"url\":\"[^\"]*/photos_of\"");
     private static final Pattern ANY_COLLECTION_PATTERN = Pattern.compile("(YXBwX2NvbGxlY3Rpb246[A-Za-z0-9_+/=-]+)");
     private static final Pattern END_CURSOR_PATTERN = Pattern.compile("\"end_cursor\":\"([^\"]+)\"");
     private static final Pattern HAS_NEXT_PAGE_PATTERN = Pattern.compile("\"has_next_page\":(true|false)");
+    private static final Pattern GRAPHQL_ERROR_PATTERN = Pattern.compile("\"errors\"\\s*:\\s*\\[");
 
     private Map<String, String> facebookCookies = new LinkedHashMap<>();
 
@@ -331,7 +344,8 @@ public class FacebookRipper extends AbstractHTMLRipper {
      * are embedded on the listing page itself.
      */
     private void harvestAlbumPhotos(Document listingPage, Set<String> allMedia) {
-        if (!paginatePhotosViaGraphql(listingPage, allMedia)) {
+        PaginationResult pagination = paginatePhotosViaGraphql(listingPage, allMedia);
+        if (!pagination.succeeded()) {
             crawlPhotoPages(listingPage, allMedia);
         }
     }
@@ -344,13 +358,59 @@ public class FacebookRipper extends AbstractHTMLRipper {
      *         {@code false} if the tokens needed to issue the query were not present (caller should
      *         fall back to crawling individual photo permalinks).
      */
-    private boolean paginatePhotosViaGraphql(Document listingPage, Set<String> allMedia) {
-        GraphqlContext ctx = buildGraphqlContext(listingPage.html());
-        if (ctx == null) {
-            return false;
+    private PaginationResult paginatePhotosViaGraphql(Document listingPage, Set<String> allMedia) {
+        String html = listingPage.html();
+        String unescaped = jsonUnescape(html);
+        GraphqlContext base = buildGraphqlContext(html);
+        if (base == null) {
+            return PaginationResult.unavailable();
         }
+
+        List<String> collectionIds = resolvePhotosCollectionIds(unescaped);
+        if (collectionIds.isEmpty()) {
+            logger.info("Facebook GraphQL pagination unavailable: no photos collection id found");
+            return PaginationResult.unavailable();
+        }
+
         String friendly = Utils.getConfigString("facebook.photos_query_name", DEFAULT_PHOTOS_QUERY);
-        String docId = Utils.getConfigString("facebook.photos_doc_id", DEFAULT_PHOTOS_DOC_ID);
+        String docId = resolvePhotosDocId(html);
+        PaginationResult combined = PaginationResult.unavailable();
+        PaginationResult firstResult = null;
+
+        for (int i = 0; i < collectionIds.size(); i++) {
+            String collectionId = collectionIds.get(i);
+            String tab = describePhotosCollectionTab(collectionId, unescaped);
+            if (i == 0) {
+                logger.info("Facebook GraphQL photo pagination trying {} collection", tab);
+            } else if (firstResult != null && !firstResult.succeeded()) {
+                logger.info("Facebook photos_of pagination yielded no results; falling back to {} collection", tab);
+            } else {
+                logger.info("Facebook GraphQL photo pagination also trying {} collection", tab);
+            }
+
+            PaginationResult result = paginatePhotosCollection(
+                    base, collectionId, unescaped, docId, friendly, allMedia);
+            combined = combined.combine(result);
+            if (i == 0) {
+                firstResult = result;
+            }
+        }
+        return combined;
+    }
+
+    /**
+     * Paginates a single Photos collection ({@code photos_of} or {@code photos_by}) via GraphQL.
+     */
+    private PaginationResult paginatePhotosCollection(GraphqlContext base, String collectionId, String unescaped,
+                                                      String docId, String friendly, Set<String> allMedia) {
+        GraphqlContext ctx = new GraphqlContext();
+        ctx.fbDtsg = base.fbDtsg;
+        ctx.lsd = base.lsd;
+        ctx.userId = base.userId;
+        ctx.clientRevision = base.clientRevision;
+        ctx.collectionId = collectionId;
+        resolvePaginationCursor(ctx, unescaped);
+
         int pageSize = Utils.getConfigInteger("facebook.photos_page_size", 8);
         int pageCap = Utils.getConfigInteger("facebook.max_listing_pages", 400);
         long delay = Utils.getConfigInteger("facebook.photo_page_delay_ms", 300);
@@ -359,10 +419,15 @@ public class FacebookRipper extends AbstractHTMLRipper {
         boolean hasNext = ctx.hasNextPage;
         int pages = 0;
         int newUrls = 0;
-        while (hasNext && cursor != null && !cursor.isBlank() && pages < pageCap && !isStopped()) {
+        boolean sawError = false;
+        while (hasNext && pages < pageCap && !isStopped()) {
+            if (pages > 0 && (cursor == null || cursor.isBlank())) {
+                logger.warn("Facebook GraphQL photo pagination stopped: missing end_cursor after page {}", pages);
+                break;
+            }
             pages++;
             Map<String, String> form = buildGraphqlForm(ctx, docId, friendly,
-                    buildPhotosVariables(pageSize, cursor, ctx.collectionId));
+                    buildPhotosVariables(pageSize, cursor, collectionId));
             String body;
             try {
                 body = executeGraphqlQuery(friendly, ctx.lsd, form);
@@ -373,19 +438,31 @@ public class FacebookRipper extends AbstractHTMLRipper {
             if (body == null || body.isBlank()) {
                 break;
             }
-            String unescaped = jsonUnescape(body);
+            String response = jsonUnescape(body);
+            if (GRAPHQL_ERROR_PATTERN.matcher(response).find()) {
+                sawError = true;
+                logger.warn("Facebook GraphQL photo pagination returned errors on page {} "
+                        + "(doc_id may be stale — capture a fresh {} request from DevTools)",
+                        pages, friendly);
+                break;
+            }
             int before = allMedia.size();
-            Matcher m = MEDIA_URL_PATTERN.matcher(unescaped);
+            Matcher m = MEDIA_URL_PATTERN.matcher(response);
             while (m.find()) {
                 String mediaUrl = unescapeJsonUrl(m.group());
                 if (mediaUrl != null && !JUNK_URL_PATTERN.matcher(mediaUrl).find()) {
                     allMedia.add(mediaUrl);
                 }
             }
-            newUrls += allMedia.size() - before;
+            int pageUrls = allMedia.size() - before;
+            newUrls += pageUrls;
+            if (pageUrls == 0) {
+                logger.warn("Facebook GraphQL photo pagination page {} returned no image URLs", pages);
+                break;
+            }
 
-            cursor = firstMatch(unescaped, END_CURSOR_PATTERN);
-            hasNext = "true".equals(firstMatch(unescaped, HAS_NEXT_PAGE_PATTERN));
+            cursor = firstMatch(response, END_CURSOR_PATTERN);
+            hasNext = "true".equals(firstMatch(response, HAS_NEXT_PAGE_PATTERN));
             if (hasNext && cursor != null && delay > 0) {
                 try {
                     Thread.sleep(delay);
@@ -395,8 +472,31 @@ public class FacebookRipper extends AbstractHTMLRipper {
                 }
             }
         }
-        logger.info("Facebook GraphQL photo pagination fetched {} page(s), {} image URL(s)", pages, newUrls);
-        return true;
+        logger.info("Facebook GraphQL photo pagination fetched {} page(s), {} image URL(s) "
+                        + "(collection={}, doc_id={})",
+                pages, newUrls, collectionId, docId);
+        return new PaginationResult(true, ctx.hasNextPage, pages, newUrls, sawError);
+    }
+
+    /**
+     * Resolves the GraphQL {@code doc_id} for photo pagination. Facebook rotates this value when it
+     * ships a new site build; prefer the value embedded in the page HTML when present.
+     */
+    private String resolvePhotosDocId(String html) {
+        String fromPage = firstMatch(html, PHOTOS_DOC_ID_PATTERN);
+        if (fromPage == null) {
+            fromPage = firstMatch(jsonUnescape(html), PHOTOS_DOC_ID_PATTERN);
+        }
+        String configured = Utils.getConfigString("facebook.photos_doc_id", DEFAULT_PHOTOS_DOC_ID);
+        if (fromPage != null && !fromPage.equals(configured)) {
+            logger.info("Using Facebook photos doc_id from page HTML ({}) instead of configured value ({})",
+                    fromPage, configured);
+            return fromPage;
+        }
+        if (fromPage != null) {
+            return fromPage;
+        }
+        return configured;
     }
 
     /**
@@ -407,35 +507,125 @@ public class FacebookRipper extends AbstractHTMLRipper {
         String unescaped = jsonUnescape(html);
         GraphqlContext ctx = new GraphqlContext();
         ctx.fbDtsg = firstMatch(html, DTSG_PATTERN);
+        if (ctx.fbDtsg == null) {
+            ctx.fbDtsg = firstMatch(html, DTSG_ASYNC_PATTERN);
+        }
         ctx.lsd = firstMatch(html, LSD_PATTERN);
         ctx.userId = firstMatch(html, USER_ID_PATTERN);
         ctx.clientRevision = firstMatch(html, CLIENT_REVISION_PATTERN);
-        ctx.collectionId = firstMatch(unescaped, PHOTOS_COLLECTION_PATTERN);
-        if (ctx.collectionId == null) {
-            ctx.collectionId = firstMatch(unescaped, ANY_COLLECTION_PATTERN);
-        }
-        // The first pagination request continues from the cursor of the batch already rendered in the
-        // page. Anchor on the photos renderer so we read the photos collection's cursor, not another.
-        int rendererIdx = unescaped.indexOf("TimelineAppCollectionPhotosRenderer");
-        String scope = rendererIdx >= 0 ? unescaped.substring(rendererIdx) : unescaped;
-        ctx.initialCursor = firstMatch(scope, END_CURSOR_PATTERN);
-        ctx.hasNextPage = "true".equals(firstMatch(scope, HAS_NEXT_PAGE_PATTERN));
-
-        if (ctx.fbDtsg == null || ctx.lsd == null || ctx.userId == null
-                || ctx.collectionId == null || ctx.initialCursor == null) {
-            logger.info("Facebook GraphQL pagination unavailable (dtsg={}, lsd={}, user={}, collection={}, "
-                            + "cursor={}); falling back to photo-permalink crawl",
-                    ctx.fbDtsg != null, ctx.lsd != null, ctx.userId != null,
-                    ctx.collectionId != null, ctx.initialCursor != null);
+        if (ctx.fbDtsg == null || ctx.lsd == null || ctx.userId == null || "0".equals(ctx.userId)) {
+            logger.info("Facebook GraphQL pagination unavailable (dtsg={}, lsd={}, user={}); "
+                            + "falling back to photo-permalink crawl (~10 photos max). "
+                            + "Log into Facebook in Firefox so RipMe can load session cookies.",
+                    ctx.fbDtsg != null, ctx.lsd != null, ctx.userId != null);
             return null;
         }
         return ctx;
     }
 
+    /**
+     * Returns Photos collection ids to paginate. Generic {@code /photos} URLs try {@code photos_of}
+     * first, then {@code photos_by}; explicit sub-tab URLs only request that tab.
+     */
+    private List<String> resolvePhotosCollectionIds(String unescaped) {
+        List<String> ids = new ArrayList<>();
+        String path = this.url.getPath() == null ? "" : this.url.getPath().toLowerCase();
+
+        if (path.contains("photos_by")) {
+            addUniqueCollectionId(ids, firstTabKeyCollection(unescaped, "photos_by"));
+        } else if (path.contains("photos_of")) {
+            addUniqueCollectionId(ids, firstTabKeyCollection(unescaped, "photos_of"));
+        } else {
+            addUniqueCollectionId(ids, firstTabKeyCollection(unescaped, "photos_of"));
+            addUniqueCollectionId(ids, firstTabKeyCollection(unescaped, "photos_by"));
+        }
+
+        if (!ids.isEmpty()) {
+            return ids;
+        }
+
+        String legacy = firstMatch(unescaped, PHOTOS_COLLECTION_PATTERN);
+        if (legacy == null) {
+            legacy = firstMatch(unescaped, PHOTOS_OF_COLLECTION_PATTERN);
+        }
+        if (legacy != null) {
+            addUniqueCollectionId(ids, legacy);
+            return ids;
+        }
+
+        int photosIdx = unescaped.indexOf("\"section_type\":\"PHOTOS\"");
+        if (photosIdx < 0) {
+            String urlPath = this.url.getPath() == null ? "" : this.url.getPath();
+            photosIdx = unescaped.indexOf(urlPath + "/photos");
+        }
+        if (photosIdx >= 0) {
+            int end = Math.min(photosIdx + 8000, unescaped.length());
+            String scope = unescaped.substring(photosIdx, end);
+            addUniqueCollectionId(ids, firstMatch(scope, TAB_KEY_PHOTOS_OF_PATTERN));
+            addUniqueCollectionId(ids, firstMatch(scope, TAB_KEY_PHOTOS_BY_PATTERN));
+        }
+        if (!ids.isEmpty()) {
+            return ids;
+        }
+
+        String any = firstMatch(unescaped, ANY_COLLECTION_PATTERN);
+        if (any != null) {
+            ids.add(any);
+        }
+        return ids;
+    }
+
+    private static void addUniqueCollectionId(List<String> ids, String collectionId) {
+        if (collectionId != null && !ids.contains(collectionId)) {
+            ids.add(collectionId);
+        }
+    }
+
+    private static String describePhotosCollectionTab(String collectionId, String unescaped) {
+        if (collectionId.equals(firstTabKeyCollection(unescaped, "photos_of"))) {
+            return "photos_of";
+        }
+        if (collectionId.equals(firstTabKeyCollection(unescaped, "photos_by"))) {
+            return "photos_by";
+        }
+        return "photos";
+    }
+
+    private static String firstTabKeyCollection(String text, String tabKey) {
+        Pattern pattern = "photos_by".equals(tabKey) ? TAB_KEY_PHOTOS_BY_PATTERN : TAB_KEY_PHOTOS_OF_PATTERN;
+        return firstMatch(text, pattern);
+    }
+
+    /**
+     * Locates the pagination cursor embedded in the listing HTML. Newer Comet builds often omit it;
+     * in that case we start from a {@code null} cursor and let the first GraphQL response supply one.
+     */
+    private void resolvePaginationCursor(GraphqlContext ctx, String unescaped) {
+        String scope = null;
+        if (ctx.collectionId != null) {
+            int collIdx = unescaped.indexOf(ctx.collectionId);
+            if (collIdx >= 0) {
+                int end = Math.min(collIdx + 20000, unescaped.length());
+                scope = unescaped.substring(collIdx, end);
+            }
+        }
+        if (scope == null) {
+            int rendererIdx = unescaped.indexOf("TimelineAppCollectionPhotosRenderer");
+            scope = rendererIdx >= 0 ? unescaped.substring(rendererIdx) : unescaped;
+        }
+        ctx.initialCursor = firstMatch(scope, END_CURSOR_PATTERN);
+        ctx.hasNextPage = "true".equals(firstMatch(scope, HAS_NEXT_PAGE_PATTERN));
+        if (ctx.initialCursor == null) {
+            ctx.hasNextPage = true;
+            logger.info("Facebook photos pagination cursor not present in HTML; starting GraphQL from null cursor");
+        }
+    }
+
     private static String buildPhotosVariables(int count, String cursor, String collectionId) {
+        String cursorJson = cursor == null ? "null" : "\"" + cursor + "\"";
         return "{\"count\":" + count
                 + ",\"created_time_end\":null,\"created_time_start\":null"
-                + ",\"cursor\":\"" + cursor + "\""
+                + ",\"cursor\":" + cursorJson
                 + ",\"scale\":2,\"tagged_user_ids\":null"
                 + ",\"id\":\"" + collectionId + "\"}";
     }
@@ -517,6 +707,52 @@ public class FacebookRipper extends AbstractHTMLRipper {
         String collectionId;
         String initialCursor;
         boolean hasNextPage;
+    }
+
+    /** Outcome of a GraphQL pagination attempt, used to decide whether to fall back to permalink crawl. */
+    private static final class PaginationResult {
+        final boolean contextBuilt;
+        final boolean expectedMore;
+        final int pagesFetched;
+        final int urlsAdded;
+        final boolean sawError;
+
+        PaginationResult(boolean contextBuilt, boolean expectedMore, int pagesFetched, int urlsAdded,
+                         boolean sawError) {
+            this.contextBuilt = contextBuilt;
+            this.expectedMore = expectedMore;
+            this.pagesFetched = pagesFetched;
+            this.urlsAdded = urlsAdded;
+            this.sawError = sawError;
+        }
+
+        static PaginationResult unavailable() {
+            return new PaginationResult(false, false, 0, 0, false);
+        }
+
+        boolean succeeded() {
+            if (!contextBuilt) {
+                return false;
+            }
+            if (!expectedMore) {
+                return true;
+            }
+            return pagesFetched > 0 && urlsAdded > 0 && !sawError;
+        }
+
+        PaginationResult combine(PaginationResult other) {
+            if (!other.contextBuilt) {
+                return this;
+            }
+            if (!this.contextBuilt) {
+                return other;
+            }
+            return new PaginationResult(true,
+                    this.expectedMore || other.expectedMore,
+                    this.pagesFetched + other.pagesFetched,
+                    this.urlsAdded + other.urlsAdded,
+                    this.sawError || other.sawError);
+        }
     }
 
     /**
