@@ -10,19 +10,24 @@ import org.json.JSONArray;
 import org.json.JSONObject;
 
 import java.io.IOException;
+import java.io.InputStream;
+import java.io.OutputStream;
 import java.net.MalformedURLException;
 import java.net.URL;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.nio.file.StandardOpenOption;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.regex.*;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 public class BlueskyRipper extends AbstractJSONRipper {
 
     private static final String DOMAIN = "bsky.app";
     private static final String HOST = "bluesky";
     private String handle;
+    private String actorDid;
     private String sessionToken = null;
     private String appPassword = null;
     private String username = null;
@@ -30,6 +35,10 @@ public class BlueskyRipper extends AbstractJSONRipper {
     private final int maxDownloads;
     private final DownloadLimitTracker downloadLimitTracker;
     private volatile boolean maxDownloadLimitReached = false;
+
+    private static final Pattern HLS_BANDWIDTH_PATTERN = Pattern.compile("BANDWIDTH=(\\d+)");
+    private static final Pattern VIDEO_URL_PATTERN =
+            Pattern.compile(".*\\.(mp4|webm|mov|m4v|gif|m3u8)(\\?.*)?$", Pattern.CASE_INSENSITIVE);
 
     private static final org.apache.logging.log4j.Logger logger = org.apache.logging.log4j.LogManager.getLogger(BlueskyRipper.class);
 
@@ -324,6 +333,7 @@ public class BlueskyRipper extends AbstractJSONRipper {
         if (status != 200) {
             throw new IOException("Bluesky API error (HTTP " + status + "): " + body + (triedCookies ? " (tried cookies)" : "") + (triedToken ? " (tried token)" : ""));
         }
+        this.actorDid = did;
         return new org.json.JSONObject(body);
     }
 
@@ -331,7 +341,11 @@ public class BlueskyRipper extends AbstractJSONRipper {
     protected JSONObject getNextPage(JSONObject json) throws IOException {
         if (!json.has("cursor")) throw new IOException("No more pages");
         String cursor = json.getString("cursor");
-        String apiUrl = "https://bsky.social/xrpc/app.bsky.feed.getAuthorFeed?actor=" + handle + "&limit=100&cursor=" + cursor;
+        if (this.actorDid == null) {
+            this.actorDid = resolveHandleToDID(handle);
+        }
+        String apiUrl = "https://bsky.social/xrpc/app.bsky.feed.getAuthorFeed?actor=" + this.actorDid
+                + "&limit=100&cursor=" + cursor;
         Connection.Response resp = Http.url(apiUrl)
                 .ignoreContentType()
                 .header("Authorization", "Bearer " + sessionToken)
@@ -362,44 +376,61 @@ public class BlueskyRipper extends AbstractJSONRipper {
             }
             JSONObject post = feed.getJSONObject(i).getJSONObject("post");
             if (post.has("embed")) {
-                JSONObject embed = post.getJSONObject("embed");
-                // Images
-                if (embed.has("images")) {
-                    JSONArray images = embed.getJSONArray("images");
-                    for (int j = 0; j < images.length(); j++) {
-                        if (downloadLimitTracker.isLimitReached()) {
-                            maxDownloadLimitReached = true;
-                            break;
-                        }
-                        String imgUrl = images.getJSONObject(j).getString("fullsize");
-                        urls.add(imgUrl);
+                for (String mediaUrl : extractMediaUrlsFromEmbed(post.getJSONObject("embed"))) {
+                    if (downloadLimitTracker.isLimitReached()) {
+                        maxDownloadLimitReached = true;
+                        break;
                     }
+                    urls.add(mediaUrl);
                 }
-                // Videos (Bluesky video embeds)
-                if (embed.has("video")) {
-                    JSONObject video = embed.getJSONObject("video");
-                    if (video.has("uri")) {
-                        if (downloadLimitTracker.isLimitReached()) {
-                            maxDownloadLimitReached = true;
-                            break;
-                        }
-                        urls.add(video.getString("uri"));
-                    }
+            }
+        }
+        return urls;
+    }
+
+    /**
+     * Extracts downloadable media URLs from a Bluesky post embed view object.
+     */
+    public static List<String> extractMediaUrlsFromEmbed(JSONObject embed) {
+        List<String> urls = new ArrayList<>();
+        if (embed == null) {
+            return urls;
+        }
+        String embedType = embed.optString("$type", "");
+
+        // Native Bluesky videos are exposed as HLS playlists on post.embed views.
+        if (embed.has("playlist")) {
+            urls.add(embed.getString("playlist"));
+        } else if (embedType.contains("embed.video")) {
+            JSONObject video = embed.optJSONObject("video");
+            if (video != null && video.has("uri")) {
+                urls.add(video.getString("uri"));
+            }
+        } else if (embed.has("video")) {
+            JSONObject video = embed.getJSONObject("video");
+            if (video.has("uri")) {
+                urls.add(video.getString("uri"));
+            }
+        }
+
+        // Images
+        if (embed.has("images")) {
+            JSONArray images = embed.getJSONArray("images");
+            for (int j = 0; j < images.length(); j++) {
+                JSONObject image = images.getJSONObject(j);
+                if (image.has("fullsize")) {
+                    urls.add(image.getString("fullsize"));
                 }
-                // External (could be a video, e.g. mp4/gif hosted elsewhere)
-                if (embed.has("external")) {
-                    JSONObject external = embed.getJSONObject("external");
-                    if (external.has("uri")) {
-                        String extUrl = external.getString("uri");
-                        // Only add if it looks like a video (mp4, webm, etc)
-                        if (extUrl.matches(".*\\.(mp4|webm|mov|m4v|gif)(\\?.*)?$")) {
-                            if (downloadLimitTracker.isLimitReached()) {
-                                maxDownloadLimitReached = true;
-                                break;
-                            }
-                            urls.add(extUrl);
-                        }
-                    }
+            }
+        }
+
+        // External link embeds (direct video files only)
+        if (embed.has("external")) {
+            JSONObject external = embed.getJSONObject("external");
+            if (external.has("uri")) {
+                String extUrl = external.getString("uri");
+                if (VIDEO_URL_PATTERN.matcher(extUrl).matches()) {
+                    urls.add(extUrl);
                 }
             }
         }
@@ -408,6 +439,11 @@ public class BlueskyRipper extends AbstractJSONRipper {
 
     @Override
     protected void downloadURL(URL url, int index) {
+        if (isHlsPlaylist(url)) {
+            downloadHlsVideo(url, index);
+            return;
+        }
+
         String path = url.getPath();
         if (path == null) path = "";
         String ext = null;
@@ -483,6 +519,174 @@ public class BlueskyRipper extends AbstractJSONRipper {
         } else {
             downloadLimitTracker.onFailure(url);
         }
+    }
+
+    private static boolean isHlsPlaylist(URL url) {
+        String external = url.toExternalForm().toLowerCase();
+        return external.contains(".m3u8");
+    }
+
+    private void downloadHlsVideo(URL playlistUrl, int index) {
+        String cid = extractVideoCid(playlistUrl);
+        String prefix = getPrefix(index);
+        String fileName = cid != null ? cid : ("video_" + index);
+        boolean countTowardsLimit = true;
+
+        if (downloadLimitTracker.isEnabled()) {
+            try {
+                Path existingPath = getFilePath(playlistUrl, "", prefix, fileName, "mp4");
+                if (Files.exists(existingPath)) {
+                    if (!Utils.getConfigBoolean("file.overwrite", false)) {
+                        logger.debug("Skipping existing Bluesky video due to max download limit: {}", existingPath);
+                        super.downloadExists(playlistUrl, existingPath);
+                        return;
+                    }
+                    countTowardsLimit = false;
+                }
+            } catch (IOException e) {
+                logger.warn("Unable to determine existing Bluesky video path for {}: {}", playlistUrl, e.getMessage());
+            }
+        }
+
+        if (!downloadLimitTracker.tryAcquire(playlistUrl, countTowardsLimit)) {
+            if (downloadLimitTracker.isLimitReached()) {
+                maxDownloadLimitReached = true;
+                if (downloadLimitTracker.shouldNotifyLimitReached()) {
+                    String message = "Reached max download limit of " + maxDownloads + ". Stopping.";
+                    logger.info(message);
+                    sendUpdate(STATUS.DOWNLOAD_COMPLETE_HISTORY, message);
+                }
+            }
+            return;
+        }
+
+        try {
+            URL mediaPlaylist = resolveBestHlsVariant(playlistUrl);
+            List<URL> segments = parseHlsSegmentUrls(mediaPlaylist);
+            if (segments.isEmpty()) {
+                throw new IOException("No HLS segments found in " + mediaPlaylist);
+            }
+            Path saveAs = getFilePath(playlistUrl, "", prefix, fileName, "mp4");
+            Files.createDirectories(saveAs.getParent());
+            long totalBytes = 0;
+            try (OutputStream out = Files.newOutputStream(saveAs, StandardOpenOption.CREATE,
+                    StandardOpenOption.TRUNCATE_EXISTING)) {
+                for (URL segment : segments) {
+                    totalBytes += appendHlsSegment(segment, out);
+                }
+            }
+            if (totalBytes <= 0) {
+                Files.deleteIfExists(saveAs);
+                throw new IOException("Downloaded Bluesky HLS video is empty: " + playlistUrl);
+            }
+            logger.info("Downloaded Bluesky HLS video {} ({} segment(s), {} bytes)", saveAs, segments.size(), totalBytes);
+            downloadCompleted(playlistUrl, saveAs);
+        } catch (IOException e) {
+            downloadLimitTracker.onFailure(playlistUrl);
+            downloadErrored(playlistUrl, e.getMessage());
+        }
+    }
+
+    private static String extractVideoCid(URL playlistUrl) {
+        String path = playlistUrl.getPath();
+        if (path == null || path.isBlank()) {
+            return null;
+        }
+        String[] parts = path.split("/");
+        for (int i = parts.length - 1; i >= 0; i--) {
+            String part = parts[i];
+            if (part.isBlank() || "watch".equals(part) || part.endsWith(".m3u8")) {
+                continue;
+            }
+            if (part.startsWith("did:") || part.startsWith("did%3A")) {
+                continue;
+            }
+            return part;
+        }
+        return null;
+    }
+
+    private URL resolveBestHlsVariant(URL playlistUrl) throws IOException {
+        String body = fetchBlueskyText(playlistUrl);
+        if (!body.contains("#EXT-X-STREAM-INF")) {
+            return playlistUrl;
+        }
+        String[] lines = body.split("\\R");
+        String bestVariant = null;
+        long bestBandwidth = -1;
+        for (int i = 0; i < lines.length; i++) {
+            String line = lines[i].trim();
+            if (!line.startsWith("#EXT-X-STREAM-INF:")) {
+                continue;
+            }
+            long bandwidth = 0;
+            Matcher matcher = HLS_BANDWIDTH_PATTERN.matcher(line);
+            if (matcher.find()) {
+                bandwidth = Long.parseLong(matcher.group(1));
+            }
+            String variant = null;
+            for (int j = i + 1; j < lines.length; j++) {
+                String candidate = lines[j].trim();
+                if (!candidate.isEmpty() && !candidate.startsWith("#")) {
+                    variant = candidate;
+                    break;
+                }
+            }
+            if (variant != null && bandwidth >= bestBandwidth) {
+                bestBandwidth = bandwidth;
+                bestVariant = variant;
+            }
+        }
+        if (bestVariant == null) {
+            throw new IOException("No HLS variants found in " + playlistUrl);
+        }
+        return resolveRelativeUrl(playlistUrl, bestVariant);
+    }
+
+    private List<URL> parseHlsSegmentUrls(URL mediaPlaylist) throws IOException {
+        String body = fetchBlueskyText(mediaPlaylist);
+        List<URL> segments = new ArrayList<>();
+        for (String line : body.split("\\R")) {
+            line = line.trim();
+            if (line.isEmpty() || line.startsWith("#")) {
+                continue;
+            }
+            segments.add(resolveRelativeUrl(mediaPlaylist, line));
+        }
+        return segments;
+    }
+
+    private long appendHlsSegment(URL segmentUrl, OutputStream out) throws IOException {
+        org.jsoup.Connection.Response response = Http.url(segmentUrl)
+                .referrer("https://bsky.app/")
+                .ignoreContentType()
+                .timeout(60_000)
+                .response();
+        if (response.statusCode() < 200 || response.statusCode() >= 300) {
+            throw new IOException("HLS segment HTTP " + response.statusCode() + " for " + segmentUrl);
+        }
+        try (InputStream in = response.bodyStream()) {
+            return in.transferTo(out);
+        }
+    }
+
+    private String fetchBlueskyText(URL resourceUrl) throws IOException {
+        org.jsoup.Connection.Response response = Http.url(resourceUrl)
+                .referrer("https://bsky.app/")
+                .ignoreContentType()
+                .timeout(30_000)
+                .response();
+        if (response.statusCode() < 200 || response.statusCode() >= 300) {
+            throw new IOException("HTTP " + response.statusCode() + " for " + resourceUrl);
+        }
+        return response.body();
+    }
+
+    private static URL resolveRelativeUrl(URL base, String relative) throws MalformedURLException {
+        if (relative.startsWith("http://") || relative.startsWith("https://")) {
+            return new URL(relative);
+        }
+        return new URL(base, relative);
     }
 
     @Override
