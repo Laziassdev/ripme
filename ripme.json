@@ -1,7 +1,9 @@
 {
-  "latestVersion": "2.1.243-1-f3d1eb1",
-  "currentHash": "b8ce7951c78f3505bdbb1b33df5ec58340c1ab1520b89cefeca71d46718672d9",
+  "latestVersion": "2.1.244-1-de52ca3",
+  "currentHash": "c06e6363b8bc947d63b1d76b25d49aaf57fb3ce2ea0bdea2a82fdf7f98e8e912",
   "changeList": [
+    "2.1.244-1-de52ca3: Enhance BlueskyRipper to support extraction of media URLs from embeds, including video playlists and images. Refactor download logic to handle HLS playlists and update API calls to use actor DID. Add unit tests for media URL extraction functionality.",
+    "2.1.244-1-de52ca3: Built at 2026-06-10T23:02:18Z",
     "2.1.243-1-f3d1eb1: Enhance FacebookRipper with improved GraphQL pagination handling and fallback mechanisms. Added new patterns for dynamic doc_id and collection identification. Updated pagination logic to ensure robust extraction of photo albums, including tests for fallback scenarios when GraphQL requests fail.",
     "2.1.243-1-f3d1eb1: Built at 2026-06-05T11:37:16Z",
     "2.1.242-1-d0f1a79: Add configuration option to enable/disable Coomer video downloads",
