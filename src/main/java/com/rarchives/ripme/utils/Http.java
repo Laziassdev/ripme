@@ -27,7 +27,10 @@ import java.io.BufferedReader;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.InputStreamReader;
+import java.io.OutputStream;
+import java.net.ConnectException;
 import java.net.HttpURLConnection;
+import java.net.SocketTimeoutException;
 import java.time.ZonedDateTime;
 import java.time.format.DateTimeFormatter;
 import java.time.format.DateTimeParseException;
@@ -306,17 +309,21 @@ public class Http {
             }
 
         } catch (IOException e) {
-            if (e.getMessage() != null && e.getMessage().contains("429")) {
-                if (retries < maxRetries) {
-                    long waitTime = calculate429WaitSeconds(retries, baseDelaySeconds, maxDelaySeconds, null, random);
-                    logger.warn("[!] IOException suggests 429 - retrying in " + waitTime + "s (attempt " + (retries + 1) + ")");
-                    Utils.sleep(waitTime * 1000L);
-                    retries++;
-                } else {
-                    logger.warn("[!] Max retries hit from IOException. Waiting 10 minutes before final attempt...");
-                    Utils.sleep(600_000);
-                    retries++;
-                }
+            if (retries < maxRetries && isTransientNetworkError(e)) {
+                long waitTime = calculate429WaitSeconds(retries, baseDelaySeconds, maxDelaySeconds, null, random);
+                logger.warn("[!] {} loading {} - retrying in {}s (attempt {}/{})",
+                        e.getClass().getSimpleName(), url, waitTime, retries + 1, maxRetries);
+                Utils.sleep(waitTime * 1000L);
+                retries++;
+            } else if (retries < maxRetries && e.getMessage() != null && e.getMessage().contains("429")) {
+                long waitTime = calculate429WaitSeconds(retries, baseDelaySeconds, maxDelaySeconds, null, random);
+                logger.warn("[!] 429 Too Many Requests - retrying in {}s (attempt {}/{})", waitTime, retries + 1, maxRetries);
+                Utils.sleep(waitTime * 1000L);
+                retries++;
+            } else if (retries == maxRetries && isTransientNetworkError(e)) {
+                logger.warn("[!] Max retries reached for {}. Waiting 10 minutes before one final attempt...", url);
+                Utils.sleep(600_000);
+                retries++;
             } else {
                 throw e;
             }
@@ -328,6 +335,128 @@ public class Http {
     }
 
     throw new IOException("Exceeded max retries (including final attempt) for GET " + url);
+    }
+
+    /**
+     * Streams a binary response to {@code out} with exponential backoff on 429, 5xx, and transient
+     * network failures (timeouts, connection errors). Uses concise log lines instead of stack traces.
+     */
+    public static long transferWithRetry(URL url, OutputStream out, int maxRetries, int baseDelaySeconds,
+                                         String userAgent, Map<String, String> headers,
+                                         int connectTimeoutMs, int readTimeoutMs) throws IOException {
+        int retries = 0;
+        int maxDelaySeconds = 600;
+        Random random = new Random();
+        Logger log = LogManager.getLogger(Http.class);
+
+        while (retries <= maxRetries) {
+            HttpURLConnection connection = null;
+            try {
+                connection = openRetryableConnection(url, userAgent, headers, connectTimeoutMs, readTimeoutMs);
+                int responseCode = connection.getResponseCode();
+
+                if (responseCode == 429) {
+                    if (retries < maxRetries) {
+                        long waitTime = calculate429WaitSeconds(retries, baseDelaySeconds, maxDelaySeconds,
+                                connection.getHeaderField("Retry-After"), random);
+                        log.warn("[!] 429 Too Many Requests for {} - retrying in {}s (attempt {}/{})",
+                                url, waitTime, retries + 1, maxRetries);
+                        Utils.sleep(waitTime * 1000L);
+                        retries++;
+                        continue;
+                    }
+                    log.warn("[!] Max retries reached for {}. Waiting 10 minutes before one final attempt...", url);
+                    Utils.sleep(600_000);
+                    retries++;
+                    continue;
+                }
+
+                if (responseCode >= 500 && responseCode <= 599) {
+                    if (retries < maxRetries) {
+                        long waitTime = calculate429WaitSeconds(retries, baseDelaySeconds, maxDelaySeconds, null, random);
+                        log.warn("[!] HTTP {} from {} - retrying in {}s (attempt {}/{})",
+                                responseCode, url, waitTime, retries + 1, maxRetries);
+                        Utils.sleep(waitTime * 1000L);
+                        retries++;
+                        continue;
+                    }
+                    throw new HttpStatusException("HTTP error fetching URL", responseCode, url.toString());
+                }
+
+                if (responseCode >= 400) {
+                    throw new HttpStatusException("HTTP error fetching URL", responseCode, url.toString());
+                }
+
+                try (InputStream inputStream = openDecodedStream(connection)) {
+                    return inputStream.transferTo(out);
+                }
+            } catch (IOException e) {
+                if (retries < maxRetries && isTransientNetworkError(e)) {
+                    long waitTime = calculate429WaitSeconds(retries, baseDelaySeconds, maxDelaySeconds, null, random);
+                    log.warn("[!] {} loading {} - retrying in {}s (attempt {}/{})",
+                            e.getClass().getSimpleName(), url, waitTime, retries + 1, maxRetries);
+                    Utils.sleep(waitTime * 1000L);
+                    retries++;
+                } else if (retries == maxRetries && isTransientNetworkError(e)) {
+                    log.warn("[!] Max retries reached for {}. Waiting 10 minutes before one final attempt...", url);
+                    Utils.sleep(600_000);
+                    retries++;
+                } else {
+                    throw e;
+                }
+            } finally {
+                if (connection != null) {
+                    connection.disconnect();
+                }
+            }
+        }
+
+        throw new IOException("Exceeded max retries (including final attempt) for GET " + url);
+    }
+
+    private static HttpURLConnection openRetryableConnection(URL url, String userAgent, Map<String, String> headers,
+                                                             int connectTimeoutMs, int readTimeoutMs)
+            throws IOException {
+        HttpURLConnection connection = (HttpURLConnection) url.openConnection();
+        connection.setRequestProperty("User-Agent", userAgent);
+        connection.setRequestProperty("Accept-Encoding", "gzip, deflate");
+        boolean acceptSet = false;
+        if (headers != null) {
+            for (Map.Entry<String, String> entry : headers.entrySet()) {
+                connection.setRequestProperty(entry.getKey(), entry.getValue());
+                if ("accept".equalsIgnoreCase(entry.getKey())) {
+                    acceptSet = true;
+                }
+            }
+        }
+        if (!acceptSet) {
+            connection.setRequestProperty("Accept", "*/*");
+        }
+        connection.setConnectTimeout(connectTimeoutMs);
+        connection.setReadTimeout(readTimeoutMs);
+        return connection;
+    }
+
+    private static InputStream openDecodedStream(HttpURLConnection connection) throws IOException {
+        InputStream inputStream = connection.getInputStream();
+        String encoding = connection.getContentEncoding();
+        if (encoding != null) {
+            if (encoding.equalsIgnoreCase("gzip")) {
+                return new GZIPInputStream(inputStream);
+            }
+            if (encoding.equalsIgnoreCase("deflate")) {
+                return new InflaterInputStream(inputStream);
+            }
+        }
+        return inputStream;
+    }
+
+    static boolean isTransientNetworkError(IOException e) {
+        if (e instanceof SocketTimeoutException || e instanceof ConnectException) {
+            return true;
+        }
+        String message = e.getMessage();
+        return message != null && message.toLowerCase().contains("timed out");
     }
 
     public Response response() throws IOException {

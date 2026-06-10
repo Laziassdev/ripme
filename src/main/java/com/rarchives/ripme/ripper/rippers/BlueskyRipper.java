@@ -2,6 +2,7 @@ package com.rarchives.ripme.ripper.rippers;
 
 import com.rarchives.ripme.ripper.AbstractJSONRipper;
 import com.rarchives.ripme.ui.RipStatusMessage.STATUS;
+import com.rarchives.ripme.ripper.AbstractRipper;
 import com.rarchives.ripme.utils.DownloadLimitTracker;
 import com.rarchives.ripme.utils.Http;
 import com.rarchives.ripme.utils.Utils;
@@ -18,7 +19,9 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.StandardOpenOption;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
@@ -657,29 +660,26 @@ public class BlueskyRipper extends AbstractJSONRipper {
     }
 
     private long appendHlsSegment(URL segmentUrl, OutputStream out) throws IOException {
-        org.jsoup.Connection.Response response = Http.url(segmentUrl)
-                .referrer("https://bsky.app/")
-                .ignoreContentType()
-                .timeout(60_000)
-                .response();
-        if (response.statusCode() < 200 || response.statusCode() >= 300) {
-            throw new IOException("HLS segment HTTP " + response.statusCode() + " for " + segmentUrl);
-        }
-        try (InputStream in = response.bodyStream()) {
-            return in.transferTo(out);
-        }
+        Map<String, String> headers = blueskyMediaHeaders();
+        int retries = Utils.getConfigInteger("download.retries", 3);
+        int baseDelaySeconds = Math.max(1, Utils.getConfigInteger("download.retry.sleep", 1000) / 1000);
+        int readTimeoutMs = Math.max(120_000, Utils.getConfigInteger("download.timeout", 6000) * 10);
+        return Http.transferWithRetry(segmentUrl, out, retries, baseDelaySeconds, AbstractRipper.USER_AGENT,
+                headers, 15_000, readTimeoutMs);
     }
 
     private String fetchBlueskyText(URL resourceUrl) throws IOException {
-        org.jsoup.Connection.Response response = Http.url(resourceUrl)
-                .referrer("https://bsky.app/")
-                .ignoreContentType()
-                .timeout(30_000)
-                .response();
-        if (response.statusCode() < 200 || response.statusCode() >= 300) {
-            throw new IOException("HTTP " + response.statusCode() + " for " + resourceUrl);
-        }
-        return response.body();
+        Map<String, String> headers = blueskyMediaHeaders();
+        int retries = Utils.getConfigInteger("download.retries", 3);
+        int baseDelaySeconds = Math.max(1, Utils.getConfigInteger("download.retry.sleep", 1000) / 1000);
+        return Http.getWith429Retry(resourceUrl, retries, baseDelaySeconds, AbstractRipper.USER_AGENT, headers);
+    }
+
+    private static Map<String, String> blueskyMediaHeaders() {
+        Map<String, String> headers = new HashMap<>();
+        headers.put("Referer", "https://bsky.app/");
+        headers.put("Accept", "*/*");
+        return headers;
     }
 
     private static URL resolveRelativeUrl(URL base, String relative) throws MalformedURLException {
