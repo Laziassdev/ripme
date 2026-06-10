@@ -1,7 +1,9 @@
 {
-  "latestVersion": "2.1.244-1-de52ca3",
-  "currentHash": "c06e6363b8bc947d63b1d76b25d49aaf57fb3ce2ea0bdea2a82fdf7f98e8e912",
+  "latestVersion": "2.1.245-1-ef532e3",
+  "currentHash": "a5aa7c3a0825d0cc93c478d016ee7336075b6e0274b7ca5c8995ef0a4f583379",
   "changeList": [
+    "2.1.245-1-ef532e3: Merge branch 'main' of https://github.com/Laziassdev/ripme",
+    "2.1.245-1-ef532e3: Built at 2026-06-10T23:20:04Z",
     "2.1.244-1-de52ca3: Enhance BlueskyRipper to support extraction of media URLs from embeds, including video playlists and images. Refactor download logic to handle HLS playlists and update API calls to use actor DID. Add unit tests for media URL extraction functionality.",
     "2.1.244-1-de52ca3: Built at 2026-06-10T23:02:18Z",
     "2.1.243-1-f3d1eb1: Enhance FacebookRipper with improved GraphQL pagination handling and fallback mechanisms. Added new patterns for dynamic doc_id and collection identification. Updated pagination logic to ensure robust extraction of photo albums, including tests for fallback scenarios when GraphQL requests fail.",
