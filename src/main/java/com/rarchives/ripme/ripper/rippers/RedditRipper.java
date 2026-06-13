@@ -805,6 +805,18 @@ public class RedditRipper extends AlbumRipper {
     }
 
     private boolean tryRipCoomerProfile(URL originalURL) {
+        if (!CoomerPartyRipper.isEnabled()) {
+            try {
+                if (CoomerPartyRipper.normalizeOnlyfansProfile(originalURL) != null) {
+                    logger.info("Coomer ripper disabled (coomer.enabled=false); skipping OnlyFans link {}", originalURL);
+                    return true;
+                }
+            } catch (MalformedURLException e) {
+                logger.warn("Invalid OnlyFans URL {}: {}", originalURL, e.getMessage());
+                return true;
+            }
+            return false;
+        }
         URL coomerUrl;
         try {
             coomerUrl = CoomerPartyRipper.normalizeOnlyfansProfile(originalURL);

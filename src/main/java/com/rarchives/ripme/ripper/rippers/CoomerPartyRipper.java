@@ -115,8 +115,19 @@ public class CoomerPartyRipper extends AbstractJSONRipper {
     @Override
     public boolean canRip(URL url) {
         String host = url.getHost();
-        return host.endsWith("coomer.party") || host.endsWith("coomer.su") || host.endsWith("coomer.st")
-                || host.endsWith("onlyfans.com");
+        return host != null && (host.endsWith("coomer.party") || host.endsWith("coomer.su") || host.endsWith("coomer.st")
+                || host.endsWith("onlyfans.com"));
+    }
+
+    /** Temporary kill-switch while coomer.st (and alternates) are unavailable. */
+    public static boolean isEnabled() {
+        return Utils.getConfigBoolean("coomer.enabled", false);
+    }
+
+    private void ensureEnabled() throws IOException {
+        if (!isEnabled()) {
+            throw new IOException("Coomer ripper is temporarily disabled (coomer.enabled=false); coomer.st is unavailable.");
+        }
     }
 
     public static URL normalizeOnlyfansProfile(URL url) throws MalformedURLException {
@@ -396,6 +407,7 @@ public class CoomerPartyRipper extends AbstractJSONRipper {
 
     @Override
     protected JSONObject getFirstPage() throws IOException {
+        ensureEnabled();
         JSONObject page = getJsonPostsForOffset(0);
         JSONArray posts = page.getJSONArray(KEY_WRAPPER_JSON_ARRAY);
         if (posts.length() == 0) {
