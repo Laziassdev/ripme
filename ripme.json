@@ -1,7 +1,9 @@
 {
-  "latestVersion": "2.1.245-1-ef532e3",
-  "currentHash": "a5aa7c3a0825d0cc93c478d016ee7336075b6e0274b7ca5c8995ef0a4f583379",
+  "latestVersion": "2.1.246-1-d124dc6",
+  "currentHash": "cab1d2dd316b89d9ee07ab33dbc8d737772ce5a591156e7cb4145879eed5f4f6",
   "changeList": [
+    "2.1.246-1-d124dc6: Merge branch 'main' of https://github.com/Laziassdev/ripme",
+    "2.1.246-1-d124dc6: Built at 2026-06-13T10:29:11Z",
     "2.1.245-1-ef532e3: Merge branch 'main' of https://github.com/Laziassdev/ripme",
     "2.1.245-1-ef532e3: Built at 2026-06-10T23:20:04Z",
     "2.1.244-1-de52ca3: Enhance BlueskyRipper to support extraction of media URLs from embeds, including video playlists and images. Refactor download logic to handle HLS playlists and update API calls to use actor DID. Add unit tests for media URL extraction functionality.",
