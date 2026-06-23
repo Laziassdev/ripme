@@ -74,7 +74,8 @@ public class DeviantartRipper extends AbstractJSONRipper {
     private static final String ACCEPT_HTML =
             "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8";
     private static final String ACCEPT_LANGUAGE = "en-US,en;q=0.5";
-    private static final String ACCEPT_IMAGE = "image/avif,image/webp,*/*";
+    private static final String ACCEPT_IMAGE = "image/avif,image/webp,image/png,image/svg+xml,image/*;q=0.8,*/*;q=0.5";
+    private static final String WIXMP_REFERER = "https://www.deviantart.com/";
 
     private static final Pattern ARTIST_PATTERN = Pattern.compile("^https?://www\\.deviantart\\.com/([a-zA-Z0-9_-]+).*$");
     private static final Pattern FOLDER_PATTERN = Pattern
@@ -104,6 +105,7 @@ public class DeviantartRipper extends AbstractJSONRipper {
     private String referer;
     private final Map<String, String> cookies = new LinkedHashMap<>();
     private final Map<String, JSONObject> deviationCache = new HashMap<>();
+    private final Map<URL, String> downloadPageUrls = new HashMap<>();
     private final List<String> usedTitles = new ArrayList<>();
     private boolean warnedAboutMissingAuth = false;
     private boolean loadedCookiesFromFirefox = false;
@@ -284,6 +286,14 @@ public class DeviantartRipper extends AbstractJSONRipper {
         JSONObject item = deviationCache.get(pageUrl);
 
         try {
+            if (!Utils.getConfigBoolean("file.overwrite", false)
+                    && Utils.getConfigBoolean("remember.url_history", true) && !isThisATest()
+                    && hasDownloadedURL(pageUrl)) {
+                sendUpdate(STATUS.DOWNLOAD_WARN, "Already downloaded " + pageUrl);
+                alreadyDownloadedUrls += 1;
+                return;
+            }
+
             ResolvedMedia media = resolveMedia(item, deviationPageUrl);
             if (media == null) {
                 logger.warn("No downloadable media for {}", pageUrl);
@@ -292,14 +302,44 @@ public class DeviantartRipper extends AbstractJSONRipper {
             }
 
             String prefix = getPrefix(index);
-            String downloadReferer = pageUrl;
+            String downloadReferer = isWixmpHost(media.downloadUrl.getHost()) ? WIXMP_REFERER : pageUrl;
             Map<String, String> downloadCookies = new LinkedHashMap<>(cookies);
+            downloadPageUrls.put(media.downloadUrl, pageUrl);
             addURLToDownload(media.downloadUrl, prefix, "", downloadReferer, downloadCookies, media.fileName,
                     media.extension);
         } catch (IOException e) {
             logger.error("Failed to resolve media for {}", pageUrl, e);
             sendUpdate(STATUS.DOWNLOAD_ERRORED, pageUrl + ": " + e.getMessage());
         }
+    }
+
+    @Override
+    protected boolean recordUrlOnQueue() {
+        return false;
+    }
+
+    @Override
+    public void downloadCompleted(URL url, Path saveAs) {
+        if (Utils.getConfigBoolean("remember.url_history", true) && !isThisATest()) {
+            String historyUrl = downloadPageUrls.remove(url);
+            if (historyUrl == null) {
+                historyUrl = url.toExternalForm();
+            }
+            try {
+                writeDownloadedURL(historyUrl + "\n");
+            } catch (IOException e) {
+                logger.debug("Unable to write URL history file");
+            }
+        } else {
+            downloadPageUrls.remove(url);
+        }
+        super.downloadCompleted(url, saveAs);
+    }
+
+    @Override
+    public void downloadErrored(URL url, String reason) {
+        downloadPageUrls.remove(url);
+        super.downloadErrored(url, reason);
     }
 
     @Override
@@ -506,7 +546,7 @@ public class DeviantartRipper extends AbstractJSONRipper {
         JSONArray results = new JSONArray();
         if (itemIds != null && deviationMap != null) {
             for (int i = 0; i < itemIds.length(); i++) {
-                String id = String.valueOf(itemIds.getLong(i));
+                String id = streamItemId(itemIds, i);
                 JSONObject deviation = deviationMap.optJSONObject(id);
                 if (deviation != null) {
                     results.put(deviation);
@@ -518,6 +558,15 @@ public class DeviantartRipper extends AbstractJSONRipper {
         page.put("results", results);
         page.put("hasMore", stream.optBoolean("hasMore", false));
         return page;
+    }
+
+    /** DeviantArt stream item ids may be numeric or composite strings (e.g. {@code 82-1083980628}). */
+    static String streamItemId(JSONArray itemIds, int index) {
+        Object value = itemIds.get(index);
+        if (value instanceof Number) {
+            return String.valueOf(((Number) value).longValue());
+        }
+        return String.valueOf(value);
     }
 
     public static String extractInitialStateJson(String html) {
@@ -704,26 +753,23 @@ public class DeviantartRipper extends AbstractJSONRipper {
                 return null;
             }
         } else {
-            JSONObject deviation = null;
-            if (hasAuthCookies()) {
-                deviation = fetchDeviation(galleryItem, deviationPageUrl);
-                if (deviation != null) {
-                    JSONObject extended = deviation.optJSONObject("extended");
-                    if (extended != null) {
-                        JSONObject download = extended.optJSONObject("download");
-                        if (download != null) {
-                            downloadUrl = download.optString("url", null);
-                        }
-                    }
-                }
+            JSONObject deviation = fetchDeviation(galleryItem, deviationPageUrl);
+            JSONObject sourceMedia = deviation != null ? deviation.optJSONObject("media") : media;
+            if (sourceMedia == null) {
+                sourceMedia = media;
             }
 
-            if (downloadUrl == null || downloadUrl.isBlank()) {
-                if (deviation == null) {
-                    deviation = fetchDeviation(galleryItem, deviationPageUrl);
+            downloadUrl = buildImageUrlFromMedia(sourceMedia);
+
+            if ((downloadUrl == null || downloadUrl.isBlank()) && deviation != null) {
+                JSONObject extended = deviation.optJSONObject("extended");
+                if (extended != null) {
+                    JSONObject download = extended.optJSONObject("download");
+                    if (download != null) {
+                        downloadUrl = download.optString("url", null);
+                        logger.debug("Falling back to /download/ URL for {}", deviationPageUrl);
+                    }
                 }
-                JSONObject deviationMedia = deviation != null ? deviation.optJSONObject("media") : media;
-                downloadUrl = buildImageUrlFromMedia(deviationMedia != null ? deviationMedia : media);
             }
 
             if (downloadUrl == null || downloadUrl.isBlank()) {
@@ -799,12 +845,24 @@ public class DeviantartRipper extends AbstractJSONRipper {
 
         String baseUri = media.optString("baseUri", "");
         String prettyName = media.optString("prettyName", "");
-        if (baseUri.isBlank() || prettyName.isBlank()) {
+        if (baseUri.isBlank()) {
             return null;
         }
 
-        JSONObject type = findMediaType(media, "fullview");
-        if (type == null) {
+        String jwt = extractMediaToken(media);
+        String fileBase = mediaFileBase(baseUri);
+
+        JSONObject fullview = findMediaType(media, "fullview");
+        if (fullview != null && fullview.optInt("r", 0) == 1 && !fullview.has("c")) {
+            return appendMediaToken(fileBase, jwt);
+        }
+
+        if (prettyName.isBlank()) {
+            return null;
+        }
+
+        JSONObject type = fullview;
+        if (type == null || !type.has("c")) {
             type = findLargestImageType(media);
         }
         if (type == null) {
@@ -816,8 +874,52 @@ public class DeviantartRipper extends AbstractJSONRipper {
             return null;
         }
 
-        String fileBase = baseUri.replace("/i/", "/f/").split("/v1/")[0];
-        return fileBase + path;
+        return appendMediaToken(fileBase + path, jwt);
+    }
+
+    public static String extractMediaToken(JSONObject media) {
+        if (media == null || !media.has("token")) {
+            return null;
+        }
+        Object token = media.get("token");
+        if (token instanceof JSONArray) {
+            JSONArray tokens = (JSONArray) token;
+            if (tokens.length() > 0) {
+                String value = tokens.optString(0, null);
+                return value != null && !value.isBlank() ? value : null;
+            }
+            return null;
+        }
+        if (token instanceof String) {
+            String value = (String) token;
+            return value.isBlank() ? null : value;
+        }
+        return null;
+    }
+
+    private static String mediaFileBase(String baseUri) {
+        if (baseUri.contains("/i/")) {
+            return baseUri.replace("/i/", "/f/").split("/v1/")[0];
+        }
+        int v1 = baseUri.indexOf("/v1/");
+        if (v1 > 0) {
+            return baseUri.substring(0, v1);
+        }
+        return baseUri.split("\\?")[0];
+    }
+
+    private static String appendMediaToken(String url, String token) {
+        if (token == null || token.isBlank()) {
+            return url;
+        }
+        if (url.contains("?")) {
+            return url + "&token=" + token;
+        }
+        return url + "?token=" + token;
+    }
+
+    private static boolean isWixmpHost(String host) {
+        return host != null && (host.contains("wixmp.com") || host.contains("wixmp-"));
     }
 
     public static String findBestVideoUrl(JSONObject media) {

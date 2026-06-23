@@ -490,7 +490,7 @@ public abstract class AbstractRipper
             return false;
         }
 
-        if (Utils.getConfigBoolean("remember.url_history", true) && !isThisATest()) {
+        if (Utils.getConfigBoolean("remember.url_history", true) && !isThisATest() && recordUrlOnQueue()) {
             logger.info("Writing " + url.toExternalForm() + " to file");
             try {
                 writeDownloadedURL(url.toExternalForm() + "\n");
@@ -538,6 +538,13 @@ public abstract class AbstractRipper
         if (headers != null && !headers.isEmpty()) {
             dft.setExtraHeaders(headers);
         }
+    }
+
+    /**
+     * When false, URL history is recorded in {@link #downloadCompleted} instead of at queue time.
+     */
+    protected boolean recordUrlOnQueue() {
+        return true;
     }
 
     protected String getDownloadUserAgent(URL url) {

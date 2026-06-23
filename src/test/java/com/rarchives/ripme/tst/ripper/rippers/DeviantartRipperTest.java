@@ -90,6 +90,26 @@ public class DeviantartRipperTest extends RippersTest {
     }
 
     @Test
+    public void testParseTagPageStateWithCompositeItemIds() throws IOException {
+        String html = "<script>window.__INITIAL_STATE__ = JSON.parse(\"{"
+                + "\\\"@@streams\\\":{\\\"@@BROWSE_PAGE_STREAM\\\":{"
+                + "\\\"items\\\":[\\\"82-1083980628\\\",456],\\\"hasMore\\\":true}},"
+                + "\\\"@@entities\\\":{\\\"deviation\\\":{"
+                + "\\\"82-1083980628\\\":{\\\"deviationId\\\":1083980628,"
+                + "\\\"url\\\":\\\"https://www.deviantart.com/foo/art/Composite-1083980628\\\"},"
+                + "\\\"456\\\":{\\\"deviationId\\\":456,\\\"url\\\":\\\"https://www.deviantart.com/foo/art/Test-456\\\"}"
+                + "}}}\");</script>";
+        JSONObject page = DeviantartRipper.parseTagPageState(html);
+        Assertions.assertTrue(page.getBoolean("hasMore"));
+        JSONArray results = page.getJSONArray("results");
+        Assertions.assertEquals(2, results.length());
+        Assertions.assertEquals("https://www.deviantart.com/foo/art/Composite-1083980628",
+                results.getJSONObject(0).getString("url"));
+        Assertions.assertEquals("https://www.deviantart.com/foo/art/Test-456",
+                results.getJSONObject(1).getString("url"));
+    }
+
+    @Test
     public void testSanitizeURL() throws IOException, URISyntaxException {
         List<URL> urls = new ArrayList<>();
         urls.add(new URI("https://www.deviantart.com/airgee/").toURL());
@@ -133,6 +153,45 @@ public class DeviantartRipperTest extends RippersTest {
         Assertions.assertEquals(
                 "https://images-wixmp.example.com/f/uuid/file.jpg/v1/fill/w_1280,h_720/pretty_name-fullview.jpg",
                 url);
+    }
+
+    @Test
+    public void testBuildImageUrlFromMediaWithJwt() {
+        JSONObject media = new JSONObject();
+        media.put("baseUri",
+                "https://images-wixmp.example.com/f/uuid/file.jpg");
+        media.put("prettyName", "pretty_name");
+        media.put("token", new JSONArray().put("eyJ.test.token"));
+        JSONArray types = new JSONArray();
+        JSONObject fullview = new JSONObject();
+        fullview.put("t", "fullview");
+        fullview.put("c", "/v1/fill/w_1280,h_720/<prettyName>-fullview.jpg");
+        types.put(fullview);
+        media.put("types", types);
+
+        String url = DeviantartRipper.buildImageUrlFromMedia(media);
+        Assertions.assertTrue(url.contains("?token=eyJ.test.token"));
+        Assertions.assertTrue(url.contains("pretty_name-fullview.jpg"));
+    }
+
+    @Test
+    public void testBuildImageUrlFromMediaOriginal() {
+        JSONObject media = new JSONObject();
+        media.put("baseUri",
+                "https://images-wixmp.example.com/f/uuid/original.png");
+        media.put("prettyName", "title_by_artist_id");
+        media.put("token", new JSONArray().put("eyJ.original.token"));
+        JSONArray types = new JSONArray();
+        JSONObject fullview = new JSONObject();
+        fullview.put("t", "fullview");
+        fullview.put("r", 1);
+        fullview.put("h", 3000);
+        fullview.put("w", 2000);
+        types.put(fullview);
+        media.put("types", types);
+
+        String url = DeviantartRipper.buildImageUrlFromMedia(media);
+        Assertions.assertEquals("https://images-wixmp.example.com/f/uuid/original.png?token=eyJ.original.token", url);
     }
 
     @Test
