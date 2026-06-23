@@ -1,7 +1,9 @@
 {
-  "latestVersion": "2.1.251-1-5e13a20",
-  "currentHash": "27f6ff00506f8c9f76def8e62ae1b6f8df8a7f000f88447aebb4c618333cfce1",
+  "latestVersion": "2.1.252-1-0575298",
+  "currentHash": "6961d4c3fe28770fdc41cd21174dc6b2e8e04cc03771d027d1c9e33fb7752286",
   "changeList": [
+    "2.1.252-1-0575298: Add configureDownloadFileThread method to customize download threads in AbstractRipper and its subclasses. Update user agent and headers handling in DownloadFileThread. Enhance DeviantartRipper to utilize new download configuration methods for improved request customization.",
+    "2.1.252-1-0575298: Built at 2026-06-23T22:52:16Z",
     "2.1.251-1-5e13a20: Merge branch 'main' of https://github.com/Laziassdev/ripme",
     "2.1.251-1-5e13a20: Built at 2026-06-23T22:43:16Z",
     "2.1.250-1-19c2472: Merge branch 'main' of https://github.com/Laziassdev/ripme",
