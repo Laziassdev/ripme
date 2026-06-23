@@ -1,7 +1,9 @@
 {
-  "latestVersion": "2.1.250-1-19c2472",
-  "currentHash": "3f6830fc5290eb30664feefa6b3bb4f832aa3c5c526238d69a466192b2901580",
+  "latestVersion": "2.1.251-1-5e13a20",
+  "currentHash": "27f6ff00506f8c9f76def8e62ae1b6f8df8a7f000f88447aebb4c618333cfce1",
   "changeList": [
+    "2.1.251-1-5e13a20: Merge branch 'main' of https://github.com/Laziassdev/ripme",
+    "2.1.251-1-5e13a20: Built at 2026-06-23T22:43:16Z",
     "2.1.250-1-19c2472: Merge branch 'main' of https://github.com/Laziassdev/ripme",
     "2.1.250-1-19c2472: Built at 2026-06-23T22:31:38Z",
     "2.1.249-1-2767c3f: Refactor DeviantartRipper to enhance API error handling and session management. Adjust retry logic for 403 errors and implement rate limit backoff strategy. Update MainWindow to set a minimum size for the UI frame.",
