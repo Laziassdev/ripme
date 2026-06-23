@@ -323,7 +323,7 @@ public class DeviantartRipper extends AbstractJSONRipper {
 
     private void refreshSession(boolean persist) throws IOException {
         Response response = Http.url(referer).referrer("https://www.deviantart.com/").cookies(cookies)
-                .retries(0).response();
+                .retries(1).response();
         int status = response.statusCode();
         if (status == 404) {
             throw new IOException("Account not found or deactivated");
@@ -432,7 +432,7 @@ public class DeviantartRipper extends AbstractJSONRipper {
         String pageUrl = buildTagPageUrl(page);
         logger.info("Fetching tag page {} for tag {}", page, tagName);
         Response response = Http.url(pageUrl).referrer("https://www.deviantart.com/").cookies(cookies)
-                .retries(0).response();
+                .retries(1).response();
         int status = response.statusCode();
         if (status == 404) {
             throw new IOException("Tag page not found: " + tagName);
