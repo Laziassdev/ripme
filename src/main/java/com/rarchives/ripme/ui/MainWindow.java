@@ -635,6 +635,7 @@ public final class MainWindow implements Runnable, RipStatusHandler {
         mainFrame.setLayout(new GridBagLayout());
 
         createUI(mainFrame.getContentPane());
+        mainFrame.setMinimumSize(new Dimension(350, 120));
         pack();
 
         loadHistory();
@@ -719,15 +720,12 @@ public final class MainWindow implements Runnable, RipStatusHandler {
     private void statusWithColor(String text, Color color) {
         statusLabel.setForeground(color);
         statusLabel.setText(text);
-        pack();
     }
 
     private void pack() {
         SwingUtilities.invokeLater(() -> {
-            Dimension preferredSize = mainFrame.getPreferredSize();
-            mainFrame.setMinimumSize(preferredSize);
             if (isCollapsed()) {
-                mainFrame.setSize(preferredSize);
+                mainFrame.pack();
             }
         });
     }

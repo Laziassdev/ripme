@@ -20,6 +20,7 @@ import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Random;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
@@ -57,9 +58,12 @@ public class DeviantartRipper extends AbstractJSONRipper {
     private static final Object COOKIE_PERSIST_LOCK = new Object();
 
     private static final int PAGE_SIZE = 24;
-    private static final int API_MAX_RETRIES = 5;
-    private static final int API_RETRY_DELAY_SECONDS = 5;
+    /** Outer retries for 403 / session recovery after {@link Http#getWith429Retry} exhausts 429 handling. */
+    private static final int API_MAX_RETRIES = 3;
+    private static final int API_RETRY_DELAY_SECONDS = 30;
+    private static final int API_MAX_DELAY_SECONDS = 600;
     private static final int PAGE_SLEEP_MS = 1500;
+    private static final Random RATE_LIMIT_RANDOM = new Random();
 
     private static final List<String> FIREFOX_HOST_PATTERNS = Arrays.asList("%deviantart.com", "%.deviantart.com");
 
@@ -248,10 +252,10 @@ public class DeviantartRipper extends AbstractJSONRipper {
             } catch (IOException e) {
                 lastError = e;
                 if (attempt < API_MAX_RETRIES) {
-                    long delayMs = API_RETRY_DELAY_SECONDS * 1000L * (attempt + 1);
-                    logger.warn("DeviantArt session init failed (attempt {}/{}), retrying in {}s: {}",
-                            attempt + 1, API_MAX_RETRIES + 1, delayMs / 1000, e.getMessage());
-                    Utils.sleep(delayMs);
+                    long waitSeconds = rateLimitBackoffSeconds(attempt);
+                    logger.warn("DeviantArt session init failed (attempt {}/{}), waiting {}s before retry: {}",
+                            attempt + 1, API_MAX_RETRIES + 1, waitSeconds, e.getMessage());
+                    Utils.sleep(waitSeconds * 1000L);
                 }
             }
         }
@@ -259,7 +263,8 @@ public class DeviantartRipper extends AbstractJSONRipper {
     }
 
     private void refreshSession(boolean persist) throws IOException {
-        Response response = Http.url(referer).referrer("https://www.deviantart.com/").cookies(cookies).response();
+        Response response = Http.url(referer).referrer("https://www.deviantart.com/").cookies(cookies)
+                .retries(0).response();
         int status = response.statusCode();
         if (status == 404) {
             throw new IOException("Account not found or deactivated");
@@ -397,31 +402,52 @@ public class DeviantartRipper extends AbstractJSONRipper {
                         AbstractRipper.USER_AGENT, headers);
                 return new JSONObject(body);
             } catch (HttpStatusException e) {
-                if (e.getStatusCode() == 403 && attempt < API_MAX_RETRIES) {
-                    long delayMs = API_RETRY_DELAY_SECONDS * 1000L * (attempt + 1);
-                    logger.warn("DeviantArt API returned 403, refreshing session (attempt {}/{}), retrying in {}s",
-                            attempt + 1, API_MAX_RETRIES, delayMs / 1000);
+                lastError = e;
+                int status = e.getStatusCode();
+                if (isRateLimitedStatus(status) && attempt < API_MAX_RETRIES) {
+                    long waitSeconds = rateLimitBackoffSeconds(attempt);
+                    logger.warn("DeviantArt API returned {}, waiting {}s before session refresh (attempt {}/{})",
+                            status, waitSeconds, attempt + 1, API_MAX_RETRIES + 1);
+                    Utils.sleep(waitSeconds * 1000L);
                     refreshSession(false);
                     requestUrl = replaceCsrfTokenInUrl(apiUrl, csrfToken);
-                    Utils.sleep(delayMs);
                     continue;
                 }
-                throw new IOException("DeviantArt API error: HTTP " + e.getStatusCode() + " for " + requestUrl, e);
+                throw new IOException("DeviantArt API error: HTTP " + status + " for " + requestUrl, e);
             } catch (IOException e) {
                 lastError = e;
-                if (attempt < API_MAX_RETRIES && e.getMessage() != null && e.getMessage().contains("403")) {
-                    long delayMs = API_RETRY_DELAY_SECONDS * 1000L * (attempt + 1);
-                    logger.warn("DeviantArt API request failed with 403, refreshing session (attempt {}/{}), "
-                            + "retrying in {}s", attempt + 1, API_MAX_RETRIES, delayMs / 1000);
-                    refreshSession(false);
-                    requestUrl = replaceCsrfTokenInUrl(apiUrl, csrfToken);
-                    Utils.sleep(delayMs);
+                if (attempt < API_MAX_RETRIES && isRateLimitMessage(e)) {
+                    long waitSeconds = rateLimitBackoffSeconds(attempt);
+                    logger.warn("DeviantArt API rate limited ({}), waiting {}s before session refresh (attempt {}/{})",
+                            e.getMessage(), waitSeconds, attempt + 1, API_MAX_RETRIES + 1);
+                    Utils.sleep(waitSeconds * 1000L);
+                    try {
+                        refreshSession(false);
+                        requestUrl = replaceCsrfTokenInUrl(apiUrl, csrfToken);
+                    } catch (IOException refreshError) {
+                        logger.warn("DeviantArt session refresh failed during backoff: {}",
+                                refreshError.getMessage());
+                    }
                     continue;
                 }
                 throw e;
             }
         }
         throw lastError != null ? lastError : new IOException("DeviantArt API failed after retries");
+    }
+
+    private static long rateLimitBackoffSeconds(int attempt) {
+        return Http.calculate429WaitSeconds(attempt, API_RETRY_DELAY_SECONDS, API_MAX_DELAY_SECONDS, null,
+                RATE_LIMIT_RANDOM);
+    }
+
+    private static boolean isRateLimitedStatus(int status) {
+        return status == 403 || status == 429;
+    }
+
+    private static boolean isRateLimitMessage(IOException e) {
+        String message = e.getMessage();
+        return message != null && (message.contains("403") || message.contains("429"));
     }
 
     private Map<String, String> buildApiHeaders() {
