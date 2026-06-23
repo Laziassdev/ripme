@@ -1,7 +1,9 @@
 {
-  "latestVersion": "2.1.248-1-fe89653",
-  "currentHash": "44bf8145c073ef2069d84f48e70980f2a3c4c6f39491d4520c1e9089a0e5a7c9",
+  "latestVersion": "2.1.249-1-2767c3f",
+  "currentHash": "6c694cd37ef3e25457c7bc5dfc26ade76f6c060ee7d584c8eae62eabbccc6673",
   "changeList": [
+    "2.1.249-1-2767c3f: Refactor DeviantartRipper to enhance API error handling and session management. Adjust retry logic for 403 errors and implement rate limit backoff strategy. Update MainWindow to set a minimum size for the UI frame.",
+    "2.1.249-1-2767c3f: Built at 2026-06-23T22:12:48Z",
     "2.1.248-1-fe89653: Refactor cookie serialization in DeviantartRipper to ensure a new HashMap is used, improving data integrity during configuration updates.",
     "2.1.248-1-fe89653: Built at 2026-06-23T21:42:04Z",
     "2.1.247-1-78be99f: Refactor DeviantartRipper to utilize JSON API for gallery and favorites extraction. Implement session cookie handling from Firefox and update properties for cookie loading. Enhance unit tests for improved coverage of gallery ID extraction and media URL building.",
