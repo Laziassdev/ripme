@@ -741,7 +741,7 @@ public class DeviantartRipper extends AbstractJSONRipper {
                 }
                 toStore.putAll(cookies);
                 toStore.put("agegate_state", "1");
-                Utils.setConfigString(COOKIES_CONFIG_KEY, serialize(toStore));
+                Utils.setConfigString(COOKIES_CONFIG_KEY, serialize(new HashMap<>(toStore)));
                 Utils.saveConfig();
             } catch (IOException e) {
                 logger.warn("Failed to persist DeviantArt cookies: {}", e.getMessage());
