@@ -1,7 +1,9 @@
 {
-  "latestVersion": "2.1.246-1-d124dc6",
-  "currentHash": "cab1d2dd316b89d9ee07ab33dbc8d737772ce5a591156e7cb4145879eed5f4f6",
+  "latestVersion": "2.1.247-1-78be99f",
+  "currentHash": "c224da914fcc3f82d22624cac44d35b97a85c10eba396ffcadce0d99b864e5d3",
   "changeList": [
+    "2.1.247-1-78be99f: Refactor DeviantartRipper to utilize JSON API for gallery and favorites extraction. Implement session cookie handling from Firefox and update properties for cookie loading. Enhance unit tests for improved coverage of gallery ID extraction and media URL building.",
+    "2.1.247-1-78be99f: Built at 2026-06-23T21:14:50Z",
     "2.1.246-1-d124dc6: Merge branch 'main' of https://github.com/Laziassdev/ripme",
     "2.1.246-1-d124dc6: Built at 2026-06-13T10:29:11Z",
     "2.1.245-1-ef532e3: Merge branch 'main' of https://github.com/Laziassdev/ripme",
