@@ -477,6 +477,7 @@ public class Http {
                     //     403 Forbidden
 
                     int status = ex.getStatusCode();
+                    logger.warn("HTTP {} for {}", status, url);
                     if (status == 401 || status == 403) {
                         throw new IOException("Failed to load " + url + ": Status Code " + status + ". You might be able to circumvent this error by setting cookies for this domain", e);
                     }

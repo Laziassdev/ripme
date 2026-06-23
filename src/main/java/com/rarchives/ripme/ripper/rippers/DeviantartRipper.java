@@ -71,6 +71,11 @@ public class DeviantartRipper extends AbstractJSONRipper {
 
     private static final List<String> FIREFOX_HOST_PATTERNS = Arrays.asList("%deviantart.com", "%.deviantart.com");
 
+    private static final String ACCEPT_HTML =
+            "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8";
+    private static final String ACCEPT_LANGUAGE = "en-US,en;q=0.5";
+    private static final String ACCEPT_IMAGE = "image/avif,image/webp,*/*";
+
     private static final Pattern ARTIST_PATTERN = Pattern.compile("^https?://www\\.deviantart\\.com/([a-zA-Z0-9_-]+).*$");
     private static final Pattern FOLDER_PATTERN = Pattern
             .compile("^https?://www\\.deviantart\\.com/[^/]+/(?:gallery|favourites)/([0-9]+)/.*$");
@@ -101,6 +106,7 @@ public class DeviantartRipper extends AbstractJSONRipper {
     private final Map<String, JSONObject> deviationCache = new HashMap<>();
     private final List<String> usedTitles = new ArrayList<>();
     private boolean warnedAboutMissingAuth = false;
+    private boolean loadedCookiesFromFirefox = false;
 
     public DeviantartRipper(URL url) throws IOException {
         super(url);
@@ -296,6 +302,16 @@ public class DeviantartRipper extends AbstractJSONRipper {
         }
     }
 
+    @Override
+    protected String getDownloadUserAgent(URL url) {
+        return browserUserAgent();
+    }
+
+    @Override
+    protected Map<String, String> getDownloadRequestHeaders(URL url) {
+        return buildDownloadHeaders(url);
+    }
+
     private void initSession() throws IOException {
         loadCookies();
         referer = stripQuery(this.url.toExternalForm());
@@ -322,9 +338,10 @@ public class DeviantartRipper extends AbstractJSONRipper {
     }
 
     private void refreshSession(boolean persist) throws IOException {
-        Response response = Http.url(referer).referrer("https://www.deviantart.com/").cookies(cookies)
-                .retries(1).response();
+        Response response = configurePageRequest(Http.url(referer).referrer("https://www.deviantart.com/").cookies(cookies)
+                .retries(1)).response();
         int status = response.statusCode();
+        logger.info("DeviantArt session page HTTP {}", status);
         if (status == 404) {
             throw new IOException("Account not found or deactivated");
         }
@@ -355,12 +372,20 @@ public class DeviantartRipper extends AbstractJSONRipper {
     private void loadCookies() {
         cookies.clear();
 
+        if (Utils.getConfigBoolean("deviantart.firefox.cookies", true)) {
+            loadCookiesFromFirefox();
+        } else {
+            logger.debug("Firefox cookie loading disabled via deviantart.firefox.cookies");
+        }
+
         try {
             String stored = Utils.getConfigString(COOKIES_CONFIG_KEY, null);
             if (stored != null && !stored.isBlank()) {
                 Map<String, String> storedCookies = deserialize(stored);
-                cookies.putAll(storedCookies);
-                logger.info("Loaded {} DeviantArt cookie(s) from {}", storedCookies.size(), COOKIES_CONFIG_KEY);
+                for (Map.Entry<String, String> entry : storedCookies.entrySet()) {
+                    cookies.putIfAbsent(entry.getKey(), entry.getValue());
+                }
+                logger.info("Merged {} DeviantArt cookie(s) from {}", storedCookies.size(), COOKIES_CONFIG_KEY);
             }
         } catch (IOException | ClassNotFoundException e) {
             logger.warn("Failed to load stored DeviantArt cookies: {}", e.getMessage());
@@ -370,15 +395,11 @@ public class DeviantartRipper extends AbstractJSONRipper {
         if (configCookieString != null && !configCookieString.isBlank()) {
             Map<String, String> configCookies = RipUtils.getCookiesFromString(configCookieString.trim());
             if (!configCookies.isEmpty()) {
-                cookies.putAll(configCookies);
-                logger.info("Loaded {} DeviantArt cookie(s) from cookies.deviantart.com", configCookies.size());
+                for (Map.Entry<String, String> entry : configCookies.entrySet()) {
+                    cookies.putIfAbsent(entry.getKey(), entry.getValue());
+                }
+                logger.info("Merged {} DeviantArt cookie(s) from cookies.deviantart.com", configCookies.size());
             }
-        }
-
-        if (Utils.getConfigBoolean("deviantart.firefox.cookies", true)) {
-            loadCookiesFromFirefox();
-        } else {
-            logger.debug("Firefox cookie loading disabled via deviantart.firefox.cookies");
         }
 
         cookies.put("agegate_state", "1");
@@ -399,6 +420,7 @@ public class DeviantartRipper extends AbstractJSONRipper {
 
             int before = cookies.size();
             cookies.putAll(profileCookies);
+            loadedCookiesFromFirefox = true;
             int added = cookies.size() - before;
             logger.info("Loaded {} DeviantArt cookie(s) from Firefox profile {} ({} new)",
                     profileCookies.size(), profilePath.getFileName(), added);
@@ -431,9 +453,10 @@ public class DeviantartRipper extends AbstractJSONRipper {
     private JSONObject fetchTagPage(int page) throws IOException {
         String pageUrl = buildTagPageUrl(page);
         logger.info("Fetching tag page {} for tag {}", page, tagName);
-        Response response = Http.url(pageUrl).referrer("https://www.deviantart.com/").cookies(cookies)
-                .retries(1).response();
+        Response response = configurePageRequest(Http.url(pageUrl).referrer("https://www.deviantart.com/").cookies(cookies)
+                .retries(1)).response();
         int status = response.statusCode();
+        logger.info("DeviantArt tag page HTTP {}", status);
         if (status == 404) {
             throw new IOException("Tag page not found: " + tagName);
         }
@@ -548,7 +571,7 @@ public class DeviantartRipper extends AbstractJSONRipper {
             try {
                 Map<String, String> headers = buildApiHeaders();
                 String body = Http.getWith429Retry(new URL(requestUrl), API_MAX_RETRIES, API_RETRY_DELAY_SECONDS,
-                        AbstractRipper.USER_AGENT, headers);
+                        browserUserAgent(), headers);
                 return new JSONObject(body);
             } catch (HttpStatusException e) {
                 lastError = e;
@@ -602,10 +625,46 @@ public class DeviantartRipper extends AbstractJSONRipper {
     private Map<String, String> buildApiHeaders() {
         Map<String, String> headers = new HashMap<>();
         headers.put("Accept", "application/json, text/plain, */*");
+        headers.put("Accept-Language", ACCEPT_LANGUAGE);
         headers.put("Referer", referer);
+        headers.put("Sec-Fetch-Dest", "empty");
+        headers.put("Sec-Fetch-Mode", "cors");
+        headers.put("Sec-Fetch-Site", "same-origin");
         String cookieHeader = FirefoxCookieUtils.toCookieHeader(cookies);
         if (cookieHeader != null && !cookieHeader.isBlank()) {
             headers.put("Cookie", cookieHeader);
+        }
+        return headers;
+    }
+
+    private Http configurePageRequest(Http http) {
+        return http.userAgent(browserUserAgent())
+                .header("Accept", ACCEPT_HTML)
+                .header("Accept-Language", ACCEPT_LANGUAGE)
+                .header("Sec-Fetch-Dest", "document")
+                .header("Sec-Fetch-Mode", "navigate")
+                .header("Sec-Fetch-Site", "none")
+                .header("Sec-Fetch-User", "?1");
+    }
+
+    private String browserUserAgent() {
+        if (loadedCookiesFromFirefox) {
+            return AbstractRipper.FIREFOX_USER_AGENT;
+        }
+        return AbstractRipper.USER_AGENT;
+    }
+
+    private Map<String, String> buildDownloadHeaders(URL downloadUrl) {
+        Map<String, String> headers = new HashMap<>();
+        headers.put("Accept", ACCEPT_IMAGE);
+        headers.put("Accept-Language", ACCEPT_LANGUAGE);
+        headers.put("Sec-Fetch-Dest", "image");
+        headers.put("Sec-Fetch-Mode", "no-cors");
+        String host = downloadUrl.getHost();
+        if (host != null && host.endsWith("deviantart.com")) {
+            headers.put("Sec-Fetch-Site", "same-site");
+        } else {
+            headers.put("Sec-Fetch-Site", "cross-site");
         }
         return headers;
     }

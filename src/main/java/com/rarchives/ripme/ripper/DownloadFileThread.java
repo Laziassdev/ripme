@@ -30,6 +30,8 @@ class DownloadFileThread implements Runnable {
 
     private String referrer = "";
     private Map<String, String> cookies = new HashMap<>();
+    private String userAgent = AbstractRipper.USER_AGENT;
+    private Map<String, String> extraHeaders = new HashMap<>();
 
     private final URL url;
     private File saveAs;
@@ -59,6 +61,18 @@ class DownloadFileThread implements Runnable {
 
     public void setCookies(Map<String, String> cookies) {
         this.cookies = cookies;
+    }
+
+    public void setUserAgent(String userAgent) {
+        if (userAgent != null && !userAgent.isBlank()) {
+            this.userAgent = userAgent;
+        }
+    }
+
+    public void setExtraHeaders(Map<String, String> extraHeaders) {
+        if (extraHeaders != null) {
+            this.extraHeaders = extraHeaders;
+        }
     }
 
     /**
@@ -141,7 +155,10 @@ class DownloadFileThread implements Runnable {
                 if (!referrer.equals("")) {
                     huc.setRequestProperty("Referer", referrer); // Sic
                 }
-                huc.setRequestProperty("User-agent", AbstractRipper.USER_AGENT);
+                huc.setRequestProperty("User-agent", userAgent);
+                for (Map.Entry<String, String> header : extraHeaders.entrySet()) {
+                    huc.setRequestProperty(header.getKey(), header.getValue());
+                }
                 StringBuilder cookie = new StringBuilder();
                 for (String key : cookies.keySet()) {
                     if (!cookie.toString().equals("")) {
@@ -203,8 +220,9 @@ class DownloadFileThread implements Runnable {
                     Utils.sleep(waitTimeSeconds * 1000L);
                     continue; // Retry the loop
                 } else if (statusCode / 100 == 4) {
-                    logger.error("[!] " + Utils.getLocalizedString("nonretriable.status.code") + " " + statusCode
-                            + " while downloading from " + url);
+                    logger.error("[!] {} {} while downloading from {} (Referer: {})",
+                            Utils.getLocalizedString("nonretriable.status.code"), statusCode, url,
+                            referrer.isBlank() ? "(none)" : referrer);
                     observer.downloadErrored(url, Utils.getLocalizedString("nonretriable.status.code") + " "
                             + statusCode + " while downloading " + url.toExternalForm());
                     return; // Not retriable, drop out.

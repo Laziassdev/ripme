@@ -55,6 +55,8 @@ public abstract class AbstractRipper
     private final String hashHistoryFile = Utils.getHashHistoryFile();
 
     public static final String USER_AGENT = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/134.0.0.0 Safari/537.36";
+    public static final String FIREFOX_USER_AGENT =
+            "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:152.0) Gecko/20100101 Firefox/152.0";
 
     private static Random randomGenerator = new Random();
 
@@ -522,6 +524,28 @@ public abstract class AbstractRipper
         }
         stop();
         return false;
+    }
+
+    /**
+     * Hook for rippers to customize download threads (User-Agent, extra headers, etc.).
+     */
+    protected void configureDownloadFileThread(DownloadFileThread dft, URL url) {
+        String userAgent = getDownloadUserAgent(url);
+        if (userAgent != null) {
+            dft.setUserAgent(userAgent);
+        }
+        Map<String, String> headers = getDownloadRequestHeaders(url);
+        if (headers != null && !headers.isEmpty()) {
+            dft.setExtraHeaders(headers);
+        }
+    }
+
+    protected String getDownloadUserAgent(URL url) {
+        return null;
+    }
+
+    protected Map<String, String> getDownloadRequestHeaders(URL url) {
+        return null;
     }
 
     protected void onDownloadSuccess(URL url) {

@@ -395,6 +395,7 @@ public abstract class AbstractHTMLRipper extends AbstractRipper {
             if (cookies != null) {
                 dft.setCookies(cookies);
             }
+            configureDownloadFileThread(dft, url);
             threadPool.addThread(url, dft);
         }
 
