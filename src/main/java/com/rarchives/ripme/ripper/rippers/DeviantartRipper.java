@@ -28,6 +28,7 @@ import org.apache.logging.log4j.Logger;
 import org.json.JSONArray;
 import org.json.JSONObject;
 import org.jsoup.Connection.Response;
+import org.jsoup.HttpStatusException;
 
 import com.rarchives.ripme.ripper.AbstractJSONRipper;
 import com.rarchives.ripme.ripper.AbstractRipper;
@@ -53,6 +54,7 @@ public class DeviantartRipper extends AbstractJSONRipper {
     private static final String GALLERY_API = "https://www.deviantart.com/_puppy/dashared/gallection/contents";
     private static final String DEVIATION_API = "https://www.deviantart.com/_puppy/dadeviation/init";
     private static final String COOKIES_CONFIG_KEY = "DeviantartLogin.cookies";
+    private static final Object COOKIE_PERSIST_LOCK = new Object();
 
     private static final int PAGE_SIZE = 24;
     private static final int API_MAX_RETRIES = 5;
@@ -221,7 +223,10 @@ public class DeviantartRipper extends AbstractJSONRipper {
             }
 
             String prefix = getPrefix(index);
-            addURLToDownload(media.downloadUrl, prefix, "", referer, cookies, media.fileName, media.extension);
+            String downloadReferer = pageUrl;
+            Map<String, String> downloadCookies = new LinkedHashMap<>(cookies);
+            addURLToDownload(media.downloadUrl, prefix, "", downloadReferer, downloadCookies, media.fileName,
+                    media.extension);
         } catch (IOException e) {
             logger.error("Failed to resolve media for {}", pageUrl, e);
             sendUpdate(STATUS.DOWNLOAD_ERRORED, pageUrl + ": " + e.getMessage());
@@ -235,9 +240,35 @@ public class DeviantartRipper extends AbstractJSONRipper {
             referer += "/";
         }
 
+        IOException lastError = null;
+        for (int attempt = 0; attempt <= API_MAX_RETRIES; attempt++) {
+            try {
+                refreshSession(attempt == 0);
+                return;
+            } catch (IOException e) {
+                lastError = e;
+                if (attempt < API_MAX_RETRIES) {
+                    long delayMs = API_RETRY_DELAY_SECONDS * 1000L * (attempt + 1);
+                    logger.warn("DeviantArt session init failed (attempt {}/{}), retrying in {}s: {}",
+                            attempt + 1, API_MAX_RETRIES + 1, delayMs / 1000, e.getMessage());
+                    Utils.sleep(delayMs);
+                }
+            }
+        }
+        throw lastError != null ? lastError : new IOException("Could not initialize DeviantArt session");
+    }
+
+    private void refreshSession(boolean persist) throws IOException {
         Response response = Http.url(referer).referrer("https://www.deviantart.com/").cookies(cookies).response();
-        if (response.statusCode() == 404) {
+        int status = response.statusCode();
+        if (status == 404) {
             throw new IOException("Account not found or deactivated");
+        }
+        if (status == 403) {
+            throw new IOException("Gallery page returned 403 Forbidden");
+        }
+        if (status >= 400) {
+            throw new IOException("Gallery page returned HTTP " + status);
         }
 
         mergeCookies(response.cookies());
@@ -252,7 +283,9 @@ public class DeviantartRipper extends AbstractJSONRipper {
             logger.info("DeviantArt auth cookies present (source: config and/or Firefox)");
         }
 
-        persistCookies();
+        if (persist) {
+            persistCookies();
+        }
     }
 
     private void loadCookies() {
@@ -355,6 +388,43 @@ public class DeviantartRipper extends AbstractJSONRipper {
     }
 
     private JSONObject fetchApiJson(String apiUrl) throws IOException {
+        String requestUrl = apiUrl;
+        IOException lastError = null;
+        for (int attempt = 0; attempt <= API_MAX_RETRIES; attempt++) {
+            try {
+                Map<String, String> headers = buildApiHeaders();
+                String body = Http.getWith429Retry(new URL(requestUrl), API_MAX_RETRIES, API_RETRY_DELAY_SECONDS,
+                        AbstractRipper.USER_AGENT, headers);
+                return new JSONObject(body);
+            } catch (HttpStatusException e) {
+                if (e.getStatusCode() == 403 && attempt < API_MAX_RETRIES) {
+                    long delayMs = API_RETRY_DELAY_SECONDS * 1000L * (attempt + 1);
+                    logger.warn("DeviantArt API returned 403, refreshing session (attempt {}/{}), retrying in {}s",
+                            attempt + 1, API_MAX_RETRIES, delayMs / 1000);
+                    refreshSession(false);
+                    requestUrl = replaceCsrfTokenInUrl(apiUrl, csrfToken);
+                    Utils.sleep(delayMs);
+                    continue;
+                }
+                throw new IOException("DeviantArt API error: HTTP " + e.getStatusCode() + " for " + requestUrl, e);
+            } catch (IOException e) {
+                lastError = e;
+                if (attempt < API_MAX_RETRIES && e.getMessage() != null && e.getMessage().contains("403")) {
+                    long delayMs = API_RETRY_DELAY_SECONDS * 1000L * (attempt + 1);
+                    logger.warn("DeviantArt API request failed with 403, refreshing session (attempt {}/{}), "
+                            + "retrying in {}s", attempt + 1, API_MAX_RETRIES, delayMs / 1000);
+                    refreshSession(false);
+                    requestUrl = replaceCsrfTokenInUrl(apiUrl, csrfToken);
+                    Utils.sleep(delayMs);
+                    continue;
+                }
+                throw e;
+            }
+        }
+        throw lastError != null ? lastError : new IOException("DeviantArt API failed after retries");
+    }
+
+    private Map<String, String> buildApiHeaders() {
         Map<String, String> headers = new HashMap<>();
         headers.put("Accept", "application/json, text/plain, */*");
         headers.put("Referer", referer);
@@ -362,10 +432,14 @@ public class DeviantartRipper extends AbstractJSONRipper {
         if (cookieHeader != null && !cookieHeader.isBlank()) {
             headers.put("Cookie", cookieHeader);
         }
+        return headers;
+    }
 
-        String body = Http.getWith429Retry(new URL(apiUrl), API_MAX_RETRIES, API_RETRY_DELAY_SECONDS,
-                AbstractRipper.USER_AGENT, headers);
-        return new JSONObject(body);
+    public static String replaceCsrfTokenInUrl(String apiUrl, String newToken) {
+        if (apiUrl.contains("csrf_token=")) {
+            return apiUrl.replaceAll("csrf_token=[^&]+", "csrf_token=" + encode(newToken));
+        }
+        return apiUrl;
     }
 
     private ResolvedMedia resolveMedia(JSONObject galleryItem, URL deviationPageUrl) throws IOException {
@@ -429,7 +503,9 @@ public class DeviantartRipper extends AbstractJSONRipper {
         if (extension == null || extension.isBlank()) {
             extension = guessExtension(downloadUrl);
         }
-        return new ResolvedMedia(new URL(downloadUrl), safeTitle + "." + extension, extension);
+        String fileName = fileNameWithoutExtension(safeTitle, extension);
+        fileName = fileNameWithoutExtension(fileName, guessExtension(downloadUrl));
+        return new ResolvedMedia(new URL(downloadUrl), fileName, extension);
     }
 
     private JSONObject fetchDeviation(JSONObject galleryItem, URL deviationPageUrl) throws IOException {
@@ -629,6 +705,21 @@ public class DeviantartRipper extends AbstractJSONRipper {
         return "jpg";
     }
 
+    /**
+     * Strips a trailing extension from {@code fileName} when it already matches
+     * {@code extension}, so {@link AbstractRipper#getFileName} does not append it twice.
+     */
+    public static String fileNameWithoutExtension(String fileName, String extension) {
+        if (fileName == null || fileName.isBlank() || extension == null || extension.isBlank()) {
+            return fileName;
+        }
+        String suffix = "." + extension.toLowerCase();
+        if (fileName.toLowerCase().endsWith(suffix)) {
+            return fileName.substring(0, fileName.length() - suffix.length());
+        }
+        return fileName;
+    }
+
     private void mergeCookies(Map<String, String> newCookies) {
         if (newCookies != null && !newCookies.isEmpty()) {
             cookies.putAll(newCookies);
@@ -637,11 +728,24 @@ public class DeviantartRipper extends AbstractJSONRipper {
     }
 
     private void persistCookies() {
-        try {
-            Utils.setConfigString(COOKIES_CONFIG_KEY, serialize(new LinkedHashMap<>(cookies)));
-            Utils.saveConfig();
-        } catch (IOException e) {
-            logger.warn("Failed to persist DeviantArt cookies: {}", e.getMessage());
+        synchronized (COOKIE_PERSIST_LOCK) {
+            try {
+                Map<String, String> toStore = new LinkedHashMap<>();
+                String stored = Utils.getConfigString(COOKIES_CONFIG_KEY, null);
+                if (stored != null && !stored.isBlank()) {
+                    try {
+                        toStore.putAll(deserialize(stored));
+                    } catch (ClassNotFoundException e) {
+                        logger.warn("Failed to merge stored DeviantArt cookies: {}", e.getMessage());
+                    }
+                }
+                toStore.putAll(cookies);
+                toStore.put("agegate_state", "1");
+                Utils.setConfigString(COOKIES_CONFIG_KEY, serialize(toStore));
+                Utils.saveConfig();
+            } catch (IOException e) {
+                logger.warn("Failed to persist DeviantArt cookies: {}", e.getMessage());
+            }
         }
     }
 

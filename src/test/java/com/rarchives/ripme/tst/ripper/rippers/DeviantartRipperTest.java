@@ -1,6 +1,7 @@
 package com.rarchives.ripme.tst.ripper.rippers;
 
 import java.io.IOException;
+import java.net.MalformedURLException;
 import java.net.URI;
 import java.net.URISyntaxException;
 import java.net.URL;
@@ -13,6 +14,7 @@ import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Disabled;
 import org.junit.jupiter.api.Test;
 
+import com.rarchives.ripme.ripper.AbstractRipper;
 import com.rarchives.ripme.ripper.rippers.DeviantartRipper;
 
 public class DeviantartRipperTest extends RippersTest {
@@ -106,5 +108,37 @@ public class DeviantartRipperTest extends RippersTest {
         media.put("types", types);
 
         Assertions.assertEquals("https://example.com/720.mp4", DeviantartRipper.findBestVideoUrl(media));
+    }
+
+    @Test
+    public void testFileNameWithoutExtension() {
+        Assertions.assertEquals("earthly_delights",
+                DeviantartRipper.fileNameWithoutExtension("earthly_delights.mp4", "mp4"));
+        Assertions.assertEquals("tiny_delights",
+                DeviantartRipper.fileNameWithoutExtension("tiny_delights.jpg", "jpg"));
+        Assertions.assertEquals("title", DeviantartRipper.fileNameWithoutExtension("title", "jpg"));
+        Assertions.assertEquals("mixed_case",
+                DeviantartRipper.fileNameWithoutExtension("mixed_case.JPG", "jpg"));
+    }
+
+    @Test
+    public void testGetFileNameNoDoubleExtension() throws MalformedURLException {
+        URL url = new URL("https://www.deviantart.com/download/12345/file.mp4");
+        String resolvedName = DeviantartRipper.fileNameWithoutExtension("earthly_delights.mp4", "mp4");
+        Assertions.assertEquals("earthly_delights.mp4",
+                AbstractRipper.getFileName(url, "", resolvedName, "mp4"));
+
+        resolvedName = DeviantartRipper.fileNameWithoutExtension("tiny_delights.jpg", "jpg");
+        Assertions.assertEquals("tiny_delights.jpg",
+                AbstractRipper.getFileName(url, "", resolvedName, "jpg"));
+    }
+
+    @Test
+    public void testReplaceCsrfTokenInUrl() {
+        String url = "https://www.deviantart.com/_puppy/dashared/gallection/contents"
+                + "?username=test&csrf_token=old.token&offset=0";
+        String updated = DeviantartRipper.replaceCsrfTokenInUrl(url, "new.token");
+        Assertions.assertTrue(updated.contains("csrf_token=new.token"));
+        Assertions.assertFalse(updated.contains("old.token"));
     }
 }
