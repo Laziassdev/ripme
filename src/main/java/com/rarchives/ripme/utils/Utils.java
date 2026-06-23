@@ -22,6 +22,7 @@ import java.util.Collections;
 import java.util.Enumeration;
 import java.util.Iterator;
 import java.util.HashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
@@ -428,13 +429,35 @@ public class Utils {
      * @return List of classes within the package
      */
     public static List<Class<?>> getClassesForPackage(String pkgname) {
-        ArrayList<Class<?>> classes = new ArrayList<>();
+        LinkedHashSet<Class<?>> classes = new LinkedHashSet<>();
         String relPath = pkgname.replace('.', '/');
-        URL resource = ClassLoader.getSystemClassLoader().getResource(relPath);
-        if (resource == null) {
-            throw new RuntimeException("No resource for " + relPath);
+        ClassLoader classLoader = Utils.class.getClassLoader();
+        if (classLoader == null) {
+            classLoader = Thread.currentThread().getContextClassLoader();
         }
+        if (classLoader == null) {
+            classLoader = ClassLoader.getSystemClassLoader();
+        }
+        try {
+            Enumeration<URL> resources = classLoader.getResources(relPath);
+            if (!resources.hasMoreElements()) {
+                throw new RuntimeException("No resource for " + relPath);
+            }
+            while (resources.hasMoreElements()) {
+                classes.addAll(loadClassesFromPackageResource(resources.nextElement(), pkgname, relPath, classLoader));
+            }
+        } catch (IOException e) {
+            throw new RuntimeException("Failed to read package " + pkgname, e);
+        }
+        if (classes.isEmpty()) {
+            throw new RuntimeException("No classes found for " + relPath);
+        }
+        return new ArrayList<>(classes);
+    }
 
+    private static List<Class<?>> loadClassesFromPackageResource(URL resource, String pkgname, String relPath,
+            ClassLoader classLoader) {
+        ArrayList<Class<?>> classes = new ArrayList<>();
         String fullPath = resource.getFile();
         File directory;
 
@@ -450,21 +473,19 @@ public class Utils {
         }
 
         if (directory != null && directory.exists()) {
-            // Get the list of the files contained in the package
             String[] files = directory.list();
             assert files != null;
             for (String file : files) {
                 if (file.endsWith(".class") && !file.contains("$")) {
                     String className = pkgname + '.' + file.substring(0, file.length() - 6);
                     try {
-                        classes.add(Class.forName(className));
+                        classes.add(Class.forName(className, true, classLoader));
                     } catch (ClassNotFoundException e) {
                         throw new RuntimeException("ClassNotFoundException loading " + className);
                     }
                 }
             }
         } else {
-            // Load from JAR
             try {
                 String jarPath = fullPath.replaceFirst("[.]jar[!].*", ".jar").replaceFirst("file:", "");
                 jarPath = URLDecoder.decode(jarPath, StandardCharsets.UTF_8);
@@ -474,18 +495,19 @@ public class Utils {
                     JarEntry nextElement = entries.nextElement();
                     String entryName = nextElement.getName();
                     if (entryName.startsWith(relPath) && entryName.length() > (relPath.length() + "/".length())
-                            && !nextElement.isDirectory()) {
+                            && !nextElement.isDirectory() && entryName.endsWith(".class")
+                            && !entryName.contains("$")) {
                         String className = entryName.replace('/', '.').replace('\\', '.').replace(".class", "");
                         try {
-                            classes.add(Class.forName(className));
+                            classes.add(Class.forName(className, true, classLoader));
                         } catch (ClassNotFoundException e) {
                             LOGGER.error("ClassNotFoundException loading " + className);
-                            jarFile.close(); // Resource leak fix?
+                            jarFile.close();
                             throw new RuntimeException("ClassNotFoundException loading " + className);
                         }
                     }
                 }
-                jarFile.close(); // Eclipse said not closing it would have a resource leak
+                jarFile.close();
             } catch (IOException e) {
                 LOGGER.error("Error while loading jar file:", e);
                 throw new RuntimeException(pkgname + " (" + directory + ") does not appear to be a valid package", e);

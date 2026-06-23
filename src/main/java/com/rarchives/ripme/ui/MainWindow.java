@@ -636,7 +636,7 @@ public final class MainWindow implements Runnable, RipStatusHandler {
 
         createUI(mainFrame.getContentPane());
         mainFrame.setMinimumSize(new Dimension(350, 120));
-        pack();
+        mainFrame.pack();
 
         loadHistory();
         loadPausedDownloads();
@@ -675,7 +675,6 @@ public final class MainWindow implements Runnable, RipStatusHandler {
     }
 
     public void run() {
-        pack();
         restoreWindowPosition(mainFrame);
         mainFrame.setVisible(true);
     }
@@ -724,15 +723,9 @@ public final class MainWindow implements Runnable, RipStatusHandler {
 
     private void pack() {
         SwingUtilities.invokeLater(() -> {
-            if (isCollapsed()) {
-                mainFrame.pack();
-            }
+            mainFrame.revalidate();
+            mainFrame.repaint();
         });
-    }
-
-    private boolean isCollapsed() {
-        return (!logPanel.isVisible() && !historyPanel.isVisible() && !queuePanel.isVisible()
-                && !configurationPanel.isVisible() && !activePanel.isVisible());
     }
 
     private void createUI(Container pane) {
@@ -2575,61 +2568,77 @@ public final class MainWindow implements Runnable, RipStatusHandler {
         // Java on Windows has a bug where if we try to manually set the position of the
         // Window,
         // javaw.exe will not close itself down when the application is closed.
-        // Therefore, even if isWindowPositioningEnabled, if we are on Windows, we
-        // ignore it.
+        // Size can still be saved and restored on Windows via setSize().
         return osName == null || osName.startsWith("Windows");
     }
 
-    private static boolean isWindowPositioningEnabled() {
-        boolean isEnabled = Utils.getConfigBoolean("window.position", true);
-        return isEnabled && !hasWindowPositionBug();
+    private static boolean isWindowPersistenceEnabled() {
+        return Utils.getConfigBoolean("window.position", true);
+    }
+
+    private static boolean isWindowPositionPersistenceEnabled() {
+        return isWindowPersistenceEnabled() && !hasWindowPositionBug();
     }
 
     private static void saveWindowPosition(Frame frame) {
-        if (!isWindowPositioningEnabled()) {
+        if (!isWindowPersistenceEnabled()) {
             return;
         }
 
-        Point point;
-        try {
-            point = frame.getLocationOnScreen();
-        } catch (Exception e) {
-            e.printStackTrace();
-            try {
-                point = frame.getLocation();
-            } catch (Exception e2) {
-                e2.printStackTrace();
-                return;
-            }
-        }
-        int x = (int) point.getX();
-        int y = (int) point.getY();
         int w = frame.getWidth();
         int h = frame.getHeight();
-        Utils.setConfigInteger("window.x", x);
-        Utils.setConfigInteger("window.y", y);
         Utils.setConfigInteger("window.w", w);
         Utils.setConfigInteger("window.h", h);
-        LOGGER.debug("Saved window position (x=" + x + ", y=" + y + ", w=" + w + ", h=" + h + ")");
+
+        if (isWindowPositionPersistenceEnabled()) {
+            Point point;
+            try {
+                point = frame.getLocationOnScreen();
+            } catch (Exception e) {
+                e.printStackTrace();
+                try {
+                    point = frame.getLocation();
+                } catch (Exception e2) {
+                    e2.printStackTrace();
+                    LOGGER.debug("Saved window size (w=" + w + ", h=" + h + ")");
+                    return;
+                }
+            }
+            int x = (int) point.getX();
+            int y = (int) point.getY();
+            Utils.setConfigInteger("window.x", x);
+            Utils.setConfigInteger("window.y", y);
+            LOGGER.debug("Saved window position (x=" + x + ", y=" + y + ", w=" + w + ", h=" + h + ")");
+        } else {
+            LOGGER.debug("Saved window size (w=" + w + ", h=" + h + ")");
+        }
     }
 
     private static void restoreWindowPosition(Frame frame) {
-        if (!isWindowPositioningEnabled()) {
+        if (!isWindowPersistenceEnabled()) {
             mainFrame.setLocationRelativeTo(null); // default to middle of screen
             return;
         }
 
         try {
-            int x = Utils.getConfigInteger("window.x", -1);
-            int y = Utils.getConfigInteger("window.y", -1);
             int w = Utils.getConfigInteger("window.w", -1);
             int h = Utils.getConfigInteger("window.h", -1);
-            if (x < 0 || y < 0 || w <= 0 || h <= 0) {
-                LOGGER.debug("UNUSUAL: One or more of: x, y, w, or h was still less than 0 after reading config");
-                mainFrame.setLocationRelativeTo(null); // default to middle of screen
-                return;
+            if (w > 0 && h > 0) {
+                frame.setSize(w, h);
             }
-            frame.setBounds(x, y, w, h);
+
+            if (isWindowPositionPersistenceEnabled()) {
+                int x = Utils.getConfigInteger("window.x", -1);
+                int y = Utils.getConfigInteger("window.y", -1);
+                if (x < 0 || y < 0) {
+                    LOGGER.debug("UNUSUAL: x or y was still less than 0 after reading config");
+                    frame.setLocationRelativeTo(null);
+                    return;
+                }
+                frame.setLocation(x, y);
+            } else {
+                frame.setLocationRelativeTo(null);
+            }
         } catch (Exception e) {
             e.printStackTrace();
         }

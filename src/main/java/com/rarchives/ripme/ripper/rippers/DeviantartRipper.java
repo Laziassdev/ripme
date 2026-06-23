@@ -24,6 +24,7 @@ import java.util.Random;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
+import org.apache.commons.lang.StringEscapeUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.json.JSONArray;
@@ -40,7 +41,10 @@ import com.rarchives.ripme.utils.RipUtils;
 import com.rarchives.ripme.utils.Utils;
 
 /**
- * Rips DeviantArt galleries and favourites via the site's JSON API.
+ * Rips DeviantArt galleries, favourites, and tag browse pages.
+ *
+ * <p>Galleries and favourites use the site's JSON API. Tag pages load embedded page
+ * state from HTML and paginate with {@code ?page=N}.
  *
  * <p>Session cookies (for NSFW content and videos) are loaded in order:
  * serialized {@code DeviantartLogin.cookies}, {@code cookies.deviantart.com}
@@ -75,11 +79,21 @@ public class DeviantartRipper extends AbstractJSONRipper {
     private static final Pattern CSRF_WINDOW_PATTERN = Pattern
             .compile("window\\.__CSRF_TOKEN__\\s*=\\s*'([^']+)'");
     private static final Pattern CSRF_JSON_PATTERN = Pattern.compile("\"csrfToken\":\"([^\"]+)\"");
+    private static final Pattern TAG_PATTERN = Pattern
+            .compile("^https?://www\\.deviantart\\.com/tag/([a-zA-Z0-9_-]+)/?$");
+    private static final Pattern DEVIATION_ARTIST_PATTERN = Pattern
+            .compile("^https?://www\\.deviantart\\.com/([a-zA-Z0-9_-]+)/art/.*$");
 
+    private static final String INITIAL_STATE_MARKER = "window.__INITIAL_STATE__ = JSON.parse(\"";
+
+    private final boolean tagMode;
+    private final String tagName;
     private final String artist;
     private final String collectionType;
     private final Integer folderId;
     private final boolean allFolders;
+
+    private int tagPage = 1;
 
     private String csrfToken;
     private String referer;
@@ -92,10 +106,24 @@ public class DeviantartRipper extends AbstractJSONRipper {
         super(url);
         String pathUrl = stripQuery(url.toExternalForm());
 
+        Matcher tagMatcher = TAG_PATTERN.matcher(pathUrl);
+        if (tagMatcher.matches()) {
+            tagMode = true;
+            tagName = tagMatcher.group(1);
+            artist = null;
+            collectionType = null;
+            folderId = null;
+            allFolders = false;
+            return;
+        }
+
+        tagMode = false;
+        tagName = null;
+
         Matcher artistMatcher = ARTIST_PATTERN.matcher(pathUrl);
         if (!artistMatcher.matches()) {
             throw new IOException("Expected deviantart.com URL format: "
-                    + "www.deviantart.com/<ARTIST>/gallery/ or .../favourites/ - got " + url);
+                    + "www.deviantart.com/<ARTIST>/gallery/, .../favourites/, or .../tag/<TAG> - got " + url);
         }
         artist = artistMatcher.group(1);
 
@@ -103,8 +131,10 @@ public class DeviantartRipper extends AbstractJSONRipper {
             collectionType = "favourites";
         } else if (pathUrl.contains("/gallery")) {
             collectionType = "gallery";
+        } else if (pathUrl.matches("https?://www\\.deviantart\\.com/[^/]+/?")) {
+            collectionType = "gallery";
         } else {
-            throw new IOException("Expected deviantart.com gallery or favourites URL - got " + url);
+            throw new IOException("Expected deviantart.com gallery, favourites, or tag URL - got " + url);
         }
 
         Matcher folderMatcher = FOLDER_PATTERN.matcher(pathUrl);
@@ -115,6 +145,22 @@ public class DeviantartRipper extends AbstractJSONRipper {
             folderId = null;
             allFolders = true;
         }
+    }
+
+    @Override
+    public boolean canRip(URL url) {
+        if (!url.getHost().endsWith(getDomain())) {
+            return false;
+        }
+        String pathUrl = stripQuery(url.toExternalForm());
+        if (TAG_PATTERN.matcher(pathUrl).matches()) {
+            return true;
+        }
+        if (!ARTIST_PATTERN.matcher(pathUrl).matches()) {
+            return false;
+        }
+        return pathUrl.contains("/gallery") || pathUrl.contains("/favourites")
+                || pathUrl.matches("https?://www\\.deviantart\\.com/[^/]+/?");
     }
 
     @Override
@@ -140,6 +186,11 @@ public class DeviantartRipper extends AbstractJSONRipper {
     @Override
     public String getGID(URL url) throws MalformedURLException {
         String pathUrl = stripQuery(url.toExternalForm());
+        Matcher tagMatcher = TAG_PATTERN.matcher(pathUrl);
+        if (tagMatcher.matches()) {
+            return "tag_" + tagMatcher.group(1).toLowerCase();
+        }
+
         Matcher artistMatcher = ARTIST_PATTERN.matcher(pathUrl);
         if (!artistMatcher.matches()) {
             throw new MalformedURLException("Invalid DeviantArt URL: " + url);
@@ -175,6 +226,10 @@ public class DeviantartRipper extends AbstractJSONRipper {
     @Override
     protected JSONObject getFirstPage() throws IOException, URISyntaxException {
         initSession();
+        if (tagMode) {
+            tagPage = 1;
+            return fetchTagPage(tagPage);
+        }
         return fetchGalleryPage(0);
     }
 
@@ -183,11 +238,15 @@ public class DeviantartRipper extends AbstractJSONRipper {
         if (!doc.optBoolean("hasMore", false)) {
             throw new IOException("No more pages");
         }
+        Utils.sleep(PAGE_SLEEP_MS);
+        if (tagMode) {
+            tagPage++;
+            return fetchTagPage(tagPage);
+        }
         int nextOffset = doc.optInt("nextOffset", -1);
         if (nextOffset < 0) {
             throw new IOException("No more pages");
         }
-        Utils.sleep(PAGE_SLEEP_MS);
         return fetchGalleryPage(nextOffset);
     }
 
@@ -369,6 +428,96 @@ public class DeviantartRipper extends AbstractJSONRipper {
                         + "deviantart.firefox.cookies=true), or set cookies.deviantart.com in rip.properties.");
     }
 
+    private JSONObject fetchTagPage(int page) throws IOException {
+        String pageUrl = buildTagPageUrl(page);
+        logger.info("Fetching tag page {} for tag {}", page, tagName);
+        Response response = Http.url(pageUrl).referrer("https://www.deviantart.com/").cookies(cookies)
+                .retries(0).response();
+        int status = response.statusCode();
+        if (status == 404) {
+            throw new IOException("Tag page not found: " + tagName);
+        }
+        if (status == 403) {
+            throw new IOException("Tag page returned 403 Forbidden");
+        }
+        if (status >= 400) {
+            throw new IOException("Tag page returned HTTP " + status);
+        }
+
+        mergeCookies(response.cookies());
+        if (csrfToken == null || csrfToken.isBlank()) {
+            csrfToken = extractCsrfToken(response.body());
+        }
+
+        return parseTagPageState(response.body());
+    }
+
+    private String buildTagPageUrl(int page) {
+        String base = "https://www.deviantart.com/tag/" + tagName;
+        if (page <= 1) {
+            return base;
+        }
+        return base + "?page=" + page;
+    }
+
+    public static JSONObject parseTagPageState(String html) throws IOException {
+        String stateJson = extractInitialStateJson(html);
+        if (stateJson == null || stateJson.isBlank()) {
+            throw new IOException("Could not find DeviantArt page state");
+        }
+
+        JSONObject state = new JSONObject(stateJson);
+        JSONObject streams = state.optJSONObject("@@streams");
+        if (streams == null) {
+            throw new IOException("DeviantArt page state missing @@streams");
+        }
+        JSONObject stream = streams.optJSONObject("@@BROWSE_PAGE_STREAM");
+        if (stream == null) {
+            throw new IOException("DeviantArt page state missing @@BROWSE_PAGE_STREAM");
+        }
+
+        JSONArray itemIds = stream.optJSONArray("items");
+        JSONObject deviations = state.optJSONObject("@@entities");
+        JSONObject deviationMap = deviations != null ? deviations.optJSONObject("deviation") : null;
+
+        JSONArray results = new JSONArray();
+        if (itemIds != null && deviationMap != null) {
+            for (int i = 0; i < itemIds.length(); i++) {
+                String id = String.valueOf(itemIds.getLong(i));
+                JSONObject deviation = deviationMap.optJSONObject(id);
+                if (deviation != null) {
+                    results.put(deviation);
+                }
+            }
+        }
+
+        JSONObject page = new JSONObject();
+        page.put("results", results);
+        page.put("hasMore", stream.optBoolean("hasMore", false));
+        return page;
+    }
+
+    public static String extractInitialStateJson(String html) {
+        if (html == null) {
+            return null;
+        }
+        int start = html.indexOf(INITIAL_STATE_MARKER);
+        if (start < 0) {
+            return null;
+        }
+        start += INITIAL_STATE_MARKER.length();
+        int end = html.indexOf("\");", start);
+        if (end < 0) {
+            return null;
+        }
+        return StringEscapeUtils.unescapeJavaScript(html.substring(start, end));
+    }
+
+    public static String usernameFromDeviationUrl(String url) {
+        Matcher matcher = DEVIATION_ARTIST_PATTERN.matcher(stripQuery(url));
+        return matcher.matches() ? matcher.group(1) : null;
+    }
+
     private JSONObject fetchGalleryPage(int offset) throws IOException {
         String apiUrl = buildGalleryApiUrl(offset);
         logger.info("Fetching gallery page at offset {}", offset);
@@ -543,8 +692,16 @@ public class DeviantartRipper extends AbstractJSONRipper {
             return null;
         }
 
+        String deviationArtist = artist;
+        if (deviationArtist == null || deviationArtist.isBlank()) {
+            deviationArtist = usernameFromDeviationUrl(deviationPageUrl.toExternalForm());
+        }
+        if (deviationArtist == null || deviationArtist.isBlank()) {
+            return null;
+        }
+
         String apiUrl = DEVIATION_API + "?deviationid=" + deviationId
-                + "&username=" + encode(artist)
+                + "&username=" + encode(deviationArtist)
                 + "&type=art&include_session=false"
                 + "&csrf_token=" + encode(csrfToken)
                 + "&expand=deviation.related&da_minor_version=" + API_MINOR_VERSION;

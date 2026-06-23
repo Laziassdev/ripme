@@ -48,6 +48,48 @@ public class DeviantartRipperTest extends RippersTest {
     }
 
     @Test
+    public void testGetGIDTag() throws IOException, URISyntaxException {
+        URL url = new URI("https://www.deviantart.com/tag/bondage").toURL();
+        DeviantartRipper ripper = new DeviantartRipper(url);
+        Assertions.assertEquals("tag_bondage", ripper.getGID(url));
+    }
+
+    @Test
+    public void testCanRipTagUrl() throws IOException, URISyntaxException {
+        URL url = new URI("https://www.deviantart.com/tag/bondage").toURL();
+        DeviantartRipper ripper = new DeviantartRipper(url);
+        Assertions.assertTrue(ripper.canRip(url));
+    }
+
+    @Test
+    public void testGetRipperTagUrl() throws Exception {
+        URL url = new URI("https://www.deviantart.com/tag/bondage").toURL();
+        AbstractRipper ripper = AbstractRipper.getRipper(url);
+        Assertions.assertTrue(ripper instanceof DeviantartRipper);
+    }
+
+    @Test
+    public void testUsernameFromDeviationUrl() {
+        Assertions.assertEquals("eropalo", DeviantartRipper.usernameFromDeviationUrl(
+                "https://www.deviantart.com/eropalo/art/Bondage-807770670"));
+    }
+
+    @Test
+    public void testParseTagPageState() throws IOException {
+        String html = "<script>window.__INITIAL_STATE__ = JSON.parse(\"{"
+                + "\\\"@@streams\\\":{\\\"@@BROWSE_PAGE_STREAM\\\":{"
+                + "\\\"items\\\":[123],\\\"hasMore\\\":true}},"
+                + "\\\"@@entities\\\":{\\\"deviation\\\":{"
+                + "\\\"123\\\":{\\\"deviationId\\\":123,\\\"url\\\":\\\"https://www.deviantart.com/foo/art/Test-123\\\"}"
+                + "}}}\");</script>";
+        JSONObject page = DeviantartRipper.parseTagPageState(html);
+        Assertions.assertTrue(page.getBoolean("hasMore"));
+        Assertions.assertEquals(1, page.getJSONArray("results").length());
+        Assertions.assertEquals("https://www.deviantart.com/foo/art/Test-123",
+                page.getJSONArray("results").getJSONObject(0).getString("url"));
+    }
+
+    @Test
     public void testSanitizeURL() throws IOException, URISyntaxException {
         List<URL> urls = new ArrayList<>();
         urls.add(new URI("https://www.deviantart.com/airgee/").toURL());
