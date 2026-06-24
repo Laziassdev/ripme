@@ -1,7 +1,9 @@
 {
-  "latestVersion": "2.1.253-1-db51cf5",
-  "currentHash": "dd93e6f2b1323120a6c84530c01500ec24a69ccda1be103b72fa6f6d3b10f9d2",
+  "latestVersion": "2.1.254-1-ec258ed",
+  "currentHash": "b52f1dfa18d33b49b0c5c3c4fc9ad472c95404b809592677d510d2432dcd7fe8",
   "changeList": [
+    "2.1.254-1-ec258ed: Refactor DeviantartRipper to support search functionality. Update URL handling to include search queries and enhance error messages for invalid URLs. Add unit tests for search URL handling and GID generation. Modify DownloadFileThread and DownloadVideoThread to report existing downloads correctly.",
+    "2.1.254-1-ec258ed: Built at 2026-06-24T14:16:44Z",
     "2.1.253-1-db51cf5: Refactor URL history management in AbstractRipper and DeviantartRipper. Introduce recordUrlOnQueue method to control when URLs are recorded. Update DeviantartRipper to handle URL history during download completion and errors. Enhance image URL building logic to support composite item IDs and JWT tokens. Add unit tests for new functionality.",
     "2.1.253-1-db51cf5: Built at 2026-06-23T23:39:46Z",
     "2.1.252-1-0575298: Add configureDownloadFileThread method to customize download threads in AbstractRipper and its subclasses. Update user agent and headers handling in DownloadFileThread. Enhance DeviantartRipper to utilize new download configuration methods for improved request customization.",
