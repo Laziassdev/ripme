@@ -1,7 +1,9 @@
 {
-  "latestVersion": "2.1.257-1-861b915",
-  "currentHash": "5bf4a14df5df9e2e89ad540e9ba09e45d2ac852071f7228826a7ed58d5e3527c",
+  "latestVersion": "2.1.258-1-1f3c24a",
+  "currentHash": "db608a4b143e192d0e45e905e95d858441ea169407960943f05d89ba8b24fc66",
   "changeList": [
+    "2.1.258-1-1f3c24a: Enhance MainWindow layout and component configuration",
+    "2.1.258-1-1f3c24a: Built at 2026-06-24T17:07:19Z",
     "2.1.257-1-861b915: Refactor MainWindow layout and configuration handling",
     "2.1.257-1-861b915: Built at 2026-06-24T16:14:24Z",
     "2.1.256-1-4e98857: Add circuit breaker for consecutive HTTP errors",
