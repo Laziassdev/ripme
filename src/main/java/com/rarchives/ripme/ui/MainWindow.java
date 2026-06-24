@@ -1267,6 +1267,7 @@ public final class MainWindow implements Runnable, RipStatusHandler {
         addItemToConfigGridBagConstraints(configGbc, idx++, configSSLVerifyOff, configCoomerDownloadVideos);
         addItemToConfigGridBagConstraints(configGbc, idx++, configSelectLangComboBox, configUrlFileChooserButton);
         addItemToConfigGridBagConstraints(configGbc, idx++, configSaveDirLabel, configSaveDirButton);
+        configMainPanel.setPreferredSize(new Dimension(620, configMainPanel.getPreferredSize().height));
 
         configOtherPanel = new JPanel(new GridBagLayout());
         configOtherPanel.setBorder(emptyBorder);
@@ -1287,21 +1288,27 @@ public final class MainWindow implements Runnable, RipStatusHandler {
                 @Override public void removeUpdate(DocumentEvent e) { Utils.setConfigString(key, field.getText()); }
                 @Override public void changedUpdate(DocumentEvent e) { Utils.setConfigString(key, field.getText()); }
             });
+            field.setColumns(24);
             otherGbc.gridx = 0;
+            otherGbc.weightx = 0;
+            otherGbc.fill = GridBagConstraints.NONE;
             otherGbc.anchor = GridBagConstraints.LINE_END;
             configOtherPanel.add(lbl, otherGbc);
             otherGbc.gridx = 1;
+            otherGbc.weightx = 1;
+            otherGbc.fill = GridBagConstraints.HORIZONTAL;
             otherGbc.anchor = GridBagConstraints.LINE_START;
             configOtherPanel.add(field, otherGbc);
             otherGbc.gridy++;
         }
+        configOtherPanel.setPreferredSize(new Dimension(620, configOtherPanel.getPreferredSize().height));
 
         GridBagConstraints configCenterGbc = new GridBagConstraints();
         configCenterGbc.gridx = 0;
         configCenterGbc.gridy = 0;
         configCenterGbc.weightx = 1;
         configCenterGbc.weighty = 1;
-        configCenterGbc.anchor = GridBagConstraints.PAGE_START;
+        configCenterGbc.anchor = GridBagConstraints.NORTH;
         configCenterGbc.fill = GridBagConstraints.NONE;
         JPanel configMainCard = new JPanel(new GridBagLayout());
         configMainCard.add(configMainPanel, configCenterGbc);
@@ -1368,6 +1375,7 @@ public final class MainWindow implements Runnable, RipStatusHandler {
 
     private JTextField configField(String key, int defaultValue) {
         final var field = new JTextField(Integer.toString(Utils.getConfigInteger(key, defaultValue)));
+        field.setColumns(8);
         field.getDocument().addDocumentListener(new DocumentListener() {
             @Override
             public void insertUpdate(DocumentEvent e) {
@@ -1408,6 +1416,8 @@ public final class MainWindow implements Runnable, RipStatusHandler {
         gbc.anchor = GridBagConstraints.LINE_END;
         configMainPanel.add(thing1ToAdd, gbc);
         gbc.gridx = 1;
+        gbc.weightx = 0;
+        gbc.fill = GridBagConstraints.NONE;
         gbc.anchor = GridBagConstraints.LINE_START;
         configMainPanel.add(thing2ToAdd, gbc);
     }
@@ -1421,6 +1431,7 @@ public final class MainWindow implements Runnable, RipStatusHandler {
         gbc.anchor = GridBagConstraints.LINE_END;
         configMainPanel.add(thing1ToAdd, gbc);
         gbc.gridx = 1;
+        gbc.weightx = 1;
         gbc.fill = GridBagConstraints.HORIZONTAL;
         gbc.anchor = GridBagConstraints.LINE_START;
         configMainPanel.add(thing2ToAdd, gbc);
@@ -1435,6 +1446,8 @@ public final class MainWindow implements Runnable, RipStatusHandler {
         gbc.anchor = GridBagConstraints.LINE_END;
         configMainPanel.add(thing1ToAdd, gbc);
         gbc.gridx = 1;
+        gbc.weightx = 0;
+        gbc.fill = GridBagConstraints.NONE;
         gbc.anchor = GridBagConstraints.LINE_START;
         configMainPanel.add(thing2ToAdd, gbc);
     }
@@ -1449,6 +1462,8 @@ public final class MainWindow implements Runnable, RipStatusHandler {
         gbc.anchor = GridBagConstraints.LINE_END;
         configMainPanel.add(thing1ToAdd, gbc);
         gbc.gridx = 1;
+        gbc.weightx = 0;
+        gbc.fill = GridBagConstraints.NONE;
         gbc.anchor = GridBagConstraints.LINE_START;
         configMainPanel.add(thing2ToAdd, gbc);
     }
@@ -1463,6 +1478,8 @@ public final class MainWindow implements Runnable, RipStatusHandler {
         gbc.anchor = GridBagConstraints.LINE_END;
         configMainPanel.add(thing1ToAdd, gbc);
         gbc.gridx = 1;
+        gbc.weightx = 0;
+        gbc.fill = GridBagConstraints.NONE;
         gbc.anchor = GridBagConstraints.LINE_START;
         configMainPanel.add(thing2ToAdd, gbc);
     }
