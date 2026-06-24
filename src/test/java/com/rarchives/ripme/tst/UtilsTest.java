@@ -1,9 +1,13 @@
 package com.rarchives.ripme.tst;
 
 import java.io.FileNotFoundException;
+import java.io.IOException;
+import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.Arrays;
+import java.util.Comparator;
+import java.util.stream.Stream;
 
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -20,6 +24,38 @@ public class UtilsTest {
     public void testConfigureLogger() {
         Utils.configureLogger();
         LOGGER.warn("this is a warning messaage.");
+    }
+
+    @Test
+    public void testDeleteArchivedLogs() throws IOException {
+        Path tempDir = Files.createTempDirectory("ripme-log-cleanup");
+        try {
+            Path rolledByIndex = tempDir.resolve("ripme.1.log.gz");
+            Path rolledByDate = tempDir.resolve("ripme-2024-06-24-1.log.gz");
+            Path activeLog = tempDir.resolve("ripme.log");
+            Path unrelated = tempDir.resolve("other.log.gz");
+
+            Files.createFile(rolledByIndex);
+            Files.createFile(rolledByDate);
+            Files.createFile(activeLog);
+            Files.createFile(unrelated);
+
+            Utils.deleteArchivedLogs(tempDir);
+
+            Assertions.assertFalse(Files.exists(rolledByIndex));
+            Assertions.assertFalse(Files.exists(rolledByDate));
+            Assertions.assertTrue(Files.exists(activeLog));
+            Assertions.assertTrue(Files.exists(unrelated));
+        } finally {
+            try (Stream<Path> paths = Files.walk(tempDir)) {
+                paths.sorted(Comparator.reverseOrder()).forEach(path -> {
+                    try {
+                        Files.deleteIfExists(path);
+                    } catch (IOException ignored) {
+                    }
+                });
+            }
+        }
     }
 
     public void testGetEXTFromMagic()

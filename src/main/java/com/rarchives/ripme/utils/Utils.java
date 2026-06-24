@@ -68,7 +68,9 @@ public class Utils {
     private static final String CONFIG_FILE = "rip.properties";
     private static final String OS = System.getProperty("os.name").toLowerCase();
     private static final int SHORTENED_PATH_LENGTH = 12;
-    private static final Pattern RIPME_ARCHIVED_LOG_PATTERN = Pattern.compile("^ripme\\.\\d+\\.log\\.gz$");
+    // log4j2.xml uses ripme.%i.log.gz; configureLogger() uses ripme-%d{yyyy-MM-dd}-%i.log.gz
+    private static final Pattern RIPME_ARCHIVED_LOG_PATTERN =
+            Pattern.compile("^ripme(?:\\.\\d+|-\\d{4}-\\d{2}-\\d{2}-\\d+)\\.log\\.gz$");
 
     private static final HashMap<String, HashMap<String, String>> cookieCache;
     private static final HashMap<ByteBuffer, String> magicHash = new HashMap<>();
@@ -717,18 +719,27 @@ public class Utils {
         ctx.updateLoggers();  // This causes all Loggers to refetch information from their LoggerConfig.
     }
 
+    /**
+     * Deletes rotated RipMe log archives in the working directory (e.g. ripme.1.log.gz).
+     * The active ripme.log file is left in place.
+     */
     public static void deleteArchivedLogs() {
-        Path directory = Paths.get(".").toAbsolutePath().normalize();
+        deleteArchivedLogs(Paths.get(".").toAbsolutePath().normalize());
+    }
+
+    public static void deleteArchivedLogs(Path directory) {
         try (Stream<Path> logFiles = Files.list(directory)) {
-            logFiles.filter(Utils::isArchivedLogFile).forEach(path -> {
-                try {
-                    Files.deleteIfExists(path);
-                } catch (IOException e) {
-                    LOGGER.debug("Failed to delete archived log file {}", path, e);
-                }
-            });
+            logFiles.filter(Files::isRegularFile)
+                    .filter(Utils::isArchivedLogFile)
+                    .forEach(path -> {
+                        try {
+                            Files.deleteIfExists(path);
+                        } catch (IOException e) {
+                            LOGGER.debug("Failed to delete archived log file {}", path, e);
+                        }
+                    });
         } catch (IOException e) {
-            LOGGER.debug("Failed to scan for archived log files", e);
+            LOGGER.debug("Failed to scan for archived log files in {}", directory, e);
         }
     }
 

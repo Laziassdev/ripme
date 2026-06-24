@@ -56,6 +56,8 @@ public class App {
     public static void main(String[] args) throws IOException {
         LoggingConfig.setup();  // <-- Enable logging format with timestamp
         Utils.deleteArchivedLogs();
+        Runtime.getRuntime().addShutdownHook(
+                new Thread(Utils::deleteArchivedLogs, "ripme-archived-log-cleanup"));
 
         logger.info("RipMe starting...");
         CommandLine cl = getArgs(args);

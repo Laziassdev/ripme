@@ -69,6 +69,13 @@ public class DeviantartRipperTest extends RippersTest {
     }
 
     @Test
+    public void testGetGIDSearchDeviations() throws IOException, URISyntaxException {
+        URL url = new URI("https://www.deviantart.com/search/deviations?q=milking+machine").toURL();
+        DeviantartRipper ripper = new DeviantartRipper(url);
+        Assertions.assertEquals("search_milking_machine", ripper.getGID(url));
+    }
+
+    @Test
     public void testCanRipSearchUrl() throws IOException, URISyntaxException {
         URL url = new URI("https://www.deviantart.com/search?q=dildopants").toURL();
         DeviantartRipper ripper = new DeviantartRipper(url);
@@ -83,8 +90,29 @@ public class DeviantartRipperTest extends RippersTest {
     }
 
     @Test
+    public void testCanRipSearchDeviationsUrl() throws IOException, URISyntaxException {
+        URL url = new URI("https://www.deviantart.com/search/deviations?q=milking+machine").toURL();
+        DeviantartRipper ripper = new DeviantartRipper(url);
+        Assertions.assertTrue(ripper.canRip(url));
+    }
+
+    @Test
+    public void testCanRipSearchDeviationsUrlWithoutQuery() throws IOException, URISyntaxException {
+        URL url = new URI("https://www.deviantart.com/search/deviations").toURL();
+        DeviantartRipper ripper = new DeviantartRipper(new URI("https://www.deviantart.com/tag/bondage").toURL());
+        Assertions.assertFalse(ripper.canRip(url));
+    }
+
+    @Test
     public void testGetRipperSearchUrl() throws Exception {
         URL url = new URI("https://www.deviantart.com/search?q=dildopants").toURL();
+        AbstractRipper ripper = AbstractRipper.getRipper(url);
+        Assertions.assertTrue(ripper instanceof DeviantartRipper);
+    }
+
+    @Test
+    public void testGetRipperSearchDeviationsUrl() throws Exception {
+        URL url = new URI("https://www.deviantart.com/search/deviations?q=milking+machine").toURL();
         AbstractRipper ripper = AbstractRipper.getRipper(url);
         Assertions.assertTrue(ripper instanceof DeviantartRipper);
     }
@@ -95,6 +123,8 @@ public class DeviantartRipperTest extends RippersTest {
                 new URI("https://www.deviantart.com/search").toURL()));
         Assertions.assertThrows(IOException.class, () -> new DeviantartRipper(
                 new URI("https://www.deviantart.com/search?q=").toURL()));
+        Assertions.assertThrows(IOException.class, () -> new DeviantartRipper(
+                new URI("https://www.deviantart.com/search/deviations").toURL()));
     }
 
     @Test
@@ -103,8 +133,15 @@ public class DeviantartRipperTest extends RippersTest {
         Assertions.assertEquals("dildopants", DeviantartRipper.getSearchQuery(url));
         Assertions.assertEquals("bondage art",
                 DeviantartRipper.getSearchQuery(new URI("https://www.deviantart.com/search?q=bondage+art").toURL()));
+        Assertions.assertEquals("milking machine",
+                DeviantartRipper.getSearchQuery(
+                        new URI("https://www.deviantart.com/search/deviations?q=milking+machine").toURL()));
+        Assertions.assertEquals("dildopants",
+                DeviantartRipper.getSearchQuery(new URI("https://www.deviantart.com/search/?q=dildopants").toURL()));
         Assertions.assertNull(DeviantartRipper.getSearchQuery(
                 new URI("https://www.deviantart.com/search").toURL()));
+        Assertions.assertNull(DeviantartRipper.getSearchQuery(
+                new URI("https://www.deviantart.com/search/deviations").toURL()));
         Assertions.assertNull(DeviantartRipper.getSearchQuery(
                 new URI("https://www.deviantart.com/tag/bondage").toURL()));
     }

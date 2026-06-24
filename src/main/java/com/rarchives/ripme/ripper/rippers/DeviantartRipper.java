@@ -89,7 +89,7 @@ public class DeviantartRipper extends AbstractJSONRipper {
     private static final Pattern TAG_PATTERN = Pattern
             .compile("^https?://www\\.deviantart\\.com/tag/([a-zA-Z0-9_-]+)/?$");
     private static final Pattern SEARCH_PATH_PATTERN = Pattern
-            .compile("^https?://www\\.deviantart\\.com/search/?$");
+            .compile("^https?://www\\.deviantart\\.com/search(?:/[a-z]+)?/?$");
     private static final Pattern DEVIATION_ARTIST_PATTERN = Pattern
             .compile("^https?://www\\.deviantart\\.com/([a-zA-Z0-9_-]+)/art/.*$");
 
@@ -157,7 +157,7 @@ public class DeviantartRipper extends AbstractJSONRipper {
         if (!artistMatcher.matches()) {
             throw new IOException("Expected deviantart.com URL format: "
                     + "www.deviantart.com/<ARTIST>/gallery/, .../favourites/, .../tag/<TAG>, "
-                    + "or .../search?q=<QUERY> - got " + url);
+                    + "or .../search?q=<QUERY> (or .../search/deviations?q=<QUERY>) - got " + url);
         }
         artist = artistMatcher.group(1);
 
