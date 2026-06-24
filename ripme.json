@@ -1,7 +1,9 @@
 {
-  "latestVersion": "2.1.255-1-15b1877",
-  "currentHash": "04934fdf0b588bdce7ebaf636f72d7f43668a386dc5c76d0cf06b33faf34812a",
+  "latestVersion": "2.1.256-1-4e98857",
+  "currentHash": "cdd14c0299d16f93eef3203db5a313f42e7a50885e843be329b7c9e300eae50f",
   "changeList": [
+    "2.1.256-1-4e98857: Add circuit breaker for consecutive HTTP errors",
+    "2.1.256-1-4e98857: Built at 2026-06-24T15:51:54Z",
     "2.1.255-1-15b1877: Add shutdown hook for log cleanup and enhance DeviantartRipper URL handling",
     "2.1.255-1-15b1877: Built at 2026-06-24T14:39:55Z",
     "2.1.254-1-ec258ed: Refactor DeviantartRipper to support search functionality. Update URL handling to include search queries and enhance error messages for invalid URLs. Add unit tests for search URL handling and GID generation. Modify DownloadFileThread and DownloadVideoThread to report existing downloads correctly.",
