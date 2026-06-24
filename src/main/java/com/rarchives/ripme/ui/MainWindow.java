@@ -1249,29 +1249,32 @@ public final class MainWindow implements Runnable, RipStatusHandler {
         configSaveDirLabel.setHorizontalAlignment(JLabel.RIGHT);
         configSaveDirButton = new JButton(Utils.getLocalizedString("select.save.dir") + "...");
 
+        GridBagConstraints configGbc = new GridBagConstraints();
+        configGbc.insets = new Insets(2, 2, 2, 2);
         var idx = 0;
-        addItemToConfigGridBagConstraints(gbc, idx++, configUpdateLabel, configUpdateButton);
-        addItemToConfigGridBagConstraints(gbc, idx++, configAutoupdateCheckbox, configLogLevelCombobox);
-        addItemToConfigGridBagConstraints(gbc, idx++, configThreadsLabel, configThreadsText);
-        addItemToConfigGridBagConstraints(gbc, idx++, configTimeoutLabel, configTimeoutText);
-        addItemToConfigGridBagConstraints(gbc, idx++, configRetriesLabel, configRetriesText);
-        addItemToConfigGridBagConstraints(gbc, idx++, configRetrySleepLabel, configRetrySleepText);
-        addItemToConfigGridBagConstraints(gbc, idx++, configOverwriteCheckbox, configSaveOrderCheckbox);
-        addItemToConfigGridBagConstraints(gbc, idx++, configPlaySound, configSaveLogs);
-        addItemToConfigGridBagConstraints(gbc, idx++, configShowPopup, configSaveURLsOnly);
-        addItemToConfigGridBagConstraints(gbc, idx++, configClipboardAutorip, configSaveAlbumTitles);
-        addItemToConfigGridBagConstraints(gbc, idx++, configSaveDescriptions, configPreferMp4);
-        addItemToConfigGridBagConstraints(gbc, idx++, configWindowPosition, configURLHistoryCheckbox);
-        addItemToConfigGridBagConstraints(gbc, idx++, configSSLVerifyOff, configCoomerDownloadVideos);
-        addItemToConfigGridBagConstraints(gbc, idx++, configSelectLangComboBox, configUrlFileChooserButton);
-        addItemToConfigGridBagConstraints(gbc, idx++, configSaveDirLabel, configSaveDirButton);
+        addItemToConfigGridBagConstraints(configGbc, idx++, configUpdateLabel, configUpdateButton);
+        addItemToConfigGridBagConstraints(configGbc, idx++, configAutoupdateCheckbox, configLogLevelCombobox);
+        addItemToConfigGridBagConstraints(configGbc, idx++, configThreadsLabel, configThreadsText);
+        addItemToConfigGridBagConstraints(configGbc, idx++, configTimeoutLabel, configTimeoutText);
+        addItemToConfigGridBagConstraints(configGbc, idx++, configRetriesLabel, configRetriesText);
+        addItemToConfigGridBagConstraints(configGbc, idx++, configRetrySleepLabel, configRetrySleepText);
+        addItemToConfigGridBagConstraints(configGbc, idx++, configOverwriteCheckbox, configSaveOrderCheckbox);
+        addItemToConfigGridBagConstraints(configGbc, idx++, configPlaySound, configSaveLogs);
+        addItemToConfigGridBagConstraints(configGbc, idx++, configShowPopup, configSaveURLsOnly);
+        addItemToConfigGridBagConstraints(configGbc, idx++, configClipboardAutorip, configSaveAlbumTitles);
+        addItemToConfigGridBagConstraints(configGbc, idx++, configSaveDescriptions, configPreferMp4);
+        addItemToConfigGridBagConstraints(configGbc, idx++, configWindowPosition, configURLHistoryCheckbox);
+        addItemToConfigGridBagConstraints(configGbc, idx++, configSSLVerifyOff, configCoomerDownloadVideos);
+        addItemToConfigGridBagConstraints(configGbc, idx++, configSelectLangComboBox, configUrlFileChooserButton);
+        addItemToConfigGridBagConstraints(configGbc, idx++, configSaveDirLabel, configSaveDirButton);
 
         configOtherPanel = new JPanel(new GridBagLayout());
         configOtherPanel.setBorder(emptyBorder);
 
         GridBagConstraints otherGbc = new GridBagConstraints();
+        otherGbc.insets = new Insets(2, 2, 2, 2);
         otherGbc.fill = GridBagConstraints.HORIZONTAL;
-        otherGbc.weightx = 1;
+        otherGbc.weightx = 0;
         otherGbc.gridy = 0;
         for (String key : Utils.getConfigKeys()) {
             if (MAIN_CONFIG_KEYS.contains(key)) {
@@ -1285,16 +1288,30 @@ public final class MainWindow implements Runnable, RipStatusHandler {
                 @Override public void changedUpdate(DocumentEvent e) { Utils.setConfigString(key, field.getText()); }
             });
             otherGbc.gridx = 0;
+            otherGbc.anchor = GridBagConstraints.LINE_END;
             configOtherPanel.add(lbl, otherGbc);
             otherGbc.gridx = 1;
+            otherGbc.anchor = GridBagConstraints.LINE_START;
             configOtherPanel.add(field, otherGbc);
             otherGbc.gridy++;
         }
 
+        GridBagConstraints configCenterGbc = new GridBagConstraints();
+        configCenterGbc.gridx = 0;
+        configCenterGbc.gridy = 0;
+        configCenterGbc.weightx = 1;
+        configCenterGbc.weighty = 1;
+        configCenterGbc.anchor = GridBagConstraints.PAGE_START;
+        configCenterGbc.fill = GridBagConstraints.NONE;
+        JPanel configMainCard = new JPanel(new GridBagLayout());
+        configMainCard.add(configMainPanel, configCenterGbc);
+        JPanel configOtherCard = new JPanel(new GridBagLayout());
+        configOtherCard.add(configOtherPanel, configCenterGbc);
+
         configCardLayout = new CardLayout();
         configCards = new JPanel(configCardLayout);
-        configCards.add(configMainPanel, "main");
-        configCards.add(configOtherPanel, "other");
+        configCards.add(configMainCard, "main");
+        configCards.add(configOtherCard, "other");
 
         configBackButton = new JButton("Back");
         configNextButton = new JButton("Next");
@@ -1386,8 +1403,12 @@ public final class MainWindow implements Runnable, RipStatusHandler {
             JButton thing2ToAdd) {
         gbc.gridy = gbcYValue;
         gbc.gridx = 0;
+        gbc.weightx = 0;
+        gbc.fill = GridBagConstraints.NONE;
+        gbc.anchor = GridBagConstraints.LINE_END;
         configMainPanel.add(thing1ToAdd, gbc);
         gbc.gridx = 1;
+        gbc.anchor = GridBagConstraints.LINE_START;
         configMainPanel.add(thing2ToAdd, gbc);
     }
 
@@ -1395,8 +1416,13 @@ public final class MainWindow implements Runnable, RipStatusHandler {
             JTextField thing2ToAdd) {
         gbc.gridy = gbcYValue;
         gbc.gridx = 0;
+        gbc.weightx = 0;
+        gbc.fill = GridBagConstraints.NONE;
+        gbc.anchor = GridBagConstraints.LINE_END;
         configMainPanel.add(thing1ToAdd, gbc);
         gbc.gridx = 1;
+        gbc.fill = GridBagConstraints.HORIZONTAL;
+        gbc.anchor = GridBagConstraints.LINE_START;
         configMainPanel.add(thing2ToAdd, gbc);
     }
 
@@ -1404,8 +1430,12 @@ public final class MainWindow implements Runnable, RipStatusHandler {
             JCheckBox thing2ToAdd) {
         gbc.gridy = gbcYValue;
         gbc.gridx = 0;
+        gbc.weightx = 0;
+        gbc.fill = GridBagConstraints.NONE;
+        gbc.anchor = GridBagConstraints.LINE_END;
         configMainPanel.add(thing1ToAdd, gbc);
         gbc.gridx = 1;
+        gbc.anchor = GridBagConstraints.LINE_START;
         configMainPanel.add(thing2ToAdd, gbc);
     }
 
@@ -1414,8 +1444,12 @@ public final class MainWindow implements Runnable, RipStatusHandler {
             JComboBox thing2ToAdd) {
         gbc.gridy = gbcYValue;
         gbc.gridx = 0;
+        gbc.weightx = 0;
+        gbc.fill = GridBagConstraints.NONE;
+        gbc.anchor = GridBagConstraints.LINE_END;
         configMainPanel.add(thing1ToAdd, gbc);
         gbc.gridx = 1;
+        gbc.anchor = GridBagConstraints.LINE_START;
         configMainPanel.add(thing2ToAdd, gbc);
     }
 
@@ -1424,8 +1458,12 @@ public final class MainWindow implements Runnable, RipStatusHandler {
             JButton thing2ToAdd) {
         gbc.gridy = gbcYValue;
         gbc.gridx = 0;
+        gbc.weightx = 0;
+        gbc.fill = GridBagConstraints.NONE;
+        gbc.anchor = GridBagConstraints.LINE_END;
         configMainPanel.add(thing1ToAdd, gbc);
         gbc.gridx = 1;
+        gbc.anchor = GridBagConstraints.LINE_START;
         configMainPanel.add(thing2ToAdd, gbc);
     }
 
@@ -1433,6 +1471,9 @@ public final class MainWindow implements Runnable, RipStatusHandler {
     private void addItemToConfigGridBagConstraints(GridBagConstraints gbc, int gbcYValue, JComboBox thing1ToAdd) {
         gbc.gridy = gbcYValue;
         gbc.gridx = 0;
+        gbc.weightx = 0;
+        gbc.fill = GridBagConstraints.NONE;
+        gbc.anchor = GridBagConstraints.LINE_START;
         configMainPanel.add(thing1ToAdd, gbc);
     }
 
