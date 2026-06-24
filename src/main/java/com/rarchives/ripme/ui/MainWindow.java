@@ -1251,6 +1251,8 @@ public final class MainWindow implements Runnable, RipStatusHandler {
 
         GridBagConstraints configGbc = new GridBagConstraints();
         configGbc.insets = new Insets(2, 2, 2, 2);
+        configGbc.fill = GridBagConstraints.HORIZONTAL;
+        configGbc.weightx = 1;
         var idx = 0;
         addItemToConfigGridBagConstraints(configGbc, idx++, configUpdateLabel, configUpdateButton);
         addItemToConfigGridBagConstraints(configGbc, idx++, configAutoupdateCheckbox, configLogLevelCombobox);
@@ -1267,7 +1269,6 @@ public final class MainWindow implements Runnable, RipStatusHandler {
         addItemToConfigGridBagConstraints(configGbc, idx++, configSSLVerifyOff, configCoomerDownloadVideos);
         addItemToConfigGridBagConstraints(configGbc, idx++, configSelectLangComboBox, configUrlFileChooserButton);
         addItemToConfigGridBagConstraints(configGbc, idx++, configSaveDirLabel, configSaveDirButton);
-        configMainPanel.setPreferredSize(new Dimension(620, configMainPanel.getPreferredSize().height));
 
         configOtherPanel = new JPanel(new GridBagLayout());
         configOtherPanel.setBorder(emptyBorder);
@@ -1275,7 +1276,6 @@ public final class MainWindow implements Runnable, RipStatusHandler {
         GridBagConstraints otherGbc = new GridBagConstraints();
         otherGbc.insets = new Insets(2, 2, 2, 2);
         otherGbc.fill = GridBagConstraints.HORIZONTAL;
-        otherGbc.weightx = 0;
         otherGbc.gridy = 0;
         for (String key : Utils.getConfigKeys()) {
             if (MAIN_CONFIG_KEYS.contains(key)) {
@@ -1291,34 +1291,17 @@ public final class MainWindow implements Runnable, RipStatusHandler {
             field.setColumns(24);
             otherGbc.gridx = 0;
             otherGbc.weightx = 0;
-            otherGbc.fill = GridBagConstraints.NONE;
-            otherGbc.anchor = GridBagConstraints.LINE_END;
             configOtherPanel.add(lbl, otherGbc);
             otherGbc.gridx = 1;
             otherGbc.weightx = 1;
-            otherGbc.fill = GridBagConstraints.HORIZONTAL;
-            otherGbc.anchor = GridBagConstraints.LINE_START;
             configOtherPanel.add(field, otherGbc);
             otherGbc.gridy++;
         }
-        configOtherPanel.setPreferredSize(new Dimension(620, configOtherPanel.getPreferredSize().height));
-
-        GridBagConstraints configCenterGbc = new GridBagConstraints();
-        configCenterGbc.gridx = 0;
-        configCenterGbc.gridy = 0;
-        configCenterGbc.weightx = 1;
-        configCenterGbc.weighty = 1;
-        configCenterGbc.anchor = GridBagConstraints.NORTH;
-        configCenterGbc.fill = GridBagConstraints.NONE;
-        JPanel configMainCard = new JPanel(new GridBagLayout());
-        configMainCard.add(configMainPanel, configCenterGbc);
-        JPanel configOtherCard = new JPanel(new GridBagLayout());
-        configOtherCard.add(configOtherPanel, configCenterGbc);
 
         configCardLayout = new CardLayout();
         configCards = new JPanel(configCardLayout);
-        configCards.add(configMainCard, "main");
-        configCards.add(configOtherCard, "other");
+        configCards.add(configMainPanel, "main");
+        configCards.add(configOtherPanel, "other");
 
         configBackButton = new JButton("Back");
         configNextButton = new JButton("Next");
@@ -1411,14 +1394,8 @@ public final class MainWindow implements Runnable, RipStatusHandler {
             JButton thing2ToAdd) {
         gbc.gridy = gbcYValue;
         gbc.gridx = 0;
-        gbc.weightx = 0;
-        gbc.fill = GridBagConstraints.NONE;
-        gbc.anchor = GridBagConstraints.LINE_END;
         configMainPanel.add(thing1ToAdd, gbc);
         gbc.gridx = 1;
-        gbc.weightx = 0;
-        gbc.fill = GridBagConstraints.NONE;
-        gbc.anchor = GridBagConstraints.LINE_START;
         configMainPanel.add(thing2ToAdd, gbc);
     }
 
@@ -1426,14 +1403,8 @@ public final class MainWindow implements Runnable, RipStatusHandler {
             JTextField thing2ToAdd) {
         gbc.gridy = gbcYValue;
         gbc.gridx = 0;
-        gbc.weightx = 0;
-        gbc.fill = GridBagConstraints.NONE;
-        gbc.anchor = GridBagConstraints.LINE_END;
         configMainPanel.add(thing1ToAdd, gbc);
         gbc.gridx = 1;
-        gbc.weightx = 1;
-        gbc.fill = GridBagConstraints.HORIZONTAL;
-        gbc.anchor = GridBagConstraints.LINE_START;
         configMainPanel.add(thing2ToAdd, gbc);
     }
 
@@ -1441,14 +1412,8 @@ public final class MainWindow implements Runnable, RipStatusHandler {
             JCheckBox thing2ToAdd) {
         gbc.gridy = gbcYValue;
         gbc.gridx = 0;
-        gbc.weightx = 0;
-        gbc.fill = GridBagConstraints.NONE;
-        gbc.anchor = GridBagConstraints.LINE_END;
         configMainPanel.add(thing1ToAdd, gbc);
         gbc.gridx = 1;
-        gbc.weightx = 0;
-        gbc.fill = GridBagConstraints.NONE;
-        gbc.anchor = GridBagConstraints.LINE_START;
         configMainPanel.add(thing2ToAdd, gbc);
     }
 
@@ -1457,14 +1422,8 @@ public final class MainWindow implements Runnable, RipStatusHandler {
             JComboBox thing2ToAdd) {
         gbc.gridy = gbcYValue;
         gbc.gridx = 0;
-        gbc.weightx = 0;
-        gbc.fill = GridBagConstraints.NONE;
-        gbc.anchor = GridBagConstraints.LINE_END;
         configMainPanel.add(thing1ToAdd, gbc);
         gbc.gridx = 1;
-        gbc.weightx = 0;
-        gbc.fill = GridBagConstraints.NONE;
-        gbc.anchor = GridBagConstraints.LINE_START;
         configMainPanel.add(thing2ToAdd, gbc);
     }
 
@@ -1473,14 +1432,8 @@ public final class MainWindow implements Runnable, RipStatusHandler {
             JButton thing2ToAdd) {
         gbc.gridy = gbcYValue;
         gbc.gridx = 0;
-        gbc.weightx = 0;
-        gbc.fill = GridBagConstraints.NONE;
-        gbc.anchor = GridBagConstraints.LINE_END;
         configMainPanel.add(thing1ToAdd, gbc);
         gbc.gridx = 1;
-        gbc.weightx = 0;
-        gbc.fill = GridBagConstraints.NONE;
-        gbc.anchor = GridBagConstraints.LINE_START;
         configMainPanel.add(thing2ToAdd, gbc);
     }
 
@@ -1488,9 +1441,6 @@ public final class MainWindow implements Runnable, RipStatusHandler {
     private void addItemToConfigGridBagConstraints(GridBagConstraints gbc, int gbcYValue, JComboBox thing1ToAdd) {
         gbc.gridy = gbcYValue;
         gbc.gridx = 0;
-        gbc.weightx = 0;
-        gbc.fill = GridBagConstraints.NONE;
-        gbc.anchor = GridBagConstraints.LINE_START;
         configMainPanel.add(thing1ToAdd, gbc);
     }
 
