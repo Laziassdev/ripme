@@ -247,6 +247,7 @@ public abstract class AbstractJSONRipper extends AbstractRipper {
      * Cleans up & tells user about failed download.
      */
     public void downloadErrored(URL url, String reason) {
+        trackHttpDownloadError(reason);
         onDownloadFailure(url);
         if (observer == null) {
             return;

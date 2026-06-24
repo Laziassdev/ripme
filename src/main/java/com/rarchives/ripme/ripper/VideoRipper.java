@@ -157,6 +157,7 @@ public abstract class VideoRipper extends AbstractRipper {
      */
     @Override
     public void downloadErrored(URL url, String reason) {
+        trackHttpDownloadError(reason);
         onDownloadFailure(url);
         if (observer == null) {
             return;

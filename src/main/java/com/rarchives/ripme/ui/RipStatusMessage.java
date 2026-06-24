@@ -17,6 +17,7 @@ public class RipStatusMessage {
         TOTAL_BYTES("Total bytes"),
         COMPLETED_BYTES("Completed bytes"),
         RIP_ERRORED("Rip Errored"),
+        RIP_CIRCUIT_BREAK("Rip Circuit Break"),
         NO_ALBUM_OR_USER("No album or user");
 
         String value;

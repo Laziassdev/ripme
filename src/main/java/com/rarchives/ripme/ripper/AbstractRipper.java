@@ -36,6 +36,7 @@ import com.rarchives.ripme.ui.RipStatusComplete;
 import com.rarchives.ripme.ui.RipStatusHandler;
 import com.rarchives.ripme.ui.RipStatusMessage;
 import com.rarchives.ripme.ui.RipStatusMessage.STATUS;
+import com.rarchives.ripme.utils.ConsecutiveHttpFailureTracker;
 import com.rarchives.ripme.utils.DownloadLimitTracker;
 import com.rarchives.ripme.utils.Utils;
 
@@ -85,6 +86,10 @@ public abstract class AbstractRipper
     private static boolean thisIsATest = false;
     private final int maxDownloads = Utils.getConfigInteger("maxdownloads", -1);
     private final DownloadLimitTracker downloadLimitTracker = new DownloadLimitTracker(maxDownloads);
+    private final int httpFailureThreshold = Utils.getConfigInteger("errors.consecutive_http.failures", 50);
+    private final ConsecutiveHttpFailureTracker httpFailureTracker =
+            new ConsecutiveHttpFailureTracker(httpFailureThreshold);
+    private final AtomicBoolean circuitBroken = new AtomicBoolean(false);
 
     private final Set<String> knownHashes = Collections.synchronizedSet(new HashSet<>());
     private volatile boolean hashHistoryLoaded = false;
@@ -110,10 +115,58 @@ public abstract class AbstractRipper
      * Resume a paused ripper.
      */
     public void resume() {
+        if (circuitBroken.get()) {
+            resetCircuitBreaker();
+            return;
+        }
         shouldPause.set(false);
         synchronized (pauseLock) {
             pauseLock.notifyAll();
         }
+    }
+
+    public boolean isCircuitBroken() {
+        return circuitBroken.get();
+    }
+
+    public int getConsecutiveHttpFailures() {
+        return httpFailureTracker.getConsecutiveFailures();
+    }
+
+    public void resetCircuitBreaker() {
+        circuitBroken.set(false);
+        httpFailureTracker.reset();
+        shouldPause.set(false);
+        synchronized (pauseLock) {
+            pauseLock.notifyAll();
+        }
+    }
+
+    protected void trackHttpDownloadError(String reason) {
+        if (httpFailureTracker.recordHttpError(reason)) {
+            tripCircuitBreaker(reason);
+        }
+    }
+
+    protected void trackHttpStatusCode(int statusCode) {
+        if (httpFailureTracker.recordHttpStatusCode(statusCode)) {
+            tripCircuitBreaker("HTTP status code " + statusCode);
+        }
+    }
+
+    protected void trackHttpDownloadSuccess() {
+        httpFailureTracker.reset();
+    }
+
+    private void tripCircuitBreaker(String reason) {
+        if (circuitBroken.getAndSet(true)) {
+            return;
+        }
+        pause();
+        String message = String.format("Paused after %d consecutive HTTP errors. Last error: %s",
+                httpFailureTracker.getThreshold(), reason);
+        logger.warn(message);
+        sendUpdate(STATUS.RIP_CIRCUIT_BREAK, message);
     }
 
     public boolean isPaused() {
@@ -556,6 +609,7 @@ public abstract class AbstractRipper
     }
 
     protected void onDownloadSuccess(URL url) {
+        trackHttpDownloadSuccess();
         if (usesCustomDownloadLimitTracking()) {
             return;
         }
@@ -861,6 +915,9 @@ public abstract class AbstractRipper
      * @param status
      */
     public void sendUpdate(STATUS status, Object message) {
+        if (status == STATUS.DOWNLOAD_ERRORED && message != null) {
+            trackHttpDownloadError(message.toString());
+        }
         if (observer == null) {
             return;
         }
@@ -887,6 +944,7 @@ public abstract class AbstractRipper
             rip();
         } catch (HttpStatusException e) {
             logger.error("Got exception while running ripper:", e);
+            trackHttpStatusCode(e.getStatusCode());
             waitForThreads();
             sendUpdate(STATUS.RIP_ERRORED, "HTTP status code " + e.getStatusCode() + " for URL " + e.getUrl());
         } catch (Exception e) {

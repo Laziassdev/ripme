@@ -300,9 +300,15 @@ public final class MainWindow implements Runnable, RipStatusHandler {
                     rowPanel.add(filesLabel, rowGbc);
 
                     rowGbc.gridx = 3;
-                    JButton pauseResumeButton = new JButton(ripperEntry.isPaused() ? Utils.getLocalizedString("active.resume") : Utils.getLocalizedString("active.pause"));
+                    boolean circuitBroken = ripperEntry.isCircuitBroken();
+                    String pauseResumeLabel = circuitBroken
+                            ? Utils.getLocalizedString("active.restart")
+                            : (ripperEntry.isPaused()
+                                    ? Utils.getLocalizedString("active.resume")
+                                    : Utils.getLocalizedString("active.pause"));
+                    JButton pauseResumeButton = new JButton(pauseResumeLabel);
                     pauseResumeButton.addActionListener(e -> {
-                        if (ripperEntry.isPaused()) {
+                        if (ripperEntry.isPaused() || ripperEntry.isCircuitBroken()) {
                             ripperEntry.resume();
                         } else {
                             ripperEntry.pause();
@@ -328,6 +334,18 @@ public final class MainWindow implements Runnable, RipStatusHandler {
                                 .setFont(currentItemLabel.getFont().deriveFont(Font.ITALIC,
                                         currentItemLabel.getFont().getSize2D() - 1f));
                         rowPanel.add(currentItemLabel, rowGbc);
+                    }
+
+                    if (circuitBroken) {
+                        rowGbc.gridx = 0;
+                        rowGbc.gridy = entry.currentItem != null && !entry.currentItem.isEmpty() ? 2 : 1;
+                        rowGbc.gridwidth = 5;
+                        rowGbc.insets = new Insets(4, 0, 0, 0);
+                        JLabel circuitLabel = new JLabel(Utils.getLocalizedString("active.circuit_break"));
+                        circuitLabel.setForeground(Color.RED);
+                        circuitLabel.setFont(circuitLabel.getFont().deriveFont(Font.ITALIC,
+                                circuitLabel.getFont().getSize2D() - 1f));
+                        rowPanel.add(circuitLabel, rowGbc);
                     }
 
                     activeListPanel.add(rowPanel);
@@ -2414,6 +2432,7 @@ public final class MainWindow implements Runnable, RipStatusHandler {
             if (LOGGER.isEnabled(Level.ERROR)) {
                 appendLog((String) msg.getObject(), Color.RED);
             }
+            refreshActivePanel();
             break;
         case DOWNLOAD_WARN:
             if (LOGGER.isEnabled(Level.WARN)) {
@@ -2436,6 +2455,14 @@ public final class MainWindow implements Runnable, RipStatusHandler {
             pack();
             statusWithColor("Error: " + msg.getObject(), Color.RED);
             removeActiveRipperEntry(evt.ripper);
+            break;
+
+        case RIP_CIRCUIT_BREAK:
+            if (LOGGER.isEnabled(Level.WARN)) {
+                appendLog((String) msg.getObject(), Color.ORANGE);
+            }
+            statusWithColor((String) msg.getObject(), Color.ORANGE);
+            refreshActivePanel();
             break;
 
         case RIP_COMPLETE:
