@@ -1,7 +1,9 @@
 {
-  "latestVersion": "2.1.256-1-4e98857",
-  "currentHash": "cdd14c0299d16f93eef3203db5a313f42e7a50885e843be329b7c9e300eae50f",
+  "latestVersion": "2.1.257-1-861b915",
+  "currentHash": "5bf4a14df5df9e2e89ad540e9ba09e45d2ac852071f7228826a7ed58d5e3527c",
   "changeList": [
+    "2.1.257-1-861b915: Refactor MainWindow layout and configuration handling",
+    "2.1.257-1-861b915: Built at 2026-06-24T16:14:24Z",
     "2.1.256-1-4e98857: Add circuit breaker for consecutive HTTP errors",
     "2.1.256-1-4e98857: Built at 2026-06-24T15:51:54Z",
     "2.1.255-1-15b1877: Add shutdown hook for log cleanup and enhance DeviantartRipper URL handling",
