@@ -1,7 +1,9 @@
 {
-  "latestVersion": "2.1.259-1-f86f8b8",
-  "currentHash": "e2d49e794bd3db7efd318e62c06256228421d94e6752e07ac69e52228bff43b3",
+  "latestVersion": "2.1.260-1-9870506",
+  "currentHash": "54f53041d57f562cfecef64ce95f8aeb50975c4b841187121e81fd2a69f10e2c",
   "changeList": [
+    "2.1.260-1-9870506: Merge branch 'main' of https://github.com/Laziassdev/ripme",
+    "2.1.260-1-9870506: Built at 2026-06-24T19:03:40Z",
     "2.1.259-1-f86f8b8: Enhance MainWindow layout and component configuration",
     "2.1.259-1-f86f8b8: Built at 2026-06-24T18:48:59Z",
     "2.1.258-1-1f3c24a: Enhance MainWindow layout and component configuration",
