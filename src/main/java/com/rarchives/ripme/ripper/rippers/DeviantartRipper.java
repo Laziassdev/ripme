@@ -10,6 +10,7 @@ import java.net.MalformedURLException;
 import java.net.URI;
 import java.net.URISyntaxException;
 import java.net.URL;
+import java.net.URLDecoder;
 import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Path;
@@ -41,9 +42,9 @@ import com.rarchives.ripme.utils.RipUtils;
 import com.rarchives.ripme.utils.Utils;
 
 /**
- * Rips DeviantArt galleries, favourites, and tag browse pages.
+ * Rips DeviantArt galleries, favourites, tag browse pages, and search results.
  *
- * <p>Galleries and favourites use the site's JSON API. Tag pages load embedded page
+ * <p>Galleries and favourites use the site's JSON API. Tag and search pages load embedded page
  * state from HTML and paginate with {@code ?page=N}.
  *
  * <p>Session cookies (for NSFW content and videos) are loaded in order:
@@ -87,19 +88,23 @@ public class DeviantartRipper extends AbstractJSONRipper {
     private static final Pattern CSRF_JSON_PATTERN = Pattern.compile("\"csrfToken\":\"([^\"]+)\"");
     private static final Pattern TAG_PATTERN = Pattern
             .compile("^https?://www\\.deviantart\\.com/tag/([a-zA-Z0-9_-]+)/?$");
+    private static final Pattern SEARCH_PATH_PATTERN = Pattern
+            .compile("^https?://www\\.deviantart\\.com/search/?$");
     private static final Pattern DEVIATION_ARTIST_PATTERN = Pattern
             .compile("^https?://www\\.deviantart\\.com/([a-zA-Z0-9_-]+)/art/.*$");
 
     private static final String INITIAL_STATE_MARKER = "window.__INITIAL_STATE__ = JSON.parse(\"";
 
     private final boolean tagMode;
+    private final boolean searchMode;
     private final String tagName;
+    private final String searchQuery;
     private final String artist;
     private final String collectionType;
     private final Integer folderId;
     private final boolean allFolders;
 
-    private int tagPage = 1;
+    private int browsePage = 1;
 
     private String csrfToken;
     private String referer;
@@ -117,7 +122,25 @@ public class DeviantartRipper extends AbstractJSONRipper {
         Matcher tagMatcher = TAG_PATTERN.matcher(pathUrl);
         if (tagMatcher.matches()) {
             tagMode = true;
+            searchMode = false;
             tagName = tagMatcher.group(1);
+            searchQuery = null;
+            artist = null;
+            collectionType = null;
+            folderId = null;
+            allFolders = false;
+            return;
+        }
+
+        if (SEARCH_PATH_PATTERN.matcher(pathUrl).matches()) {
+            String query = getSearchQuery(url);
+            if (query == null || query.isBlank()) {
+                throw new IOException("DeviantArt search URL requires ?q= parameter - got " + url);
+            }
+            tagMode = false;
+            searchMode = true;
+            tagName = null;
+            searchQuery = query;
             artist = null;
             collectionType = null;
             folderId = null;
@@ -126,12 +149,15 @@ public class DeviantartRipper extends AbstractJSONRipper {
         }
 
         tagMode = false;
+        searchMode = false;
         tagName = null;
+        searchQuery = null;
 
         Matcher artistMatcher = ARTIST_PATTERN.matcher(pathUrl);
         if (!artistMatcher.matches()) {
             throw new IOException("Expected deviantart.com URL format: "
-                    + "www.deviantart.com/<ARTIST>/gallery/, .../favourites/, or .../tag/<TAG> - got " + url);
+                    + "www.deviantart.com/<ARTIST>/gallery/, .../favourites/, .../tag/<TAG>, "
+                    + "or .../search?q=<QUERY> - got " + url);
         }
         artist = artistMatcher.group(1);
 
@@ -142,7 +168,7 @@ public class DeviantartRipper extends AbstractJSONRipper {
         } else if (pathUrl.matches("https?://www\\.deviantart\\.com/[^/]+/?")) {
             collectionType = "gallery";
         } else {
-            throw new IOException("Expected deviantart.com gallery, favourites, or tag URL - got " + url);
+            throw new IOException("Expected deviantart.com gallery, favourites, tag, or search URL - got " + url);
         }
 
         Matcher folderMatcher = FOLDER_PATTERN.matcher(pathUrl);
@@ -164,6 +190,10 @@ public class DeviantartRipper extends AbstractJSONRipper {
         if (TAG_PATTERN.matcher(pathUrl).matches()) {
             return true;
         }
+        if (SEARCH_PATH_PATTERN.matcher(pathUrl).matches()) {
+            String query = getSearchQuery(url);
+            return query != null && !query.isBlank();
+        }
         if (!ARTIST_PATTERN.matcher(pathUrl).matches()) {
             return false;
         }
@@ -184,6 +214,9 @@ public class DeviantartRipper extends AbstractJSONRipper {
     @Override
     public URL sanitizeURL(URL url) throws MalformedURLException, URISyntaxException {
         String pathUrl = stripQuery(url.toExternalForm());
+        if (SEARCH_PATH_PATTERN.matcher(pathUrl).matches()) {
+            return url;
+        }
         if (pathUrl.matches("https?://www\\.deviantart\\.com/[^/]+/?")) {
             String base = pathUrl.replaceAll("/?$", "");
             return new URI(base + "/gallery/").toURL();
@@ -197,6 +230,14 @@ public class DeviantartRipper extends AbstractJSONRipper {
         Matcher tagMatcher = TAG_PATTERN.matcher(pathUrl);
         if (tagMatcher.matches()) {
             return "tag_" + tagMatcher.group(1).toLowerCase();
+        }
+
+        if (SEARCH_PATH_PATTERN.matcher(pathUrl).matches()) {
+            String query = getSearchQuery(url);
+            if (query == null || query.isBlank()) {
+                throw new MalformedURLException("DeviantArt search URL requires ?q= parameter: " + url);
+            }
+            return "search_" + searchQueryToGid(query);
         }
 
         Matcher artistMatcher = ARTIST_PATTERN.matcher(pathUrl);
@@ -234,9 +275,9 @@ public class DeviantartRipper extends AbstractJSONRipper {
     @Override
     protected JSONObject getFirstPage() throws IOException, URISyntaxException {
         initSession();
-        if (tagMode) {
-            tagPage = 1;
-            return fetchTagPage(tagPage);
+        if (tagMode || searchMode) {
+            browsePage = 1;
+            return fetchBrowsePage(browsePage);
         }
         return fetchGalleryPage(0);
     }
@@ -247,9 +288,9 @@ public class DeviantartRipper extends AbstractJSONRipper {
             throw new IOException("No more pages");
         }
         Utils.sleep(PAGE_SLEEP_MS);
-        if (tagMode) {
-            tagPage++;
-            return fetchTagPage(tagPage);
+        if (tagMode || searchMode) {
+            browsePage++;
+            return fetchBrowsePage(browsePage);
         }
         int nextOffset = doc.optInt("nextOffset", -1);
         if (nextOffset < 0) {
@@ -320,10 +361,30 @@ public class DeviantartRipper extends AbstractJSONRipper {
 
     @Override
     public void downloadCompleted(URL url, Path saveAs) {
+        recordDownloadPageUrl(url);
+        super.downloadCompleted(url, saveAs);
+    }
+
+    @Override
+    public void downloadExists(URL url, Path file) {
+        recordDownloadPageUrl(url);
+        super.downloadExists(url, file);
+    }
+
+    @Override
+    public void downloadErrored(URL url, String reason) {
+        downloadPageUrls.remove(url);
+        super.downloadErrored(url, reason);
+    }
+
+    /**
+     * Records the DeviantArt deviation page URL (not the CDN image URL) in URL history.
+     */
+    private void recordDownloadPageUrl(URL imageUrl) {
         if (Utils.getConfigBoolean("remember.url_history", true) && !isThisATest()) {
-            String historyUrl = downloadPageUrls.remove(url);
+            String historyUrl = downloadPageUrls.remove(imageUrl);
             if (historyUrl == null) {
-                historyUrl = url.toExternalForm();
+                historyUrl = imageUrl.toExternalForm();
             }
             try {
                 writeDownloadedURL(historyUrl + "\n");
@@ -331,15 +392,8 @@ public class DeviantartRipper extends AbstractJSONRipper {
                 logger.debug("Unable to write URL history file");
             }
         } else {
-            downloadPageUrls.remove(url);
+            downloadPageUrls.remove(imageUrl);
         }
-        super.downloadCompleted(url, saveAs);
-    }
-
-    @Override
-    public void downloadErrored(URL url, String reason) {
-        downloadPageUrls.remove(url);
-        super.downloadErrored(url, reason);
     }
 
     @Override
@@ -354,9 +408,13 @@ public class DeviantartRipper extends AbstractJSONRipper {
 
     private void initSession() throws IOException {
         loadCookies();
-        referer = stripQuery(this.url.toExternalForm());
-        if (!referer.endsWith("/")) {
-            referer += "/";
+        if (searchMode) {
+            referer = buildSearchPageUrl(1);
+        } else {
+            referer = stripQuery(this.url.toExternalForm());
+            if (!referer.endsWith("/")) {
+                referer += "/";
+            }
         }
 
         IOException lastError = null;
@@ -490,21 +548,26 @@ public class DeviantartRipper extends AbstractJSONRipper {
                         + "deviantart.firefox.cookies=true), or set cookies.deviantart.com in rip.properties.");
     }
 
-    private JSONObject fetchTagPage(int page) throws IOException {
-        String pageUrl = buildTagPageUrl(page);
-        logger.info("Fetching tag page {} for tag {}", page, tagName);
+    private JSONObject fetchBrowsePage(int page) throws IOException {
+        String pageUrl = searchMode ? buildSearchPageUrl(page) : buildTagPageUrl(page);
+        String pageType = searchMode ? "search" : "tag";
+        String pageLabel = searchMode ? searchQuery : tagName;
+        logger.info("Fetching {} page {} for {}", pageType, page, pageLabel);
         Response response = configurePageRequest(Http.url(pageUrl).referrer("https://www.deviantart.com/").cookies(cookies)
                 .retries(1)).response();
         int status = response.statusCode();
-        logger.info("DeviantArt tag page HTTP {}", status);
+        logger.info("DeviantArt {} page HTTP {}", pageType, status);
         if (status == 404) {
-            throw new IOException("Tag page not found: " + tagName);
+            throw new IOException(pageType.substring(0, 1).toUpperCase() + pageType.substring(1)
+                    + " page not found: " + pageLabel);
         }
         if (status == 403) {
-            throw new IOException("Tag page returned 403 Forbidden");
+            throw new IOException(pageType.substring(0, 1).toUpperCase() + pageType.substring(1)
+                    + " page returned 403 Forbidden");
         }
         if (status >= 400) {
-            throw new IOException("Tag page returned HTTP " + status);
+            throw new IOException(pageType.substring(0, 1).toUpperCase() + pageType.substring(1)
+                    + " page returned HTTP " + status);
         }
 
         mergeCookies(response.cookies());
@@ -513,6 +576,14 @@ public class DeviantartRipper extends AbstractJSONRipper {
         }
 
         return parseTagPageState(response.body());
+    }
+
+    private String buildSearchPageUrl(int page) {
+        String base = "https://www.deviantart.com/search?q=" + encode(searchQuery);
+        if (page <= 1) {
+            return base;
+        }
+        return base + "&page=" + page;
     }
 
     private String buildTagPageUrl(int page) {
@@ -1107,6 +1178,35 @@ public class DeviantartRipper extends AbstractJSONRipper {
         try (ObjectInputStream ois = new ObjectInputStream(new ByteArrayInputStream(data))) {
             return (Map<String, String>) ois.readObject();
         }
+    }
+
+    public static String getSearchQuery(URL url) {
+        String pathUrl = stripQuery(url.toExternalForm());
+        if (!SEARCH_PATH_PATTERN.matcher(pathUrl).matches()) {
+            return null;
+        }
+        String query = url.getQuery();
+        if (query == null || query.isBlank()) {
+            return null;
+        }
+        for (String param : query.split("&")) {
+            int eq = param.indexOf('=');
+            if (eq <= 0 || !"q".equals(param.substring(0, eq))) {
+                continue;
+            }
+            String value = param.substring(eq + 1);
+            if (value.isBlank()) {
+                return null;
+            }
+            return URLDecoder.decode(value, StandardCharsets.UTF_8);
+        }
+        return null;
+    }
+
+    static String searchQueryToGid(String query) {
+        String safe = query.toLowerCase().replaceAll("[^a-z0-9]+", "_");
+        safe = safe.replaceAll("^_+|_+$", "");
+        return safe.isBlank() ? "query" : safe;
     }
 
     private static String stripQuery(String url) {

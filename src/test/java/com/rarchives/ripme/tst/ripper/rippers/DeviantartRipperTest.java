@@ -55,6 +55,76 @@ public class DeviantartRipperTest extends RippersTest {
     }
 
     @Test
+    public void testGetGIDSearch() throws IOException, URISyntaxException {
+        URL url = new URI("https://www.deviantart.com/search?q=dildopants").toURL();
+        DeviantartRipper ripper = new DeviantartRipper(url);
+        Assertions.assertEquals("search_dildopants", ripper.getGID(url));
+    }
+
+    @Test
+    public void testGetGIDSearchWithSpaces() throws IOException, URISyntaxException {
+        URL url = new URI("https://www.deviantart.com/search?q=bondage+art").toURL();
+        DeviantartRipper ripper = new DeviantartRipper(url);
+        Assertions.assertEquals("search_bondage_art", ripper.getGID(url));
+    }
+
+    @Test
+    public void testCanRipSearchUrl() throws IOException, URISyntaxException {
+        URL url = new URI("https://www.deviantart.com/search?q=dildopants").toURL();
+        DeviantartRipper ripper = new DeviantartRipper(url);
+        Assertions.assertTrue(ripper.canRip(url));
+    }
+
+    @Test
+    public void testCanRipSearchUrlWithoutQuery() throws IOException, URISyntaxException {
+        URL url = new URI("https://www.deviantart.com/search").toURL();
+        DeviantartRipper ripper = new DeviantartRipper(new URI("https://www.deviantart.com/tag/bondage").toURL());
+        Assertions.assertFalse(ripper.canRip(url));
+    }
+
+    @Test
+    public void testGetRipperSearchUrl() throws Exception {
+        URL url = new URI("https://www.deviantart.com/search?q=dildopants").toURL();
+        AbstractRipper ripper = AbstractRipper.getRipper(url);
+        Assertions.assertTrue(ripper instanceof DeviantartRipper);
+    }
+
+    @Test
+    public void testSearchUrlRequiresQuery() {
+        Assertions.assertThrows(IOException.class, () -> new DeviantartRipper(
+                new URI("https://www.deviantart.com/search").toURL()));
+        Assertions.assertThrows(IOException.class, () -> new DeviantartRipper(
+                new URI("https://www.deviantart.com/search?q=").toURL()));
+    }
+
+    @Test
+    public void testGetSearchQuery() throws IOException, URISyntaxException {
+        URL url = new URI("https://www.deviantart.com/search?q=dildopants").toURL();
+        Assertions.assertEquals("dildopants", DeviantartRipper.getSearchQuery(url));
+        Assertions.assertEquals("bondage art",
+                DeviantartRipper.getSearchQuery(new URI("https://www.deviantart.com/search?q=bondage+art").toURL()));
+        Assertions.assertNull(DeviantartRipper.getSearchQuery(
+                new URI("https://www.deviantart.com/search").toURL()));
+        Assertions.assertNull(DeviantartRipper.getSearchQuery(
+                new URI("https://www.deviantart.com/tag/bondage").toURL()));
+    }
+
+    @Test
+    public void testParseSearchPageState() throws IOException {
+        String html = "<script>window.__INITIAL_STATE__ = JSON.parse(\"{"
+                + "\\\"@@streams\\\":{\\\"@@BROWSE_PAGE_STREAM\\\":{"
+                + "\\\"items\\\":[789],\\\"hasMore\\\":false}},"
+                + "\\\"@@entities\\\":{\\\"deviation\\\":{"
+                + "\\\"789\\\":{\\\"deviationId\\\":789,\\\"url\\\":\\\"https://www.deviantart.com/foo/art/Search-789\\\"}"
+                + "}}}\");</script>";
+        JSONObject page = DeviantartRipper.parseTagPageState(html);
+        Assertions.assertFalse(page.getBoolean("hasMore"));
+        Assertions.assertEquals(1, page.getJSONArray("results").length());
+        Assertions.assertEquals("https://www.deviantart.com/foo/art/Search-789",
+                page.getJSONArray("results").getJSONObject(0).getString("url"));
+    }
+
+    @Test
     public void testCanRipTagUrl() throws IOException, URISyntaxException {
         URL url = new URI("https://www.deviantart.com/tag/bondage").toURL();
         DeviantartRipper ripper = new DeviantartRipper(url);

@@ -364,7 +364,7 @@ class DownloadFileThread implements Runnable {
                     if (!fileToInspect.delete()) {
                         logger.warn("[!] Failed to delete duplicate file {}", fileToInspect.getAbsolutePath());
                     }
-                    observer.downloadErrored(url, "Duplicate file (deleted)");
+                    observer.downloadExists(url, targetPath);
                     return;
                 }
                 if (useTempFile) {

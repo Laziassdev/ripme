@@ -177,7 +177,7 @@ class DownloadVideoThread implements Runnable {
                     } catch (IOException e) {
                         logger.warn("[!] Failed to delete duplicate file {}: {}", workingPath, e.getMessage());
                     }
-                    observer.downloadErrored(url, "Duplicate file (deleted)");
+                    observer.downloadExists(url, targetPath);
                     return;
                 }
                 if (tempPath != null) {
