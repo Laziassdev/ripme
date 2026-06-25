@@ -130,3 +130,4 @@ history.json
 .classpath
 *.txt
 bin/
+ripme.*.log.gz
