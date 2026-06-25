@@ -1,7 +1,9 @@
 {
-  "latestVersion": "2.1.260-1-9870506",
-  "currentHash": "54f53041d57f562cfecef64ce95f8aeb50975c4b841187121e81fd2a69f10e2c",
+  "latestVersion": "2.1.261-1-4defb6f",
+  "currentHash": "3ed76b13fba6720403e8809fad861546aa4c451884f25d3c282bce676faf8280",
   "changeList": [
+    "2.1.261-1-4defb6f: Add ripme log files to .gitignore",
+    "2.1.261-1-4defb6f: Built at 2026-06-25T07:51:01Z",
     "2.1.260-1-9870506: Merge branch 'main' of https://github.com/Laziassdev/ripme",
     "2.1.260-1-9870506: Built at 2026-06-24T19:03:40Z",
     "2.1.259-1-f86f8b8: Enhance MainWindow layout and component configuration",
