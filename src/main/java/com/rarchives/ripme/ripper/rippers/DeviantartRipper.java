@@ -410,6 +410,8 @@ public class DeviantartRipper extends AbstractJSONRipper {
         loadCookies();
         if (searchMode) {
             referer = buildSearchPageUrl(1);
+        } else if (tagName != null) {
+            referer = buildTagPageUrl(1);
         } else {
             referer = stripQuery(this.url.toExternalForm());
             if (!referer.endsWith("/")) {
@@ -571,9 +573,11 @@ public class DeviantartRipper extends AbstractJSONRipper {
         }
 
         mergeCookies(response.cookies());
-        if (csrfToken == null || csrfToken.isBlank()) {
-            csrfToken = extractCsrfToken(response.body());
+        String newToken = extractCsrfToken(response.body());
+        if (newToken != null && !newToken.isBlank()) {
+            csrfToken = newToken;
         }
+        referer = pageUrl;
 
         return parseTagPageState(response.body());
     }
@@ -734,12 +738,12 @@ public class DeviantartRipper extends AbstractJSONRipper {
     }
 
     private static boolean isRateLimitedStatus(int status) {
-        return status == 403 || status == 429;
+        return status == 400 || status == 403 || status == 429;
     }
 
     private static boolean isRateLimitMessage(IOException e) {
         String message = e.getMessage();
-        return message != null && (message.contains("403") || message.contains("429"));
+        return message != null && (message.contains("400") || message.contains("403") || message.contains("429"));
     }
 
     private Map<String, String> buildApiHeaders() {
@@ -824,21 +828,24 @@ public class DeviantartRipper extends AbstractJSONRipper {
                 return null;
             }
         } else {
-            JSONObject deviation = fetchDeviation(galleryItem, deviationPageUrl);
-            JSONObject sourceMedia = deviation != null ? deviation.optJSONObject("media") : media;
-            if (sourceMedia == null) {
-                sourceMedia = media;
-            }
+            downloadUrl = buildImageUrlFromMedia(media);
+            JSONObject deviation = null;
+            if (downloadUrl == null || downloadUrl.isBlank()) {
+                deviation = fetchDeviation(galleryItem, deviationPageUrl);
+                JSONObject sourceMedia = deviation != null ? deviation.optJSONObject("media") : media;
+                if (sourceMedia == null) {
+                    sourceMedia = media;
+                }
+                downloadUrl = buildImageUrlFromMedia(sourceMedia);
 
-            downloadUrl = buildImageUrlFromMedia(sourceMedia);
-
-            if ((downloadUrl == null || downloadUrl.isBlank()) && deviation != null) {
-                JSONObject extended = deviation.optJSONObject("extended");
-                if (extended != null) {
-                    JSONObject download = extended.optJSONObject("download");
-                    if (download != null) {
-                        downloadUrl = download.optString("url", null);
-                        logger.debug("Falling back to /download/ URL for {}", deviationPageUrl);
+                if ((downloadUrl == null || downloadUrl.isBlank()) && deviation != null) {
+                    JSONObject extended = deviation.optJSONObject("extended");
+                    if (extended != null) {
+                        JSONObject download = extended.optJSONObject("download");
+                        if (download != null) {
+                            downloadUrl = download.optString("url", null);
+                            logger.debug("Falling back to /download/ URL for {}", deviationPageUrl);
+                        }
                     }
                 }
             }
