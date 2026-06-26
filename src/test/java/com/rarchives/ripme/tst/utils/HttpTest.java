@@ -167,6 +167,30 @@ public class HttpTest {
     }
 
     @Test
+    public void testGetWith429RetryPreservesLineBreaks() throws Exception {
+        String playlist = "#EXTM3U\n#EXT-X-STREAM-INF:BANDWIDTH=1\n720p/video.m3u8\n";
+        HttpServer server = HttpServer.create(new InetSocketAddress(0), 0);
+        server.createContext("/", exchange -> {
+            byte[] body = playlist.getBytes(StandardCharsets.UTF_8);
+            exchange.sendResponseHeaders(200, body.length);
+            try (OutputStream os = exchange.getResponseBody()) {
+                os.write(body);
+            }
+            exchange.close();
+        });
+        server.setExecutor(Executors.newSingleThreadExecutor());
+        server.start();
+        try {
+            URL url = new URL("http://localhost:" + server.getAddress().getPort() + "/playlist.m3u8");
+            String body = Http.getWith429Retry(url, 0, 1, "test-agent");
+            assertEquals(playlist, body);
+            assertTrue(body.contains("\n720p/video.m3u8\n"));
+        } finally {
+            server.stop(0);
+        }
+    }
+
+    @Test
     public void testCalculate429WaitSecondsFromDeltaRetryAfter() {
         long wait = Http.calculate429WaitSeconds(2, 3, 600, "12", new Random(0));
         assertEquals(12L, wait);

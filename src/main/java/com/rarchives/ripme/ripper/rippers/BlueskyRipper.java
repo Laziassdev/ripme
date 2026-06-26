@@ -585,6 +585,7 @@ public class BlueskyRipper extends AbstractJSONRipper {
             logger.info("Downloaded Bluesky HLS video {} ({} segment(s), {} bytes)", saveAs, segments.size(), totalBytes);
             downloadCompleted(playlistUrl, saveAs);
         } catch (IOException e) {
+            logger.warn("Bluesky HLS download failed for {}: {}", playlistUrl, e.getMessage());
             downloadLimitTracker.onFailure(playlistUrl);
             downloadErrored(playlistUrl, e.getMessage());
         }
