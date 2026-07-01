@@ -1,7 +1,9 @@
 {
-  "latestVersion": "2.1.262-1-5b64f8d",
-  "currentHash": "8a7586f755042dde70b12bb791705d598bf485d17a6fee379e3df562fa330e03",
+  "latestVersion": "2.1.263-1-5344627",
+  "currentHash": "a6c7b390639bfe449f40d70f7c4e8ccc147783840914e08dd4c7919705e8372b",
   "changeList": [
+    "2.1.263-1-5344627: Merge branch 'main' of https://github.com/Laziassdev/ripme",
+    "2.1.263-1-5344627: Built at 2026-07-01T05:29:16Z",
     "2.1.262-1-5b64f8d: Improve error logging and response handling in BlueskyRipper and Http classes",
     "2.1.262-1-5b64f8d: Built at 2026-06-26T17:02:03Z",
     "2.1.261-1-4defb6f: Add ripme log files to .gitignore",
