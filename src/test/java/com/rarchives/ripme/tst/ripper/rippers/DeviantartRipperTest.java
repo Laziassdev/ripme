@@ -197,6 +197,24 @@ public class DeviantartRipperTest extends RippersTest {
     }
 
     @Test
+    public void testExtractInitialStateJsonWithEmbeddedScriptSnippet() throws IOException {
+        // Deviation metadata can embed HTML/JS containing createElement(\"script\");
+        // which must not be mistaken for the JSON.parse(\"...\") closing delimiter.
+        String html = "<script>window.__INITIAL_STATE__ = JSON.parse(\"{"
+                + "\\\"@@streams\\\":{\\\"@@BROWSE_PAGE_STREAM\\\":{"
+                + "\\\"items\\\":[1],\\\"hasMore\\\":false}},"
+                + "\\\"@@entities\\\":{\\\"deviation\\\":{"
+                + "\\\"1\\\":{\\\"url\\\":\\\"https://example.com/art/x\\\"},"
+                + "\\\"x\\\":\\\"createElement(\\\\\\\"script\\\\\\\");\\\""
+                + "}}}\");</script>";
+        JSONObject page = DeviantartRipper.parseTagPageState(html);
+        Assertions.assertFalse(page.getBoolean("hasMore"));
+        Assertions.assertEquals(1, page.getJSONArray("results").length());
+        Assertions.assertEquals("https://example.com/art/x",
+                page.getJSONArray("results").getJSONObject(0).getString("url"));
+    }
+
+    @Test
     public void testParseTagPageStateWithCompositeItemIds() throws IOException {
         String html = "<script>window.__INITIAL_STATE__ = JSON.parse(\"{"
                 + "\\\"@@streams\\\":{\\\"@@BROWSE_PAGE_STREAM\\\":{"

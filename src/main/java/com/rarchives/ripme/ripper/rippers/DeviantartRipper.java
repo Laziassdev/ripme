@@ -653,11 +653,44 @@ public class DeviantartRipper extends AbstractJSONRipper {
             return null;
         }
         start += INITIAL_STATE_MARKER.length();
-        int end = html.indexOf("\");", start);
+        int end = findJavaScriptQuotedStringEnd(html, start);
         if (end < 0) {
             return null;
         }
         return StringEscapeUtils.unescapeJavaScript(html.substring(start, end));
+    }
+
+    /**
+     * Finds the closing {@code ");} of {@code JSON.parse("...")}, skipping escaped quotes inside the
+     * JavaScript string literal (e.g. embedded {@code createElement(\"script\")} in page state).
+     */
+    static int findJavaScriptQuotedStringEnd(String html, int start) {
+        for (int i = start; i < html.length(); i++) {
+            char c = html.charAt(i);
+            if (c == '\\') {
+                i++;
+                if (i >= html.length()) {
+                    return -1;
+                }
+                char escaped = html.charAt(i);
+                if (escaped == 'u') {
+                    if (i + 4 >= html.length()) {
+                        return -1;
+                    }
+                    i += 4;
+                } else if (escaped == 'x') {
+                    if (i + 2 >= html.length()) {
+                        return -1;
+                    }
+                    i += 2;
+                }
+                continue;
+            }
+            if (c == '"' && i + 2 < html.length() && html.charAt(i + 1) == ')' && html.charAt(i + 2) == ';') {
+                return i;
+            }
+        }
+        return -1;
     }
 
     public static String usernameFromDeviationUrl(String url) {
