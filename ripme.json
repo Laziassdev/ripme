@@ -1,7 +1,9 @@
 {
-  "latestVersion": "2.1.266-1-d840060",
-  "currentHash": "5bd062915a7b970df097b885031807b26ee6adfbb75251dc7c1ef69863e707d4",
+  "latestVersion": "2.1.267-1-d660021",
+  "currentHash": "c863301b4f913c9852ba995225170cf7dac6aeefe6b0457e79141e71b2ae4457",
   "changeList": [
+    "2.1.267-1-d660021: Enhance InstagramRipper with user ID caching and improved API request handling",
+    "2.1.267-1-d660021: Built at 2026-07-02T12:56:31Z",
     "2.1.266-1-d840060: Refactor InstagramRipper to improve API request handling and error logging",
     "2.1.266-1-d840060: Built at 2026-07-02T12:41:05Z",
     "2.1.265-1-9b0ebfa: Implement long configuration field handling in MainWindow and Utils",
