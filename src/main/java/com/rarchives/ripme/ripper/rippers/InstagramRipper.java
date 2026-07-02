@@ -56,6 +56,7 @@ public class InstagramRipper extends AbstractJSONRipper {
     }
     
     private String idString;
+    private String cachedUserId = null;
     private Map<String, String> cookies = new HashMap<>();
     private boolean hasNextPage = true;
     private String endCursor = null;
@@ -232,14 +233,15 @@ public class InstagramRipper extends AbstractJSONRipper {
         String url = urlBuilder.toString();
         logger.debug("Fetching API URL: " + url);
 
-        try {            Response response = Http.url(url)
+        try {
+            Http feedRequest = Http.url(url)
                     .userAgent(INSTAGRAM_USER_AGENT)
                     .header("Accept", "*/*")
                     .header("Accept-Language", "en-US,en;q=0.9")
                     .header("X-IG-App-ID", INSTAGRAM_APP_ID)
                     .header("X-Requested-With", "XMLHttpRequest")
                     .header("X-ASBD-ID", "129477")
-                    .header("X-IG-WWW-Claim", "0")
+                    .header("X-IG-WWW-Claim", cookies.getOrDefault("ig_www_claim", "0"))
                     .header("X-CSRFToken", cookies.getOrDefault("csrftoken", ""))
                     .header("Origin", "https://www.instagram.com")
                     .header("DNT", "1")
@@ -248,9 +250,9 @@ public class InstagramRipper extends AbstractJSONRipper {
                     .header("Sec-Fetch-Dest", "empty")
                     .header("Sec-Fetch-Mode", "cors")
                     .header("Sec-Fetch-Site", "same-origin")
-                    .cookies(cookies)
-                    .ignoreContentType()
-                    .response();
+                    .cookies(cookies);
+            applyOptionalInstagramHeaders(feedRequest);
+            Response response = feedRequest.ignoreContentType().response();
 
             int statusCode = response.statusCode();
             String jsonText = response.body();
@@ -362,32 +364,53 @@ public class InstagramRipper extends AbstractJSONRipper {
         }
     }
     private String getUserID(String username) throws IOException {
+        if (cachedUserId != null && !cachedUserId.isEmpty()) {
+            return cachedUserId;
+        }
+
         logger.debug("Getting user ID for username: " + username);
 
         IOException lastException = null;
 
         try {
-            String id = fetchUserIdFromProfile(username);
+            String id = fetchUserIdFromTopSearch(username);
             if (id != null && !id.isEmpty()) {
-                return id;
+                logger.info("Resolved user ID for {} via topsearch", username);
+                return cacheUserId(id);
             }
         } catch (IOException e) {
             lastException = e;
-            logger.warn("Primary profile lookup failed for {}: {}", username, e.getMessage());
+            logger.warn("Topsearch lookup failed for {}: {}", username, e.getMessage());
         }
 
         try {
-            String id = fetchUserIdFromTopSearch(username);
+            String id = fetchUserIdFromProfileHtml(username);
             if (id != null && !id.isEmpty()) {
-                logger.debug("Resolved user ID for {} via topsearch fallback", username);
-                return id;
+                logger.info("Resolved user ID for {} via profile page HTML", username);
+                return cacheUserId(id);
             }
         } catch (IOException e) {
             lastException = e;
-            logger.warn("Topsearch fallback failed for {}: {}", username, e.getMessage());
+            logger.warn("Profile HTML lookup failed for {}: {}", username, e.getMessage());
+        }
+
+        try {
+            String id = fetchUserIdFromProfile(username);
+            if (id != null && !id.isEmpty()) {
+                logger.info("Resolved user ID for {} via web_profile_info API", username);
+                return cacheUserId(id);
+            }
+        } catch (IOException e) {
+            lastException = e;
+            logger.warn("web_profile_info lookup failed for {}: {}", username, e.getMessage());
         }
 
         throw new IOException("Could not fetch user ID. You must be logged in via Firefox cookies.", lastException);
+    }
+
+    private String cacheUserId(String userId) {
+        cachedUserId = userId;
+        return userId;
     }
 
     private Response executeInstagramApiRequest(String requestUrl, String referer, String actionDescription) throws IOException {
@@ -419,6 +442,7 @@ public class InstagramRipper extends AbstractJSONRipper {
                             .header("Sec-Fetch-Mode", "cors")
                             .header("Sec-Fetch-Site", requestUrl.contains("i.instagram.com") ? "same-site" : "same-origin")
                             .cookies(cookies);
+                    applyOptionalInstagramHeaders(request);
                 } else {
                     request.header("Sec-Fetch-Dest", "empty")
                             .header("Sec-Fetch-Mode", "cors")
@@ -438,12 +462,20 @@ public class InstagramRipper extends AbstractJSONRipper {
                 }
 
                 if (statusCode == 429) {
+                    boolean likelyBotBlock = responseBody == null || responseBody.trim().isEmpty();
+                    if (likelyBotBlock) {
+                        throw new InstagramBotBlockedException("Instagram blocked request while " + actionDescription);
+                    }
                     throw new HttpStatusException("HTTP error fetching URL", 429, requestUrl);
                 }
 
                 return response;
             } catch (IOException e) {
                 lastException = e;
+
+                if (e instanceof InstagramBotBlockedException) {
+                    throw new IOException(e.getMessage(), e);
+                }
 
                 boolean isRateLimit = e instanceof HttpStatusException && ((HttpStatusException) e).getStatusCode() == 429;
                 long waitMillis = WAIT_TIME * (1L << (attempt - 1));
@@ -515,6 +547,79 @@ public class InstagramRipper extends AbstractJSONRipper {
     private boolean hasCookie(String name) {
         String value = cookies.get(name);
         return value != null && !value.isEmpty();
+    }
+
+    private void applyOptionalInstagramHeaders(Http request) {
+        String webSessionId = cookies.get("web_session_id");
+        if (webSessionId != null && !webSessionId.isEmpty()) {
+            request.header("X-Web-Session-Id", webSessionId);
+        }
+        String mid = cookies.get("mid");
+        if (mid != null && !mid.isEmpty()) {
+            request.header("X-MID", mid);
+        }
+    }
+
+    private String fetchUserIdFromProfileHtml(String username) throws IOException {
+        String profileUrl = "https://www.instagram.com/" + username + "/";
+        Response response = Http.url(profileUrl)
+                .userAgent(INSTAGRAM_USER_AGENT)
+                .header("Accept", "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8")
+                .header("Accept-Language", "en-US,en;q=0.9")
+                .header("Referer", "https://www.instagram.com/")
+                .header("Sec-Fetch-Dest", "document")
+                .header("Sec-Fetch-Mode", "navigate")
+                .header("Sec-Fetch-Site", "same-origin")
+                .header("Upgrade-Insecure-Requests", "1")
+                .cookies(cookies)
+                .ignoreContentType()
+                .response();
+
+        if (response.statusCode() != 200) {
+            throw new IOException("Profile page HTTP " + response.statusCode());
+        }
+
+        return parseUserIdFromProfileHtml(response.body(), username);
+    }
+
+    private String parseUserIdFromProfileHtml(String html, String username) throws IOException {
+        if (html == null || html.isEmpty()) {
+            throw new IOException("Empty profile page response");
+        }
+
+        Pattern[] patterns = {
+                Pattern.compile("\"username\"\\s*:\\s*\"" + Pattern.quote(username)
+                        + "\"[^}]{0,500}?\"id\"\\s*:\\s*\"(\\d+)\"", Pattern.CASE_INSENSITIVE),
+                Pattern.compile("\"id\"\\s*:\\s*\"(\\d+)\"[^}]{0,500}?\"username\"\\s*:\\s*\""
+                        + Pattern.quote(username) + "\"", Pattern.CASE_INSENSITIVE),
+                Pattern.compile("\"profile_id\"\\s*:\\s*\"(\\d+)\""),
+                Pattern.compile("profilePage_[^\"]*\"id\"\\s*:\\s*\"(\\d+)\""),
+        };
+
+        for (Pattern pattern : patterns) {
+            Matcher matcher = pattern.matcher(html);
+            if (matcher.find()) {
+                return matcher.group(1);
+            }
+        }
+
+        Pattern sharedDataPattern = Pattern.compile("window\\._sharedData = (\\{.*?\\});");
+        Matcher sharedDataMatcher = sharedDataPattern.matcher(html);
+        if (sharedDataMatcher.find()) {
+            JSONObject sharedData = new JSONObject(sharedDataMatcher.group(1));
+            if (sharedData.has("entry_data")
+                    && sharedData.getJSONObject("entry_data").has("ProfilePage")) {
+                JSONArray pages = sharedData.getJSONObject("entry_data").getJSONArray("ProfilePage");
+                if (pages.length() > 0) {
+                    JSONObject user = pages.getJSONObject(0).getJSONObject("graphql").getJSONObject("user");
+                    if (user.has("id")) {
+                        return user.getString("id");
+                    }
+                }
+            }
+        }
+
+        throw new IOException("Could not extract user ID from profile HTML");
     }
 
     private String fetchUserIdFromProfile(String username) throws IOException {
@@ -798,6 +903,12 @@ public class InstagramRipper extends AbstractJSONRipper {
                 logger.info(message);
                 sendUpdate(RipStatusMessage.STATUS.DOWNLOAD_COMPLETE_HISTORY, message);
             }
+        }
+    }
+
+    private static class InstagramBotBlockedException extends IOException {
+        InstagramBotBlockedException(String message) {
+            super(message);
         }
     }
 }
