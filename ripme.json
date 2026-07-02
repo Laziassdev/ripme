@@ -1,7 +1,9 @@
 {
-  "latestVersion": "2.1.265-1-9b0ebfa",
-  "currentHash": "d40d996b6d55fcd5ae3c941733f2cf001d22b3c6c4c1742a02b9a4861962dac9",
+  "latestVersion": "2.1.266-1-d840060",
+  "currentHash": "5bd062915a7b970df097b885031807b26ee6adfbb75251dc7c1ef69863e707d4",
   "changeList": [
+    "2.1.266-1-d840060: Refactor InstagramRipper to improve API request handling and error logging",
+    "2.1.266-1-d840060: Built at 2026-07-02T12:41:05Z",
     "2.1.265-1-9b0ebfa: Implement long configuration field handling in MainWindow and Utils",
     "2.1.265-1-9b0ebfa: Built at 2026-07-02T12:27:31Z",
     "2.1.264-1-5018707: Enhance MainWindow configuration with new options and improve config key management",
