@@ -1,7 +1,9 @@
 {
-  "latestVersion": "2.1.263-1-5344627",
-  "currentHash": "a6c7b390639bfe449f40d70f7c4e8ccc147783840914e08dd4c7919705e8372b",
+  "latestVersion": "2.1.264-1-5018707",
+  "currentHash": "dcfdc35f272f638867f25168d216b6dfceae878da82a46630dd1c9f4fe9ad5a5",
   "changeList": [
+    "2.1.264-1-5018707: Enhance MainWindow configuration with new options and improve config key management",
+    "2.1.264-1-5018707: Built at 2026-07-02T12:06:42Z",
     "2.1.263-1-5344627: Merge branch 'main' of https://github.com/Laziassdev/ripme",
     "2.1.263-1-5344627: Built at 2026-07-01T05:29:16Z",
     "2.1.262-1-5b64f8d: Improve error logging and response handling in BlueskyRipper and Http classes",
