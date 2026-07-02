@@ -23,9 +23,12 @@ import java.sql.Connection;
 import java.nio.file.*;
 
 import com.rarchives.ripme.ripper.AbstractJSONRipper;
+import com.rarchives.ripme.ripper.AbstractRipper;
 import com.rarchives.ripme.ui.RipStatusMessage;
 import com.rarchives.ripme.utils.DownloadLimitTracker;
+import com.rarchives.ripme.utils.FirefoxCookieUtils;
 import com.rarchives.ripme.utils.Http;
+import com.rarchives.ripme.utils.RipUtils;
 import com.rarchives.ripme.utils.Utils;
 import org.jsoup.Connection.Response;
 import java.sql.DriverManager;
@@ -39,6 +42,9 @@ public class InstagramRipper extends AbstractJSONRipper {
     private static final int WAIT_TIME = 2000;
     private static final int TIMEOUT = 20000;
     private static final int MAX_RATE_LIMIT_RETRIES = 6;
+    private static final String INSTAGRAM_APP_ID = "936619743392459";
+    /** Instagram rejects truncated or non-browser user agents with 429/403. */
+    private static final String INSTAGRAM_USER_AGENT = AbstractRipper.USER_AGENT;
     private String csrftoken = null;
     
     static {
@@ -227,10 +233,10 @@ public class InstagramRipper extends AbstractJSONRipper {
         logger.debug("Fetching API URL: " + url);
 
         try {            Response response = Http.url(url)
-                    .header("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36")
+                    .userAgent(INSTAGRAM_USER_AGENT)
                     .header("Accept", "*/*")
-                    .header("Accept-Language", "en-US,en;q=0.5")
-                    .header("X-IG-App-ID", "936619743392459")
+                    .header("Accept-Language", "en-US,en;q=0.9")
+                    .header("X-IG-App-ID", INSTAGRAM_APP_ID)
                     .header("X-Requested-With", "XMLHttpRequest")
                     .header("X-ASBD-ID", "129477")
                     .header("X-IG-WWW-Claim", "0")
@@ -385,6 +391,10 @@ public class InstagramRipper extends AbstractJSONRipper {
     }
 
     private Response executeInstagramApiRequest(String requestUrl, String referer, String actionDescription) throws IOException {
+        return executeInstagramApiRequest(requestUrl, referer, actionDescription, true);
+    }
+
+    private Response executeInstagramApiRequest(String requestUrl, String referer, String actionDescription, boolean sendCookies) throws IOException {
         IOException lastException = null;
 
         for (int attempt = 1; attempt <= MAX_RATE_LIMIT_RETRIES; attempt++) {
@@ -392,21 +402,28 @@ public class InstagramRipper extends AbstractJSONRipper {
                 Http request = Http.url(requestUrl)
                         .retries(1)
                         .ignoreHttpErrors()
-                        .header("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36")
+                        .userAgent(INSTAGRAM_USER_AGENT)
                         .header("Accept", "application/json, */*;q=0.1")
-                        .header("Accept-Language", "en-US,en;q=0.5")
-                        .header("X-IG-App-ID", "936619743392459")
-                        .header("X-Requested-With", "XMLHttpRequest")
-                        .header("X-ASBD-ID", "129477")
-                        .header("X-IG-WWW-Claim", "0")
-                        .header("X-CSRFToken", cookies.getOrDefault("csrftoken", ""))
-                        .header("Origin", "https://www.instagram.com")
-                        .header("Connection", "keep-alive")
-                        .header("Sec-Fetch-Dest", "empty")
-                        .header("Sec-Fetch-Mode", "cors")
-                        .header("Sec-Fetch-Site", "same-origin")
-                        .cookies(cookies)
+                        .header("Accept-Language", "en-US,en;q=0.9")
+                        .header("X-IG-App-ID", INSTAGRAM_APP_ID)
                         .ignoreContentType();
+
+                if (sendCookies) {
+                    request.header("X-Requested-With", "XMLHttpRequest")
+                            .header("X-ASBD-ID", "129477")
+                            .header("X-IG-WWW-Claim", cookies.getOrDefault("ig_www_claim", "0"))
+                            .header("X-CSRFToken", cookies.getOrDefault("csrftoken", ""))
+                            .header("Origin", "https://www.instagram.com")
+                            .header("Connection", "keep-alive")
+                            .header("Sec-Fetch-Dest", "empty")
+                            .header("Sec-Fetch-Mode", "cors")
+                            .header("Sec-Fetch-Site", requestUrl.contains("i.instagram.com") ? "same-site" : "same-origin")
+                            .cookies(cookies);
+                } else {
+                    request.header("Sec-Fetch-Dest", "empty")
+                            .header("Sec-Fetch-Mode", "cors")
+                            .header("Sec-Fetch-Site", "same-site");
+                }
 
                 if (referer != null && !referer.isEmpty()) {
                     request.header("Referer", referer);
@@ -417,7 +434,7 @@ public class InstagramRipper extends AbstractJSONRipper {
                 String responseBody = response.body();
                 logger.debug("Instagram API {} -> status {} (len={})", requestUrl, statusCode, responseBody != null ? responseBody.length() : 0);
                 if (statusCode >= 400) {
-                    logger.warn("Instagram API error {} -> status {} body={} ", requestUrl, statusCode, summarizeBody(responseBody));
+                    logInstagramApiError(requestUrl, statusCode, responseBody, response.headers());
                 }
 
                 if (statusCode == 429) {
@@ -433,7 +450,10 @@ public class InstagramRipper extends AbstractJSONRipper {
 
                 if (attempt < MAX_RATE_LIMIT_RETRIES && (isRateLimit || !(e instanceof HttpStatusException))) {
                     if (isRateLimit) {
-                        logger.warn("Instagram rate limited {} (attempt {}/{}). Waiting {} ms before retry.", actionDescription, attempt, MAX_RATE_LIMIT_RETRIES, waitMillis);
+                        logger.warn("Instagram returned 429 while {} (attempt {}/{}). Waiting {} ms before retry. "
+                                + "If this persists on the first attempt, verify Firefox login cookies (sessionid) "
+                                + "or set cookies.instagram.com in config.",
+                                actionDescription, attempt, MAX_RATE_LIMIT_RETRIES, waitMillis);
                     } else {
                         logger.warn("Error {} (attempt {}/{}). Waiting {} ms before retry: {}", actionDescription, attempt, MAX_RATE_LIMIT_RETRIES, waitMillis, e.getMessage());
                     }
@@ -461,15 +481,74 @@ public class InstagramRipper extends AbstractJSONRipper {
         return normalized.substring(0, Math.min(normalized.length(), 300));
     }
 
-    private String fetchUserIdFromProfile(String username) throws IOException {
-        String profileUrl = "https://www.instagram.com/api/v1/users/web_profile_info/?username=" + URLEncoder.encode(username, StandardCharsets.UTF_8);
-        Response response = executeInstagramApiRequest(profileUrl, "https://www.instagram.com/" + username + "/", "fetching profile info for " + username);
-
-        if (response.statusCode() != 200) {
-            throw new IOException("Failed to get profile info: HTTP " + response.statusCode());
+    private void logInstagramApiError(String requestUrl, int statusCode, String body, Map<String, String> headers) {
+        logger.warn("Instagram API error {} -> status {} body={}", requestUrl, statusCode, summarizeBody(body));
+        if (statusCode != 429 || headers == null) {
+            return;
         }
 
-        String jsonText = response.body();
+        String retryAfter = firstHeader(headers, "retry-after");
+        String wwwClaim = firstHeader(headers, "ig-set-www-claim", "x-ig-set-www-claim");
+        String bodySummary = summarizeBody(body);
+        if (bodySummary.equals("<null>") || bodySummary.isEmpty()) {
+            logger.warn("Empty 429 response is often bot detection or an invalid session, not a true rate limit. "
+                    + "Retry-After={} ig-set-www-claim={} hasSessionid={} hasCsrftoken={}",
+                    retryAfter, wwwClaim, hasCookie("sessionid"), hasCookie("csrftoken"));
+        } else if (bodySummary.toLowerCase(Locale.ROOT).contains("useragent")
+                || bodySummary.toLowerCase(Locale.ROOT).contains("checkpoint")
+                || bodySummary.toLowerCase(Locale.ROOT).contains("login")) {
+            logger.warn("Instagram rejected the request (auth/checkpoint), not a rate limit: {}", bodySummary);
+        }
+    }
+
+    private String firstHeader(Map<String, String> headers, String... names) {
+        for (String name : names) {
+            for (Map.Entry<String, String> entry : headers.entrySet()) {
+                if (entry.getKey() != null && entry.getKey().equalsIgnoreCase(name)) {
+                    return entry.getValue();
+                }
+            }
+        }
+        return null;
+    }
+
+    private boolean hasCookie(String name) {
+        String value = cookies.get(name);
+        return value != null && !value.isEmpty();
+    }
+
+    private String fetchUserIdFromProfile(String username) throws IOException {
+        String encodedUsername = URLEncoder.encode(username, StandardCharsets.UTF_8);
+        String profilePath = "/api/v1/users/web_profile_info/?username=" + encodedUsername;
+
+        IOException lastException = null;
+
+        try {
+            String mobileProfileUrl = "https://i.instagram.com" + profilePath;
+            Response response = executeInstagramApiRequest(mobileProfileUrl, null,
+                    "fetching profile info for " + username, false);
+            if (response.statusCode() == 200) {
+                return parseUserIdFromProfileResponse(response.body());
+            }
+            lastException = new IOException("Failed to get profile info from i.instagram.com: HTTP " + response.statusCode());
+            logger.debug("i.instagram.com profile lookup for {} returned HTTP {}", username, response.statusCode());
+        } catch (IOException e) {
+            lastException = e;
+            logger.debug("i.instagram.com profile lookup failed for {}: {}", username, e.getMessage());
+        }
+
+        String webProfileUrl = "https://www.instagram.com" + profilePath;
+        Response response = executeInstagramApiRequest(webProfileUrl, "https://www.instagram.com/" + username + "/",
+                "fetching profile info for " + username, true);
+
+        if (response.statusCode() != 200) {
+            throw new IOException("Failed to get profile info: HTTP " + response.statusCode(), lastException);
+        }
+
+        return parseUserIdFromProfileResponse(response.body());
+    }
+
+    private String parseUserIdFromProfileResponse(String jsonText) throws IOException {
         JSONObject json = new JSONObject(jsonText);
         if (!json.has("data") || !json.getJSONObject("data").has("user")) {
             throw new IOException("Invalid profile response - no user data found");
@@ -523,68 +602,52 @@ public class InstagramRipper extends AbstractJSONRipper {
     }
 
     private void extractFirefoxCookies() {
-        try {
-            String firefoxProfilePath = Utils.getConfigString("firefox.profile.path", "");
-            if (firefoxProfilePath.isEmpty()) {
-                // Try to find Firefox profile path automatically
-                String appDataPath = System.getenv("APPDATA");
-                if (appDataPath != null) {
-                    firefoxProfilePath = appDataPath + "\\Mozilla\\Firefox\\Profiles";
-                }
-            }
-            
-            if (firefoxProfilePath == null || firefoxProfilePath.isEmpty()) {
-                logger.warn("Firefox profile path not found. Cannot extract cookies.");
-                return;
-            }
-            
-            File profilesDir = new File(firefoxProfilePath);
-            if (!profilesDir.exists()) {
-                logger.warn("Firefox profiles directory does not exist: " + firefoxProfilePath);
-                return;
+        mergeConfigCookies();
+
+        if (!FirefoxCookieUtils.isSQLiteDriverAvailable()) {
+            logger.warn("SQLite JDBC driver not found. Firefox cookie authentication will not be available.");
+            return;
+        }
+
+        for (Path profilePath : FirefoxCookieUtils.discoverFirefoxProfiles()) {
+            Map<String, String> profileCookies = FirefoxCookieUtils.readCookiesFromProfile(profilePath,
+                    Arrays.asList("%instagram.com", "%.instagram.com"));
+            if (profileCookies.isEmpty()) {
+                continue;
             }
 
-            // Find the newest default profile containing cookies.sqlite
-            File newestProfile = null;
-            long newestTime = 0;
-            
-            for (File profile : profilesDir.listFiles()) {
-                if (profile.isDirectory() && profile.getName().endsWith(".default-release")) {
-                    File cookiesFile = new File(profile, "cookies.sqlite");
-                    if (cookiesFile.exists() && cookiesFile.lastModified() > newestTime) {
-                        newestProfile = profile;
-                        newestTime = cookiesFile.lastModified();
-                    }
-                }
-            }
+            cookies.putAll(profileCookies);
+            logger.info("Loaded {} Instagram cookies from Firefox profile {}", profileCookies.size(),
+                    profilePath.getFileName());
+            break;
+        }
 
-            if (newestProfile == null) {
-                logger.warn("No Firefox profile with cookies.sqlite found");
-                return;
-            }
+        if (cookies.isEmpty()) {
+            logger.warn("No Instagram cookies found in Firefox profiles.");
+        } else {
+            logCookieDiagnostics();
+        }
+    }
 
-            File cookiesDB = new File(newestProfile, "cookies.sqlite");
-            logger.info("Using cookies from: " + cookiesDB.getAbsolutePath());
-            
-            try (Connection conn = DriverManager.getConnection("jdbc:sqlite:" + cookiesDB.getAbsolutePath())) {
-                String query = "SELECT name, value FROM moz_cookies WHERE host LIKE '%.instagram.com'";
-                try (Statement stmt = conn.createStatement();
-                     ResultSet rs = stmt.executeQuery(query)) {
-                    
-                    while (rs.next()) {
-                        String name = rs.getString("name");
-                        String value = rs.getString("value");
-                        cookies.put(name, value);
-                        logger.debug("Extracted cookie: " + name + "=" + value.substring(0, Math.min(value.length(), 20)) + "...");
-                    }
-                }
-                
-                logger.info("Successfully extracted " + cookies.size() + " cookies from Firefox");
-            } catch (SQLException e) {
-                logger.error("Error reading Firefox cookies: " + e.getMessage());
+    private void mergeConfigCookies() {
+        for (String domain : Arrays.asList("www.instagram.com", "instagram.com")) {
+            String configCookies = Utils.getConfigString("cookies." + domain, "");
+            if (configCookies == null || configCookies.isBlank()) {
+                continue;
             }
-        } catch (Exception e) {
-            logger.error("Error extracting Firefox cookies: " + e.getMessage(), e);
+            cookies.putAll(RipUtils.getCookiesFromString(configCookies.trim()));
+            logger.info("Loaded Instagram cookies from config (cookies.{})", domain);
+        }
+    }
+
+    private void logCookieDiagnostics() {
+        logger.info("Instagram cookie check: sessionid={} csrftoken={} ds_user_id={} ({} cookies total)",
+                hasCookie("sessionid"), hasCookie("csrftoken"), hasCookie("ds_user_id"), cookies.size());
+        if (!hasCookie("sessionid")) {
+            logger.warn("No sessionid cookie found. Log into Instagram in Firefox before ripping private profiles.");
+        }
+        if (!hasCookie("csrftoken")) {
+            logger.warn("No csrftoken cookie found. Open instagram.com in Firefox once to refresh cookies.");
         }
     }    
     @Override
