@@ -159,6 +159,10 @@ public class Utils {
         return config.getInt(key, defaultValue);
     }
 
+    public static long getConfigLong(String key, long defaultValue) {
+        return config.getLong(key, defaultValue);
+    }
+
     public static boolean getConfigBoolean(String key, boolean defaultValue) {
         return config.getBoolean(key, defaultValue);
     }
@@ -210,6 +214,10 @@ public class Utils {
     }
 
     public static void setConfigInteger(String key, int value) {
+        config.setProperty(key, value);
+    }
+
+    public static void setConfigLong(String key, long value) {
         config.setProperty(key, value);
     }
 

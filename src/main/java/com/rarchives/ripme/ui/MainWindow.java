@@ -1368,6 +1368,40 @@ public final class MainWindow implements Runnable, RipStatusHandler {
         return field;
     }
 
+    private JTextField configLongField(String key, long defaultValue) {
+        final var field = new JTextField(Long.toString(Utils.getConfigLong(key, defaultValue)));
+        field.setColumns(12);
+        field.getDocument().addDocumentListener(new DocumentListener() {
+            @Override
+            public void insertUpdate(DocumentEvent e) {
+                checkAndUpdate();
+            }
+
+            @Override
+            public void removeUpdate(DocumentEvent e) {
+                checkAndUpdate();
+            }
+
+            @Override
+            public void changedUpdate(DocumentEvent e) {
+                checkAndUpdate();
+            }
+
+            private void checkAndUpdate() {
+                final var txt = field.getText();
+                try {
+                    final var newValue = Long.parseLong(txt);
+                    if (newValue > 0) {
+                        Utils.setConfigLong(key, newValue);
+                    }
+                } catch (final Exception e) {
+                    LOGGER.warn(e.getMessage());
+                }
+            }
+        });
+        return field;
+    }
+
     private static String getConfigLabel(String key) {
         try {
             return Utils.getLocalizedString(key);
@@ -1391,7 +1425,7 @@ public final class MainWindow implements Runnable, RipStatusHandler {
         GridBagConstraints gbc = newConfigGridBagConstraints();
         int row = 0;
         row = addConfigLabelFieldRow(panel, gbc, row, "page.timeout", configField("page.timeout", 5000));
-        row = addConfigLabelFieldRow(panel, gbc, row, "download.max_size", configField("download.max_size", 104857600));
+        row = addConfigLabelFieldRow(panel, gbc, row, "download.max_size", configLongField("download.max_size", 104857600L));
         row = addConfigLabelFieldRow(panel, gbc, row, "maxdownloads", configField("maxdownloads", 250));
         row = addConfigCheckBoxPairRow(panel, gbc, row, "error.skip404", false, "download.allow_duplicates", false);
         row = addConfigLabelFieldRow(panel, gbc, row, "errors.consecutive_http.failures",
