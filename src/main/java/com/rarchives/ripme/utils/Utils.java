@@ -181,6 +181,26 @@ public class Utils {
         return keys;
     }
 
+    /**
+     * Returns config keys from the active config merged with bundled defaults so
+     * newly added properties appear in the UI even when absent from an older file.
+     */
+    public static List<String> getMergedConfigKeys() {
+        LinkedHashSet<String> keys = new LinkedHashSet<>();
+        try {
+            PropertiesConfiguration defaults = new PropertiesConfiguration(CONFIG_FILE);
+            for (Iterator<String> it = defaults.getKeys(); it.hasNext();) {
+                keys.add(it.next());
+            }
+        } catch (ConfigurationException e) {
+            LOGGER.warn("Failed to load default config keys", e);
+        }
+        keys.addAll(getConfigKeys());
+        List<String> sorted = new ArrayList<>(keys);
+        Collections.sort(sorted);
+        return sorted;
+    }
+
     public static void setConfigBoolean(String key, boolean value) {
         config.setProperty(key, value);
     }

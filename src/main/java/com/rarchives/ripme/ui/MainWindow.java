@@ -29,6 +29,7 @@ import java.util.LinkedHashMap;
 import java.util.Locale;
 import java.util.Set;
 import java.util.Map;
+import java.util.MissingResourceException;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
@@ -72,13 +73,23 @@ public final class MainWindow implements Runnable, RipStatusHandler {
 
     private static final Logger LOGGER = LogManager.getLogger(MainWindow.class);
 
-    private static final Set<String> MAIN_CONFIG_KEYS = new HashSet<>(Arrays.asList(
+    private static final Set<String> MANAGED_CONFIG_KEYS = new HashSet<>(Arrays.asList(
             "threads.size", "download.timeout", "download.retries", "download.retry.sleep", "file.overwrite",
             "auto.update", "play.sound", "download.show_popup", "download.save_order", "log.save",
             "urls_only.save", "album_titles.save", "clipboard.autorip", "descriptions.save", "prefer.mp4",
-            "coomer.download.videos",
+            "coomer.download.videos", "coomer.enabled",
             "window.position", "remember.url_history", "ssl.verify.off", "lang", "log.level",
-            "rips.directory"));
+            "rips.directory",
+            "page.timeout", "download.max_size", "maxdownloads", "error.skip404",
+            "errors.consecutive_http.failures",
+            "reddit.rip_by_upvote", "reddit.min_upvotes", "reddit.max_upvotes", "reddit.use_sub_dirs",
+            "facebook.photos_doc_id", "facebook.photos_query_name", "facebook.photos_page_size",
+            "facebook.max_listing_pages", "facebook.max_photo_pages", "facebook.photo_page_delay_ms",
+            "deviantart.firefox.cookies",
+            "twitter.auth", "twitter.access_token", "twitter.max_requests", "twitter.rip_retweets",
+            "twitter.exclude_replies", "tumblr.auth", "gw.api",
+            "proxy.http", "proxy.socks", "download.allow_duplicates",
+            "bluesky.username", "bluesky.apppassword"));
 
     /* not static! */
     private boolean isRipping = false; // Flag to indicate if we're ripping something
@@ -138,10 +149,7 @@ public final class MainWindow implements Runnable, RipStatusHandler {
     private static JPanel configurationPanel;
     private static JPanel configMainPanel;
     private static JPanel configOtherPanel;
-    private static JPanel configCards;
-    private static JButton configBackButton;
-    private static JButton configNextButton;
-    private static CardLayout configCardLayout;
+    private static JTabbedPane configTabbedPane;
     private static JButton configUpdateButton;
     private static JLabel configUpdateLabel;
     private static JTextField configTimeoutText;
@@ -168,6 +176,7 @@ public final class MainWindow implements Runnable, RipStatusHandler {
     private static JCheckBox configSaveDescriptions;
     private static JCheckBox configPreferMp4;
     private static JCheckBox configCoomerDownloadVideos;
+    private static JCheckBox configCoomerEnabled;
     private static JCheckBox configWindowPosition;
     private static JComboBox<String> configSelectLangComboBox;
     private static JLabel configThreadsLabel;
@@ -714,6 +723,7 @@ public final class MainWindow implements Runnable, RipStatusHandler {
         Utils.setConfigBoolean("clipboard.autorip", configClipboardAutorip.isSelected());
         Utils.setConfigBoolean("descriptions.save", configSaveDescriptions.isSelected());
         Utils.setConfigBoolean("prefer.mp4", configPreferMp4.isSelected());
+        Utils.setConfigBoolean("coomer.enabled", configCoomerEnabled.isSelected());
         Utils.setConfigBoolean("coomer.download.videos", configCoomerDownloadVideos.isSelected());
         Utils.setConfigBoolean("remember.url_history", configURLHistoryCheckbox.isSelected());
         Utils.setConfigBoolean("ssl.verify.off", configSSLVerifyOff.isSelected());
@@ -1219,6 +1229,7 @@ public final class MainWindow implements Runnable, RipStatusHandler {
         configSaveDescriptions = addNewCheckbox(Utils.getLocalizedString("save.descriptions"), "descriptions.save",
                 true);
         configPreferMp4 = addNewCheckbox(Utils.getLocalizedString("prefer.mp4.over.gif"), "prefer.mp4", false);
+        configCoomerEnabled = addNewCheckbox(Utils.getLocalizedString("coomer.enabled"), "coomer.enabled", false);
         configCoomerDownloadVideos = addNewCheckbox(Utils.getLocalizedString("coomer.download.videos"),
                 "coomer.download.videos", true);
         configWindowPosition = addNewCheckbox(Utils.getLocalizedString("restore.window.position"), "window.position",
@@ -1267,7 +1278,8 @@ public final class MainWindow implements Runnable, RipStatusHandler {
         addItemToConfigGridBagConstraints(configGbc, idx++, configClipboardAutorip, configSaveAlbumTitles);
         addItemToConfigGridBagConstraints(configGbc, idx++, configSaveDescriptions, configPreferMp4);
         addItemToConfigGridBagConstraints(configGbc, idx++, configWindowPosition, configURLHistoryCheckbox);
-        addItemToConfigGridBagConstraints(configGbc, idx++, configSSLVerifyOff, configCoomerDownloadVideos);
+        addItemToConfigGridBagConstraints(configGbc, idx++, configCoomerEnabled, configCoomerDownloadVideos);
+        addItemToConfigGridBagConstraints(configGbc, idx++, configSSLVerifyOff);
         addItemToConfigGridBagConstraints(configGbc, idx++, configSelectLangComboBox, configUrlFileChooserButton);
         addItemToConfigGridBagConstraints(configGbc, idx++, configSaveDirLabel, configSaveDirButton);
         configGbc.gridx = 0;
@@ -1278,62 +1290,20 @@ public final class MainWindow implements Runnable, RipStatusHandler {
         configGbc.fill = GridBagConstraints.BOTH;
         configMainPanel.add(new JPanel(), configGbc);
 
-        configOtherPanel = new JPanel(new GridBagLayout());
-        configOtherPanel.setBorder(emptyBorder);
+        configOtherPanel = buildOtherConfigPanel(emptyBorder);
 
-        GridBagConstraints otherGbc = new GridBagConstraints();
-        otherGbc.insets = new Insets(2, 2, 2, 2);
-        otherGbc.fill = GridBagConstraints.HORIZONTAL;
-        otherGbc.gridy = 0;
-        for (String key : Utils.getConfigKeys()) {
-            if (MAIN_CONFIG_KEYS.contains(key)) {
-                continue;
-            }
-            JLabel lbl = new JLabel(key, JLabel.RIGHT);
-            JTextField field = new JTextField(Utils.getConfigString(key, ""));
-            field.getDocument().addDocumentListener(new DocumentListener() {
-                @Override public void insertUpdate(DocumentEvent e) { Utils.setConfigString(key, field.getText()); }
-                @Override public void removeUpdate(DocumentEvent e) { Utils.setConfigString(key, field.getText()); }
-                @Override public void changedUpdate(DocumentEvent e) { Utils.setConfigString(key, field.getText()); }
-            });
-            field.setColumns(24);
-            otherGbc.gridx = 0;
-            otherGbc.weightx = 0;
-            configOtherPanel.add(lbl, otherGbc);
-            otherGbc.gridx = 1;
-            otherGbc.weightx = 1;
-            configOtherPanel.add(field, otherGbc);
-            otherGbc.gridy++;
-        }
-
-        configCardLayout = new CardLayout();
-        configCards = new JPanel(configCardLayout);
-        configCards.add(configMainPanel, "main");
-        configCards.add(configOtherPanel, "other");
-
-        configBackButton = new JButton("Back");
-        configNextButton = new JButton("Next");
-        configBackButton.setEnabled(false);
-        configBackButton.addActionListener(e -> {
-            configCardLayout.show(configCards, "main");
-            configBackButton.setEnabled(false);
-            configNextButton.setEnabled(true);
-        });
-        configNextButton.addActionListener(e -> {
-            configCardLayout.show(configCards, "other");
-            configBackButton.setEnabled(true);
-            configNextButton.setEnabled(false);
-        });
-
-        JPanel configNavPanel = new JPanel();
-        configNavPanel.add(configBackButton);
-        configNavPanel.add(configNextButton);
+        configTabbedPane = new JTabbedPane();
+        configTabbedPane.addTab(Utils.getLocalizedString("config.tab.general"), scrollableConfigPanel(configMainPanel));
+        configTabbedPane.addTab(Utils.getLocalizedString("config.tab.downloads"), scrollableConfigPanel(buildDownloadsConfigPanel(emptyBorder)));
+        configTabbedPane.addTab(Utils.getLocalizedString("config.tab.reddit"), scrollableConfigPanel(buildRedditConfigPanel(emptyBorder)));
+        configTabbedPane.addTab(Utils.getLocalizedString("config.tab.sites"), scrollableConfigPanel(buildSitesConfigPanel(emptyBorder)));
+        configTabbedPane.addTab(Utils.getLocalizedString("config.tab.api"), scrollableConfigPanel(buildApiConfigPanel(emptyBorder)));
+        configTabbedPane.addTab(Utils.getLocalizedString("config.tab.other"), scrollableConfigPanel(configOtherPanel));
 
         configurationPanel = new JPanel(new BorderLayout());
         configurationPanel.setBorder(emptyBorder);
         configurationPanel.setVisible(false);
-        configurationPanel.add(configCards, BorderLayout.CENTER);
-        configurationPanel.add(configNavPanel, BorderLayout.SOUTH);
+        configurationPanel.add(configTabbedPane, BorderLayout.CENTER);
 
         emptyPanel = new JPanel();
         emptyPanel.setPreferredSize(new Dimension(0, 0));
@@ -1394,6 +1364,188 @@ public final class MainWindow implements Runnable, RipStatusHandler {
                     LOGGER.warn(e.getMessage());
                 }
             }
+        });
+        return field;
+    }
+
+    private static String getConfigLabel(String key) {
+        try {
+            return Utils.getLocalizedString(key);
+        } catch (MissingResourceException e) {
+            return key;
+        }
+    }
+
+    private static JPanel scrollableConfigPanel(JPanel content) {
+        JScrollPane scroll = new JScrollPane(content);
+        scroll.setBorder(null);
+        scroll.getVerticalScrollBar().setUnitIncrement(16);
+        JPanel wrapper = new JPanel(new BorderLayout());
+        wrapper.add(scroll, BorderLayout.CENTER);
+        return wrapper;
+    }
+
+    private JPanel buildDownloadsConfigPanel(EmptyBorder emptyBorder) {
+        JPanel panel = new JPanel(new GridBagLayout());
+        panel.setBorder(emptyBorder);
+        GridBagConstraints gbc = newConfigGridBagConstraints();
+        int row = 0;
+        row = addConfigLabelFieldRow(panel, gbc, row, "page.timeout", configField("page.timeout", 5000));
+        row = addConfigLabelFieldRow(panel, gbc, row, "download.max_size", configField("download.max_size", 104857600));
+        row = addConfigLabelFieldRow(panel, gbc, row, "maxdownloads", configField("maxdownloads", 250));
+        row = addConfigCheckBoxPairRow(panel, gbc, row, "error.skip404", false, "download.allow_duplicates", false);
+        row = addConfigLabelFieldRow(panel, gbc, row, "errors.consecutive_http.failures",
+                configField("errors.consecutive_http.failures", 50));
+        addConfigFiller(panel, gbc, row);
+        return panel;
+    }
+
+    private JPanel buildRedditConfigPanel(EmptyBorder emptyBorder) {
+        JPanel panel = new JPanel(new GridBagLayout());
+        panel.setBorder(emptyBorder);
+        GridBagConstraints gbc = newConfigGridBagConstraints();
+        int row = 0;
+        row = addConfigCheckBoxPairRow(panel, gbc, row, "reddit.rip_by_upvote", false, null, null);
+        row = addConfigLabelFieldRow(panel, gbc, row, "reddit.min_upvotes", configField("reddit.min_upvotes", 0));
+        row = addConfigLabelFieldRow(panel, gbc, row, "reddit.max_upvotes", configField("reddit.max_upvotes", 10000));
+        row = addConfigCheckBoxPairRow(panel, gbc, row, "reddit.use_sub_dirs", true, null, null);
+        addConfigFiller(panel, gbc, row);
+        return panel;
+    }
+
+    private JPanel buildSitesConfigPanel(EmptyBorder emptyBorder) {
+        JPanel panel = new JPanel(new GridBagLayout());
+        panel.setBorder(emptyBorder);
+        GridBagConstraints gbc = newConfigGridBagConstraints();
+        int row = 0;
+        row = addConfigLabelFieldRow(panel, gbc, row, "facebook.photos_doc_id",
+                configStringField("facebook.photos_doc_id", "27028962643386672"));
+        row = addConfigLabelFieldRow(panel, gbc, row, "facebook.photos_query_name",
+                configStringField("facebook.photos_query_name", "ProfileCometAppCollectionPhotosRendererPaginationQuery"));
+        row = addConfigLabelFieldRow(panel, gbc, row, "facebook.photos_page_size",
+                configField("facebook.photos_page_size", 8));
+        row = addConfigLabelFieldRow(panel, gbc, row, "facebook.max_listing_pages",
+                configField("facebook.max_listing_pages", 400));
+        row = addConfigLabelFieldRow(panel, gbc, row, "facebook.max_photo_pages",
+                configField("facebook.max_photo_pages", 1000));
+        row = addConfigLabelFieldRow(panel, gbc, row, "facebook.photo_page_delay_ms",
+                configField("facebook.photo_page_delay_ms", 300));
+        row = addConfigCheckBoxPairRow(panel, gbc, row, "deviantart.firefox.cookies", true, null, null);
+        addConfigFiller(panel, gbc, row);
+        return panel;
+    }
+
+    private JPanel buildApiConfigPanel(EmptyBorder emptyBorder) {
+        JPanel panel = new JPanel(new GridBagLayout());
+        panel.setBorder(emptyBorder);
+        GridBagConstraints gbc = newConfigGridBagConstraints();
+        int row = 0;
+        row = addConfigLabelFieldRow(panel, gbc, row, "twitter.auth", configStringField("twitter.auth", ""));
+        row = addConfigLabelFieldRow(panel, gbc, row, "twitter.access_token", configStringField("twitter.access_token", ""));
+        row = addConfigLabelFieldRow(panel, gbc, row, "twitter.max_requests", configField("twitter.max_requests", 10));
+        row = addConfigCheckBoxPairRow(panel, gbc, row, "twitter.rip_retweets", false, "twitter.exclude_replies", true);
+        row = addConfigLabelFieldRow(panel, gbc, row, "tumblr.auth", configStringField("tumblr.auth", ""));
+        row = addConfigLabelFieldRow(panel, gbc, row, "gw.api", configStringField("gw.api", "gonewild"));
+        row = addConfigLabelFieldRow(panel, gbc, row, "proxy.http", configStringField("proxy.http", ""));
+        row = addConfigLabelFieldRow(panel, gbc, row, "proxy.socks", configStringField("proxy.socks", ""));
+        row = addConfigLabelFieldRow(panel, gbc, row, "bluesky.username", configStringField("bluesky.username", ""));
+        row = addConfigLabelFieldRow(panel, gbc, row, "bluesky.apppassword", configStringField("bluesky.apppassword", ""));
+        addConfigFiller(panel, gbc, row);
+        return panel;
+    }
+
+    private JPanel buildOtherConfigPanel(EmptyBorder emptyBorder) {
+        JPanel panel = new JPanel(new GridBagLayout());
+        panel.setBorder(emptyBorder);
+        GridBagConstraints gbc = newConfigGridBagConstraints();
+        int row = 0;
+        for (String key : Utils.getMergedConfigKeys()) {
+            if (MANAGED_CONFIG_KEYS.contains(key)) {
+                continue;
+            }
+            String value = Utils.getConfigString(key, "");
+            gbc.gridy = row++;
+            gbc.gridx = 0;
+            gbc.weightx = 0;
+            panel.add(new JLabel(key, JLabel.RIGHT), gbc);
+            gbc.gridx = 1;
+            gbc.weightx = 1;
+            if ("true".equalsIgnoreCase(value) || "false".equalsIgnoreCase(value)) {
+                JCheckBox checkbox = new JCheckBox("", Utils.getConfigBoolean(key, false));
+                checkbox.addActionListener(e -> Utils.setConfigBoolean(key, checkbox.isSelected()));
+                panel.add(checkbox, gbc);
+            } else {
+                JTextField field = new JTextField(value);
+                field.setColumns(24);
+                field.getDocument().addDocumentListener(new DocumentListener() {
+                    @Override public void insertUpdate(DocumentEvent e) { Utils.setConfigString(key, field.getText()); }
+                    @Override public void removeUpdate(DocumentEvent e) { Utils.setConfigString(key, field.getText()); }
+                    @Override public void changedUpdate(DocumentEvent e) { Utils.setConfigString(key, field.getText()); }
+                });
+                panel.add(field, gbc);
+            }
+        }
+        addConfigFiller(panel, gbc, row);
+        return panel;
+    }
+
+    private static GridBagConstraints newConfigGridBagConstraints() {
+        GridBagConstraints gbc = new GridBagConstraints();
+        gbc.insets = new Insets(2, 2, 2, 2);
+        gbc.fill = GridBagConstraints.HORIZONTAL;
+        gbc.anchor = GridBagConstraints.LINE_START;
+        gbc.weighty = 0;
+        return gbc;
+    }
+
+    private int addConfigLabelFieldRow(JPanel panel, GridBagConstraints gbc, int row, String key, JTextField field) {
+        gbc.gridy = row;
+        gbc.gridx = 0;
+        gbc.weightx = 0;
+        panel.add(new JLabel(getConfigLabel(key), JLabel.RIGHT), gbc);
+        gbc.gridx = 1;
+        gbc.weightx = 1;
+        panel.add(field, gbc);
+        return row + 1;
+    }
+
+    private int addConfigCheckBoxPairRow(JPanel panel, GridBagConstraints gbc, int row, String leftKey,
+            boolean leftDefault, String rightKey, Boolean rightDefault) {
+        gbc.gridy = row;
+        gbc.gridwidth = 1;
+        gbc.gridx = 0;
+        gbc.weightx = 1;
+        JCheckBox left = addNewCheckbox(getConfigLabel(leftKey), leftKey, leftDefault);
+        addCheckboxListener(left, leftKey);
+        panel.add(left, gbc);
+        gbc.gridx = 1;
+        if (rightKey != null) {
+            JCheckBox right = addNewCheckbox(getConfigLabel(rightKey), rightKey, rightDefault);
+            addCheckboxListener(right, rightKey);
+            panel.add(right, gbc);
+        } else {
+            panel.add(new JPanel(), gbc);
+        }
+        return row + 1;
+    }
+
+    private static void addConfigFiller(JPanel panel, GridBagConstraints gbc, int row) {
+        gbc.gridx = 0;
+        gbc.gridy = row;
+        gbc.gridwidth = 2;
+        gbc.weightx = 1;
+        gbc.weighty = 1;
+        gbc.fill = GridBagConstraints.BOTH;
+        panel.add(new JPanel(), gbc);
+    }
+
+    private JTextField configStringField(String key, String defaultValue) {
+        final var field = new JTextField(Utils.getConfigString(key, defaultValue));
+        field.setColumns(24);
+        field.getDocument().addDocumentListener(new DocumentListener() {
+            @Override public void insertUpdate(DocumentEvent e) { Utils.setConfigString(key, field.getText()); }
+            @Override public void removeUpdate(DocumentEvent e) { Utils.setConfigString(key, field.getText()); }
+            @Override public void changedUpdate(DocumentEvent e) { Utils.setConfigString(key, field.getText()); }
         });
         return field;
     }
@@ -1465,6 +1617,14 @@ public final class MainWindow implements Runnable, RipStatusHandler {
         configMainPanel.add(thing2ToAdd, gbc);
     }
 
+    private void addItemToConfigGridBagConstraints(GridBagConstraints gbc, int gbcYValue, JCheckBox thing1ToAdd) {
+        gbc.gridy = gbcYValue;
+        gbc.gridx = 0;
+        gbc.gridwidth = 2;
+        gbc.weightx = 1;
+        configMainPanel.add(thing1ToAdd, gbc);
+    }
+
     @SuppressWarnings({ "unused", "rawtypes" })
     private void addItemToConfigGridBagConstraints(GridBagConstraints gbc, int gbcYValue, JComboBox thing1ToAdd) {
         gbc.gridy = gbcYValue;
@@ -1492,10 +1652,19 @@ public final class MainWindow implements Runnable, RipStatusHandler {
         configUrlFileChooserButton.setText(Utils.getLocalizedString("download.url.list"));
         configSaveDirButton.setText(Utils.getLocalizedString("select.save.dir") + "...");
         configPreferMp4.setText(Utils.getLocalizedString("prefer.mp4.over.gif"));
+        configCoomerEnabled.setText(Utils.getLocalizedString("coomer.enabled"));
         configCoomerDownloadVideos.setText(Utils.getLocalizedString("coomer.download.videos"));
         configWindowPosition.setText(Utils.getLocalizedString("restore.window.position"));
         configURLHistoryCheckbox.setText(Utils.getLocalizedString("remember.url.history"));
         configSSLVerifyOff.setText(Utils.getLocalizedString("ssl.verify.off"));
+        if (configTabbedPane != null) {
+            configTabbedPane.setTitleAt(0, Utils.getLocalizedString("config.tab.general"));
+            configTabbedPane.setTitleAt(1, Utils.getLocalizedString("config.tab.downloads"));
+            configTabbedPane.setTitleAt(2, Utils.getLocalizedString("config.tab.reddit"));
+            configTabbedPane.setTitleAt(3, Utils.getLocalizedString("config.tab.sites"));
+            configTabbedPane.setTitleAt(4, Utils.getLocalizedString("config.tab.api"));
+            configTabbedPane.setTitleAt(5, Utils.getLocalizedString("config.tab.other"));
+        }
         optionLog.setText(Utils.getLocalizedString("Log"));
         optionHistory.setText(Utils.getLocalizedString("History"));
         optionQueue.setText(Utils.getLocalizedString("queue"));
@@ -1652,9 +1821,7 @@ public final class MainWindow implements Runnable, RipStatusHandler {
             optionQueue.setFont(optionLog.getFont().deriveFont(Font.PLAIN));
             optionActive.setFont(optionLog.getFont().deriveFont(Font.PLAIN));
             if (configurationPanel.isVisible()) {
-                configCardLayout.show(configCards, "main");
-                configBackButton.setEnabled(false);
-                configNextButton.setEnabled(true);
+                configTabbedPane.setSelectedIndex(0);
                 optionConfiguration.setFont(optionLog.getFont().deriveFont(Font.BOLD));
             } else {
                 optionConfiguration.setFont(optionLog.getFont().deriveFont(Font.PLAIN));
@@ -1844,6 +2011,7 @@ public final class MainWindow implements Runnable, RipStatusHandler {
         addCheckboxListener(configSaveAlbumTitles, "album_titles.save");
         addCheckboxListener(configSaveDescriptions, "descriptions.save");
         addCheckboxListener(configPreferMp4, "prefer.mp4");
+        addCheckboxListener(configCoomerEnabled, "coomer.enabled");
         addCheckboxListener(configCoomerDownloadVideos, "coomer.download.videos");
         addCheckboxListener(configWindowPosition, "window.position");
 
