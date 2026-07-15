@@ -27,6 +27,7 @@ import org.apache.logging.log4j.Logger;
 import org.json.JSONArray;
 import org.json.JSONException;
 import org.json.JSONObject;
+import org.jsoup.Connection;
 import org.jsoup.HttpStatusException;
 
 import com.rarchives.ripme.ripper.AbstractJSONRipper;
@@ -55,7 +56,17 @@ public class TwitterRipper extends AbstractJSONRipper {
 
     public static final String DEFAULT_QUERY_USER_BY_SCREEN_NAME = "xc8f1g7BYqr6VTzTbvNlGw";
     public static final String DEFAULT_QUERY_USER_TWEETS = "2GIWTr7XwadIixZDtyXd4A";
-    public static final String DEFAULT_QUERY_SEARCH_TIMELINE = "NA567V_8AFwu0cZEkAAKcw";
+    /** Current SearchTimeline id (twikit Apr 2026). Older TumblThree id NA567V… now 404s. */
+    public static final String DEFAULT_QUERY_SEARCH_TIMELINE = "R0u1RWRf748KzyGBXvOYRA";
+
+    /** Fallback SearchTimeline query IDs tried on HTTP 404 (X rotates these). */
+    private static final String[] SEARCH_TIMELINE_QUERY_FALLBACKS = {
+            "R0u1RWRf748KzyGBXvOYRA",
+            "ML-n2SfAxx5S_9QMqNejbg",
+            "M1jEez78PEfVfbQLvlWMvQ",
+            "4fpceYZ6-YQCx_JSl_Cn_A",
+            "NA567V_8AFwu0cZEkAAKcw"
+    };
 
     private static final String FEATURES_USER_BY_SCREEN_NAME =
             "%7B%22hidden_profile_likes_enabled%22%3Afalse%2C%22hidden_profile_subscriptions_enabled%22%3Afalse%2C"
@@ -85,6 +96,49 @@ public class TwitterRipper extends AbstractJSONRipper {
 
     private static final String FIELD_TOGGLES_TIMELINE =
             "%7B%22withAuxiliaryUserLabels%22%3Afalse%2C%22withArticleRichContentState%22%3Afalse%7D";
+
+    /** Feature flags for SearchTimeline POST (from twikit SEARCH_TIMELINE_FEATURES). */
+    private static final JSONObject FEATURES_SEARCH_TIMELINE = new JSONObject()
+            .put("rweb_video_screen_enabled", false)
+            .put("rweb_cashtags_enabled", true)
+            .put("profile_label_improvements_pcf_label_in_post_enabled", true)
+            .put("responsive_web_profile_redirect_enabled", false)
+            .put("rweb_tipjar_consumption_enabled", false)
+            .put("verified_phone_label_enabled", false)
+            .put("creator_subscriptions_tweet_preview_api_enabled", true)
+            .put("responsive_web_graphql_timeline_navigation_enabled", true)
+            .put("responsive_web_graphql_skip_user_profile_image_extensions_enabled", false)
+            .put("premium_content_api_read_enabled", false)
+            .put("communities_web_enable_tweet_community_results_fetch", true)
+            .put("c9s_tweet_anatomy_moderator_badge_enabled", true)
+            .put("responsive_web_grok_analyze_button_fetch_trends_enabled", false)
+            .put("responsive_web_grok_analyze_post_followups_enabled", true)
+            .put("responsive_web_jetfuel_frame", true)
+            .put("responsive_web_grok_share_attachment_enabled", true)
+            .put("responsive_web_grok_annotations_enabled", true)
+            .put("articles_preview_enabled", true)
+            .put("responsive_web_edit_tweet_api_enabled", true)
+            .put("graphql_is_translatable_rweb_tweet_is_translatable_enabled", true)
+            .put("view_counts_everywhere_api_enabled", true)
+            .put("longform_notetweets_consumption_enabled", true)
+            .put("responsive_web_twitter_article_tweet_consumption_enabled", true)
+            .put("content_disclosure_indicator_enabled", true)
+            .put("content_disclosure_ai_generated_indicator_enabled", true)
+            .put("responsive_web_grok_show_grok_translated_post", true)
+            .put("responsive_web_grok_analysis_button_from_backend", true)
+            .put("post_ctas_fetch_enabled", true)
+            .put("freedom_of_speech_not_reach_fetch_enabled", true)
+            .put("standardized_nudges_misinfo", true)
+            .put("tweet_with_visibility_results_prefer_gql_limited_actions_policy_enabled", true)
+            .put("longform_notetweets_rich_text_read_enabled", true)
+            .put("longform_notetweets_inline_media_enabled", false)
+            .put("responsive_web_grok_image_annotation_enabled", true)
+            .put("responsive_web_grok_imagine_annotation_enabled", true)
+            .put("responsive_web_grok_community_note_auto_translation_is_enabled", true)
+            .put("responsive_web_enhance_cards_enabled", false);
+
+    private static final JSONObject FIELD_TOGGLES_SEARCH = new JSONObject()
+            .put("withArticleRichContentState", false);
 
     private static final DateTimeFormatter TWITTER_DATE =
             DateTimeFormatter.ofPattern("EEE MMM dd HH:mm:ss Z yyyy", Locale.US);
@@ -241,6 +295,7 @@ public class TwitterRipper extends AbstractJSONRipper {
                     .header("User-Agent", AbstractRipper.USER_AGENT)
                     .header("Origin", "https://x.com")
                     .header("x-twitter-active-user", "yes")
+                    .header("x-twitter-auth-type", "OAuth2Session")
                     .header("x-twitter-client-language", "en");
             if (referer != null && !referer.isEmpty()) {
                 http = http.referrer(referer);
@@ -313,18 +368,106 @@ public class TwitterRipper extends AbstractJSONRipper {
                 + "&fieldToggles=" + FIELD_TOGGLES_TIMELINE;
     }
 
-    private String buildSearchTimelineUrl(String rawQuery, String cursorValue) {
-        String qid = queryId("twitter.graphql.search_timeline", DEFAULT_QUERY_SEARCH_TIMELINE);
-        StringBuilder variables = new StringBuilder();
-        variables.append("{\"rawQuery\":\"").append(escapeJson(rawQuery)).append("\"");
-        variables.append(",\"count\":").append(PAGE_SIZE);
+    private JSONObject buildSearchTimelineVariables(String rawQuery, String cursorValue) {
+        JSONObject variables = new JSONObject();
+        variables.put("rawQuery", rawQuery);
+        variables.put("count", PAGE_SIZE);
+        variables.put("querySource", "typed_query");
+        variables.put("product", "Latest");
+        variables.put("withGrokTranslatedBio", true);
         if (cursorValue != null && !cursorValue.isEmpty()) {
-            variables.append(",\"cursor\":\"").append(escapeJson(cursorValue)).append("\"");
+            variables.put("cursor", cursorValue);
         }
-        variables.append(",\"product\":\"Latest\"}");
-        return GRAPHQL_BASE + "/" + qid + "/SearchTimeline?variables=" + urlEncode(variables.toString())
-                + "&features=" + FEATURES_TIMELINE
-                + "&fieldToggles=" + FIELD_TOGGLES_TIMELINE;
+        return variables;
+    }
+
+    /**
+     * Posts SearchTimeline GraphQL. X currently returns 404 for GET on this operation;
+     * also retries alternate query IDs when the configured one is stale.
+     */
+    private JSONObject fetchSearchTimeline(String rawQuery, String cursorValue, String referer) throws IOException {
+        List<String> candidates = new ArrayList<>();
+        String configured = queryId("twitter.graphql.search_timeline", DEFAULT_QUERY_SEARCH_TIMELINE);
+        candidates.add(configured);
+        for (String fallback : SEARCH_TIMELINE_QUERY_FALLBACKS) {
+            if (!candidates.contains(fallback)) {
+                candidates.add(fallback);
+            }
+        }
+
+        JSONObject variables = buildSearchTimelineVariables(rawQuery, cursorValue);
+        IOException lastError = null;
+        for (String qid : candidates) {
+            String url = GRAPHQL_BASE + "/" + qid + "/SearchTimeline";
+            try {
+                JSONObject response = graphqlPost(url, qid, variables, FEATURES_SEARCH_TIMELINE,
+                        FIELD_TOGGLES_SEARCH, referer);
+                if (!configured.equals(qid)) {
+                    logger.info("SearchTimeline succeeded with query id {} (configured id was stale)", qid);
+                }
+                return response;
+            } catch (IOException e) {
+                lastError = e;
+                Throwable cause = e.getCause();
+                int status = cause instanceof HttpStatusException
+                        ? ((HttpStatusException) cause).getStatusCode()
+                        : -1;
+                if (status == 404) {
+                    logger.warn("SearchTimeline query id {} returned HTTP 404; trying next id", qid);
+                    continue;
+                }
+                throw e;
+            }
+        }
+        throw lastError != null ? lastError
+                : new IOException("SearchTimeline failed for all known query ids");
+    }
+
+    private JSONObject graphqlPost(String url, String queryId, JSONObject variables, JSONObject features,
+            JSONObject fieldToggles, String referer) throws IOException {
+        currentRequest++;
+        logger.info("    Retrieving POST " + url);
+        try {
+            JSONObject body = new JSONObject();
+            body.put("variables", variables);
+            body.put("features", features);
+            body.put("queryId", queryId);
+            if (fieldToggles != null) {
+                body.put("fieldToggles", fieldToggles);
+            }
+
+            Connection conn = Http.url(url).ignoreContentType().connection();
+            conn.method(Connection.Method.POST);
+            conn.header("Authorization", "Bearer " + bearerToken);
+            conn.header("Accept", "application/json");
+            conn.header("Content-Type", "application/json");
+            conn.header("X-Requested-With", "XMLHttpRequest");
+            conn.header("User-Agent", AbstractRipper.USER_AGENT);
+            conn.header("Origin", "https://x.com");
+            conn.header("x-twitter-active-user", "yes");
+            conn.header("x-twitter-auth-type", "OAuth2Session");
+            conn.header("x-twitter-client-language", "en");
+            if (referer != null && !referer.isEmpty()) {
+                conn.referrer(referer);
+            }
+            if (twitterCookieHeader != null && !twitterCookieHeader.isEmpty()) {
+                conn.header("Cookie", twitterCookieHeader);
+            }
+            String csrf = getTwitterCookie("ct0");
+            if (csrf != null && !csrf.isEmpty()) {
+                conn.header("x-csrf-token", csrf);
+            }
+            conn.requestBody(body.toString());
+            Connection.Response resp = conn.execute();
+            JSONObject json = new JSONObject(resp.body());
+            if (json.has("errors") && !json.has("data")) {
+                throw new IOException("X GraphQL errors: " + formatApiErrors(json));
+            }
+            return json;
+        } catch (HttpStatusException e) {
+            throw new IOException("X GraphQL returned HTTP " + e.getStatusCode()
+                    + ". Log in to https://x.com in Firefox and try again.", e);
+        }
     }
 
     private static String escapeJson(String value) {
@@ -813,11 +956,12 @@ public class TwitterRipper extends AbstractJSONRipper {
     }
 
     private JSONObject fetchTimelinePage() throws IOException {
-        String requestUrl;
         String referer;
+        JSONObject response;
         if (fetchMode == FETCH_MODE.USER_TWEETS) {
-            requestUrl = buildUserTweetsUrl(userRestId, cursor);
+            String requestUrl = buildUserTweetsUrl(userRestId, cursor);
             referer = "https://x.com/" + accountName;
+            response = graphqlGet(requestUrl, referer);
         } else {
             String rawQuery;
             if (albumType == ALBUM_TYPE.ACCOUNT && switchedToSearchFallback) {
@@ -827,10 +971,9 @@ public class TwitterRipper extends AbstractJSONRipper {
                 rawQuery = searchText;
                 referer = "https://x.com/search?q=" + urlEncode(searchText) + "&src=typed_query&f=latest";
             }
-            requestUrl = buildSearchTimelineUrl(rawQuery, cursor);
+            response = fetchSearchTimeline(rawQuery, cursor, referer);
         }
 
-        JSONObject response = graphqlGet(requestUrl, referer);
         TimelinePage page = parseTimelinePage(response);
         lastBottomCursor = page.bottomCursor;
         lastPageHadTweets = !page.tweets.isEmpty();
