@@ -1,7 +1,9 @@
 {
-  "latestVersion": "2.1.269-1-a4df883",
-  "currentHash": "e442b0250131ff6a1ed3ff6e56ae4656f7c34560d27c46b0082a0741bef99e9c",
+  "latestVersion": "2.1.270-1-37042c5",
+  "currentHash": "5ed956b669ba80a915b69ee3aae5bdaa4014a673b18abca928f614fb9c9d797b",
   "changeList": [
+    "2.1.270-1-37042c5: Merge branch 'main' of https://github.com/Laziassdev/ripme",
+    "2.1.270-1-37042c5: Built at 2026-07-15T23:07:48Z",
     "2.1.269-1-a4df883: Enhance TwitterRipper URL handling for photo downloads",
     "2.1.269-1-a4df883: Built at 2026-07-15T22:35:49Z",
     "2.1.268-1-09c6e33: Enhance TwitterRipper functionality and update configuration",
