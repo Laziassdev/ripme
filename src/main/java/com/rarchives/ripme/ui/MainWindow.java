@@ -2425,16 +2425,7 @@ public final class MainWindow implements Runnable, RipStatusHandler {
                 ripper.setObserver(this);
 
                 String ripUrl = normalizeQueueUrl(ripper.getURL().toExternalForm());
-                if (!HISTORY.containsURL(ripUrl)) {
-                    HistoryEntry entry = new HistoryEntry();
-                    entry.url = ripUrl;
-                    entry.dir = ripper.getWorkingDir().getAbsolutePath();
-                    entry.startDate = new Date();
-                    entry.modifiedDate = new Date();
-                    HISTORY.add(entry);
-                    historyTableModel.fireTableDataChanged();
-                    saveHistory();
-                } else {
+                if (HISTORY.containsURL(ripUrl)) {
                     HistoryEntry entry = HISTORY.getEntryByURL(ripUrl);
                     entry.latestCount = 0;
                     if (entry.dir == null || entry.dir.isEmpty()) {
@@ -2687,6 +2678,7 @@ public final class MainWindow implements Runnable, RipStatusHandler {
             if (LOGGER.isEnabled(Level.ERROR)) {
                 appendLog((String) msg.getObject(), Color.RED);
             }
+            removeEmptyHistoryEntry(evt.ripper);
             statusProgress.setValue(0);
             statusProgress.setVisible(false);
             openButton.setVisible(false);
@@ -2709,14 +2701,18 @@ public final class MainWindow implements Runnable, RipStatusHandler {
             HistoryEntry entry;
             if (HISTORY.containsURL(url)) {
                 entry = HISTORY.getEntryByURL(url);
-                entry.latestCount = rsc.count;
-                entry.count += rsc.count;
-                entry.modifiedDate = new Date();
-                HISTORY.moveToBottom(entry);
-                if (entry.dir == null || entry.dir.isEmpty()) {
-                    entry.dir = rsc.getDir();
+                if (rsc.count == 0 && entry.count == 0) {
+                    HISTORY.remove(entry);
+                } else {
+                    entry.latestCount = rsc.count;
+                    entry.count += rsc.count;
+                    entry.modifiedDate = new Date();
+                    HISTORY.moveToBottom(entry);
+                    if (entry.dir == null || entry.dir.isEmpty()) {
+                        entry.dir = rsc.getDir();
+                    }
                 }
-            } else {
+            } else if (rsc.count > 0) {
                 entry = new HistoryEntry();
                 entry.url = url;
                 entry.dir = rsc.getDir();
@@ -2808,6 +2804,7 @@ public final class MainWindow implements Runnable, RipStatusHandler {
             if (LOGGER.isEnabled(Level.ERROR)) {
                 appendLog((String) msg.getObject(), Color.RED);
             }
+            removeEmptyHistoryEntry(evt.ripper);
             statusProgress.setValue(0);
             statusProgress.setVisible(false);
             openButton.setVisible(false);
@@ -2815,6 +2812,15 @@ public final class MainWindow implements Runnable, RipStatusHandler {
             statusWithColor("Error: " + msg.getObject(), Color.RED);
             removeActiveRipperEntry(evt.ripper);
             break;
+        }
+    }
+
+    private void removeEmptyHistoryEntry(AbstractRipper ripper) {
+        String url = normalizeQueueUrl(ripper.getURL().toExternalForm());
+        if (HISTORY.removeIfNeverDownloaded(url)) {
+            historyTableModel.fireTableDataChanged();
+            applyHistoryFilter();
+            saveHistory();
         }
     }
 

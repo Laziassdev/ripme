@@ -107,6 +107,29 @@ public class History {
         throw new RuntimeException("Could not find URL " + url + " in History");
     }
 
+    /**
+     * Removes an entry only when it has never recorded a successful download.
+     *
+     * @param url URL of the history entry.
+     * @return {@code true} when an empty entry was removed.
+     */
+    public boolean removeIfNeverDownloaded(String url) {
+        HistoryEntry entry = findEntryByURL(url);
+        if (entry == null || entry.count > 0) {
+            return false;
+        }
+        return list.remove(entry);
+    }
+
+    private HistoryEntry findEntryByURL(String url) {
+        for (HistoryEntry entry : this.list) {
+            if (entry.url.equals(url)) {
+                return entry;
+            }
+        }
+        return null;
+    }
+
     private void fromJSON(JSONArray jsonArray) {
         JSONObject json;
         for (int i = 0; i < jsonArray.length(); i++) {

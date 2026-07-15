@@ -1,6 +1,8 @@
 package com.rarchives.ripme.ui;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.util.Date;
 
@@ -40,5 +42,29 @@ public class HistoryNormalizationMergeTest {
         assertEquals(3, merged.latestCount);
         assertEquals(new Date(500), merged.startDate);
         assertEquals(new Date(3000), merged.modifiedDate);
+    }
+
+    @Test
+    public void removesEntryThatNeverDownloadedFiles() {
+        History history = new History();
+        HistoryEntry entry = new HistoryEntry();
+        entry.url = "https://example.com/empty";
+        entry.count = 0;
+        history.add(entry);
+
+        assertTrue(history.removeIfNeverDownloaded(entry.url));
+        assertTrue(history.isEmpty());
+    }
+
+    @Test
+    public void preservesEntryWithPriorDownloads() {
+        History history = new History();
+        HistoryEntry entry = new HistoryEntry();
+        entry.url = "https://example.com/existing";
+        entry.count = 3;
+        history.add(entry);
+
+        assertFalse(history.removeIfNeverDownloaded(entry.url));
+        assertEquals(1, history.toList().size());
     }
 }
