@@ -678,6 +678,8 @@ public class TwitterRipper extends AbstractJSONRipper {
 
     /**
      * Rewrites pbs.twimg.com photo URLs to request the original size.
+     * Keeps the file extension in the path so RipMe's downloader can name the file correctly
+     * (query-only {@code ?format=} URLs would otherwise save with no extension).
      */
     public static String rewritePhotoUrl(String url) {
         if (url == null || url.isEmpty()) {
@@ -694,11 +696,20 @@ public class TwitterRipper extends AbstractJSONRipper {
             String path = uri.getPath();
             int slash = path.lastIndexOf('/');
             String filename = slash >= 0 ? path.substring(slash + 1) : path;
+            // Strip size suffixes like ":large" / ":orig" before reading the extension
+            int colon = filename.indexOf(':');
+            if (colon > 0) {
+                filename = filename.substring(0, colon);
+            }
             int dot = filename.lastIndexOf('.');
             String baseName = dot > 0 ? filename.substring(0, dot) : filename;
             String ext = dot > 0 ? filename.substring(dot + 1) : "jpg";
+            if (ext.isBlank() || ext.contains("/") || ext.length() > 5) {
+                ext = "jpg";
+            }
             String dir = slash >= 0 ? path.substring(0, slash + 1) : "/";
-            return uri.getScheme() + "://" + uri.getHost() + dir + baseName + "?format=" + ext + "&name=orig";
+            return uri.getScheme() + "://" + uri.getHost() + dir + baseName + "." + ext
+                    + "?format=" + ext + "&name=orig";
         } catch (IllegalArgumentException e) {
             return url.contains("?") ? url : url + ":orig";
         }

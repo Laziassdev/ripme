@@ -76,10 +76,12 @@ public class TwitterRipperTest extends RippersTest {
 
     @Test
     public void testRewritePhotoUrl() {
-        assertEquals("https://pbs.twimg.com/media/PhotoAbc123?format=jpg&name=orig",
+        assertEquals("https://pbs.twimg.com/media/PhotoAbc123.jpg?format=jpg&name=orig",
                 TwitterRipper.rewritePhotoUrl("https://pbs.twimg.com/media/PhotoAbc123.jpg"));
-        assertEquals("https://pbs.twimg.com/media/PhotoAbc123?format=png&name=orig",
+        assertEquals("https://pbs.twimg.com/media/PhotoAbc123.png?format=png&name=orig",
                 TwitterRipper.rewritePhotoUrl("https://pbs.twimg.com/media/PhotoAbc123.png"));
+        assertEquals("https://pbs.twimg.com/media/PhotoAbc123.jpg?format=jpg&name=orig",
+                TwitterRipper.rewritePhotoUrl("https://pbs.twimg.com/media/PhotoAbc123.jpg:large"));
     }
 
     @Test
@@ -91,6 +93,7 @@ public class TwitterRipperTest extends RippersTest {
         assertEquals(1, withDefaults.size());
         assertTrue(withDefaults.get(0).contains("format=jpg"));
         assertTrue(withDefaults.get(0).contains("name=orig"));
+        assertTrue(withDefaults.get(0).contains(".jpg?"));
 
         List<String> videoUrls = TwitterRipper.extractMediaUrls(page.tweets.get(1), true, true);
         assertEquals(1, videoUrls.size());
