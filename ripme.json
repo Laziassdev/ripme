@@ -1,7 +1,9 @@
 {
-  "latestVersion": "2.1.267-1-d660021",
-  "currentHash": "c863301b4f913c9852ba995225170cf7dac6aeefe6b0457e79141e71b2ae4457",
+  "latestVersion": "2.1.268-1-09c6e33",
+  "currentHash": "87b14a2aeb0bbd5ca526eb8c4f565096c48f4e0347155d86cb831bb1457db375",
   "changeList": [
+    "2.1.268-1-09c6e33: Enhance TwitterRipper functionality and update configuration",
+    "2.1.268-1-09c6e33: Built at 2026-07-15T18:24:34Z",
     "2.1.267-1-d660021: Enhance InstagramRipper with user ID caching and improved API request handling",
     "2.1.267-1-d660021: Built at 2026-07-02T12:56:31Z",
     "2.1.266-1-d840060: Refactor InstagramRipper to improve API request handling and error logging",
