@@ -87,7 +87,8 @@ public final class MainWindow implements Runnable, RipStatusHandler {
             "facebook.max_listing_pages", "facebook.max_photo_pages", "facebook.photo_page_delay_ms",
             "deviantart.firefox.cookies",
             "twitter.auth", "twitter.access_token", "twitter.max_requests", "twitter.rip_retweets",
-            "twitter.exclude_replies", "tumblr.auth", "gw.api",
+            "twitter.exclude_replies", "twitter.graphql.user_by_screen_name", "twitter.graphql.user_tweets",
+            "twitter.graphql.search_timeline", "tumblr.auth", "gw.api",
             "proxy.http", "proxy.socks", "download.allow_duplicates",
             "bluesky.username", "bluesky.apppassword"));
 
@@ -1474,9 +1475,8 @@ public final class MainWindow implements Runnable, RipStatusHandler {
         panel.setBorder(emptyBorder);
         GridBagConstraints gbc = newConfigGridBagConstraints();
         int row = 0;
-        row = addConfigLabelFieldRow(panel, gbc, row, "twitter.auth", configStringField("twitter.auth", ""));
         row = addConfigLabelFieldRow(panel, gbc, row, "twitter.access_token", configStringField("twitter.access_token", ""));
-        row = addConfigLabelFieldRow(panel, gbc, row, "twitter.max_requests", configField("twitter.max_requests", 10));
+        row = addConfigLabelFieldRow(panel, gbc, row, "twitter.max_requests", configField("twitter.max_requests", 40));
         row = addConfigCheckBoxPairRow(panel, gbc, row, "twitter.rip_retweets", false, "twitter.exclude_replies", true);
         row = addConfigLabelFieldRow(panel, gbc, row, "tumblr.auth", configStringField("tumblr.auth", ""));
         row = addConfigLabelFieldRow(panel, gbc, row, "gw.api", configStringField("gw.api", "gonewild"));

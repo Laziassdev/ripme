@@ -1,24 +1,23 @@
 package com.rarchives.ripme.ripper.rippers;
 
 import java.io.IOException;
+import java.io.UnsupportedEncodingException;
 import java.net.MalformedURLException;
 import java.net.URI;
 import java.net.URL;
-import java.net.URISyntaxException;
+import java.net.URLDecoder;
+import java.net.URLEncoder;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.nio.file.StandardCopyOption;
-import java.sql.Connection;
-import java.sql.DriverManager;
-import java.sql.ResultSet;
-import java.sql.SQLException;
-import java.sql.Statement;
+import java.time.ZonedDateTime;
+import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
-import java.util.Set;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
@@ -28,44 +27,90 @@ import org.apache.logging.log4j.Logger;
 import org.json.JSONArray;
 import org.json.JSONException;
 import org.json.JSONObject;
-import org.json.JSONTokener;
 import org.jsoup.HttpStatusException;
-import org.jsoup.nodes.Document;
 
 import com.rarchives.ripme.ripper.AbstractJSONRipper;
+import com.rarchives.ripme.ripper.AbstractRipper;
 import com.rarchives.ripme.ui.RipStatusMessage.STATUS;
 import com.rarchives.ripme.utils.DownloadLimitTracker;
 import com.rarchives.ripme.utils.FirefoxCookieUtils;
 import com.rarchives.ripme.utils.Http;
+import com.rarchives.ripme.utils.RipUtils;
 import com.rarchives.ripme.utils.Utils;
 
+/**
+ * Rips media from X/Twitter profiles and searches using the web GraphQL API
+ * (same approach as TumblThree), authenticated with Firefox session cookies.
+ */
 public class TwitterRipper extends AbstractJSONRipper {
     private static final Logger logger = LogManager.getLogger(TwitterRipper.class);
 
-    private static final String[] DOMAINS = {"twitter.com", "x.com"};
-    private static final String DOMAIN = "twitter.com", HOST = "twitter";
-    private static final String API_TWITTER = "https://api.twitter.com";
-    private static final String API_X = "https://api.x.com";
+    private static final String DOMAIN = "twitter.com";
+    private static final String HOST = "twitter";
+    private static final String GRAPHQL_BASE = "https://x.com/i/api/graphql";
+
+    /** Public web-client bearer token used by X's site (and TumblThree). */
+    public static final String DEFAULT_BEARER_TOKEN =
+            "AAAAAAAAAAAAAAAAAAAAANRILgAAAAAAnNwIzUejRCOuH5E6I8xnZz4puTs%3D1Zv7ttfk8LF81IUq16cHjhLTvJu4FA33AGWWjCpTnA";
+
+    public static final String DEFAULT_QUERY_USER_BY_SCREEN_NAME = "xc8f1g7BYqr6VTzTbvNlGw";
+    public static final String DEFAULT_QUERY_USER_TWEETS = "2GIWTr7XwadIixZDtyXd4A";
+    public static final String DEFAULT_QUERY_SEARCH_TIMELINE = "NA567V_8AFwu0cZEkAAKcw";
+
+    private static final String FEATURES_USER_BY_SCREEN_NAME =
+            "%7B%22hidden_profile_likes_enabled%22%3Afalse%2C%22hidden_profile_subscriptions_enabled%22%3Afalse%2C"
+                    + "%22responsive_web_graphql_exclude_directive_enabled%22%3Atrue%2C%22verified_phone_label_enabled%22%3Afalse%2C"
+                    + "%22subscriptions_verification_info_verified_since_enabled%22%3Atrue%2C%22highlights_tweets_tab_ui_enabled%22%3Atrue%2C"
+                    + "%22creator_subscriptions_tweet_preview_api_enabled%22%3Atrue%2C"
+                    + "%22responsive_web_graphql_skip_user_profile_image_extensions_enabled%22%3Afalse%2C"
+                    + "%22responsive_web_graphql_timeline_navigation_enabled%22%3Atrue%7D";
+
+    private static final String FIELD_TOGGLES_USER =
+            "%7B%22withAuxiliaryUserLabels%22%3Afalse%7D";
+
+    private static final String FEATURES_TIMELINE =
+            "%7B%22rweb_lists_timeline_redesign_enabled%22%3Atrue%2C%22responsive_web_graphql_exclude_directive_enabled%22%3Atrue%2C"
+                    + "%22verified_phone_label_enabled%22%3Afalse%2C%22creator_subscriptions_tweet_preview_api_enabled%22%3Atrue%2C"
+                    + "%22responsive_web_graphql_timeline_navigation_enabled%22%3Atrue%2C"
+                    + "%22responsive_web_graphql_skip_user_profile_image_extensions_enabled%22%3Afalse%2C"
+                    + "%22tweetypie_unmention_optimization_enabled%22%3Atrue%2C%22responsive_web_edit_tweet_api_enabled%22%3Atrue%2C"
+                    + "%22graphql_is_translatable_rweb_tweet_is_translatable_enabled%22%3Atrue%2C"
+                    + "%22view_counts_everywhere_api_enabled%22%3Atrue%2C%22longform_notetweets_consumption_enabled%22%3Atrue%2C"
+                    + "%22responsive_web_twitter_article_tweet_consumption_enabled%22%3Afalse%2C"
+                    + "%22tweet_awards_web_tipping_enabled%22%3Afalse%2C%22freedom_of_speech_not_reach_fetch_enabled%22%3Atrue%2C"
+                    + "%22standardized_nudges_misinfo%22%3Atrue%2C"
+                    + "%22tweet_with_visibility_results_prefer_gql_limited_actions_policy_enabled%22%3Atrue%2C"
+                    + "%22longform_notetweets_rich_text_read_enabled%22%3Atrue%2C%22longform_notetweets_inline_media_enabled%22%3Atrue%2C"
+                    + "%22responsive_web_media_download_video_enabled%22%3Afalse%2C%22responsive_web_enhance_cards_enabled%22%3Afalse%7D";
+
+    private static final String FIELD_TOGGLES_TIMELINE =
+            "%7B%22withAuxiliaryUserLabels%22%3Afalse%2C%22withArticleRichContentState%22%3Afalse%7D";
+
+    private static final DateTimeFormatter TWITTER_DATE =
+            DateTimeFormatter.ofPattern("EEE MMM dd HH:mm:ss Z yyyy", Locale.US);
+    private static final DateTimeFormatter UNTIL_DATE =
+            DateTimeFormatter.ofPattern("yyyy-MM-dd", Locale.US);
 
     private static final int MAX_REQUESTS = Utils.getConfigInteger("twitter.max_requests", 10);
     private static final boolean RIP_RETWEETS = Utils.getConfigBoolean("twitter.rip_retweets", true);
     private static final boolean EXCLUDE_REPLIES = Utils.getConfigBoolean("twitter.exclude_replies", true);
-    private static final int MAX_ITEMS_REQUEST = Utils.getConfigInteger("twitter.max_items_request", 200);
+    private static final int PAGE_SIZE = Utils.getConfigInteger("twitter.max_items_request", 20);
     private static final int WAIT_TIME = 2000;
-
-    // Base 64 of consumer key : consumer secret
-    private String authKey;
-    private String accessToken;
 
     private enum ALBUM_TYPE {
         ACCOUNT, SEARCH
     }
 
-    private ALBUM_TYPE albumType;
-    private String searchText, accountName;
-    private Long lastMaxID = 0L;
-    private int currentRequest = 0;
+    private enum FETCH_MODE {
+        USER_TWEETS, SEARCH_TIMELINE
+    }
 
+    private String bearerToken;
+    private ALBUM_TYPE albumType;
+    private String searchText;
+    private String accountName;
+    private String userRestId;
+    private int currentRequest = 0;
     private boolean hasTweets = true;
     private String originalHost;
     private final int maxDownloads = Utils.getConfigInteger("maxdownloads",
@@ -75,222 +120,147 @@ public class TwitterRipper extends AbstractJSONRipper {
     private volatile boolean maxDownloadLimitReached = false;
     private String twitterCookieHeader;
     private final Map<String, String> twitterCookies = new LinkedHashMap<>();
-    private volatile String apiBase = API_TWITTER;
+
+    private FETCH_MODE fetchMode = FETCH_MODE.USER_TWEETS;
+    private String cursor;
+    private String previousCursor;
+    private String lastBottomCursor;
+    private String oldestPostDate;
+    private boolean switchedToSearchFallback;
+    private boolean lastPageHadTweets;
 
     public TwitterRipper(URL url) throws IOException {
         super(url);
-        authKey = Utils.getConfigString("twitter.auth", null);
-        if (authKey != null) {
-            authKey = authKey.trim();
+        bearerToken = Utils.getConfigString("twitter.access_token", null);
+        if (bearerToken != null) {
+            bearerToken = bearerToken.trim();
         }
-        accessToken = Utils.getConfigString("twitter.access_token", null);
-        if (accessToken != null) {
-            accessToken = accessToken.trim();
+        if (bearerToken == null || bearerToken.isEmpty()) {
+            bearerToken = DEFAULT_BEARER_TOKEN;
         }
-        if (accessToken == null || accessToken.isEmpty()) {
-            accessToken = loadAccessTokenFromFirefox();
-        }
-        loadTwitterCookiesFromFirefox();
-        if ((authKey == null || authKey.isEmpty()) && (accessToken == null || accessToken.isEmpty())) {
-            logger.debug(
-                    "Twitter ripper instantiated without credentials; rip attempts will fail until authentication details are provided.");
-        }
+        loadTwitterCookies();
     }
 
     @Override
     public URL sanitizeURL(URL url) throws MalformedURLException {
-        originalHost = url.getHost() != null ? url.getHost().toLowerCase() : "";
-
+        originalHost = url.getHost() != null ? url.getHost().toLowerCase(Locale.ROOT) : "";
         String urlString = url.toExternalForm();
-        if (originalHost.endsWith("x.com")) {
-            try {
-                URI uri = url.toURI();
-                String sanitizedHost = originalHost.replaceFirst("(?i)x\\.com$", "twitter.com");
-                URI sanitizedUri = new URI(uri.getScheme(), uri.getUserInfo(), sanitizedHost, uri.getPort(), uri.getPath(),
-                        uri.getQuery(), uri.getFragment());
-                url = sanitizedUri.toURL();
-                urlString = url.toExternalForm();
-            } catch (URISyntaxException e) {
-                throw new MalformedURLException("Unable to normalize x.com URL: " + e.getMessage());
-            }
-        }
 
-        // https://twitter.com/search?q=from%3Apurrbunny%20filter%3Aimages&src=typd
-        Pattern p = Pattern.compile("^https?://(m\\.)?twitter\\.com/search\\?(.*)q=(?<search>[a-zA-Z0-9%\\-_]+).*$");
-        Matcher m = p.matcher(urlString);
-        if (m.matches()) {
+        Pattern searchPattern = Pattern.compile(
+                "^https?://(m\\.)?(twitter|x)\\.com/search\\?(.*)$", Pattern.CASE_INSENSITIVE);
+        Matcher searchMatcher = searchPattern.matcher(urlString);
+        if (searchMatcher.matches()) {
+            String query = extractQueryParam(searchMatcher.group(3), "q");
+            if (query == null || query.isEmpty()) {
+                throw new MalformedURLException("Search URL missing q parameter: " + url);
+            }
             albumType = ALBUM_TYPE.SEARCH;
-            searchText = m.group("search");
-
-            if (searchText.startsWith("from%3A")) {
-                // from filter not supported
-                searchText = searchText.substring(7);
-            }
-            if (searchText.contains("x")) {
-                // x character not supported
-                searchText = searchText.replace("x", "");
-            }
+            searchText = query;
+            fetchMode = FETCH_MODE.SEARCH_TIMELINE;
             return URI.create(urlString).toURL();
         }
-        p = Pattern.compile("^https?://(m\\.)?(twitter|x)\\.com/([a-zA-Z0-9\\-_]+).*$");
-        m = p.matcher(urlString);
-        if (m.matches()) {
+
+        Pattern accountPattern = Pattern.compile(
+                "^https?://(m\\.)?(twitter|x)\\.com/([a-zA-Z0-9_]+)(/.*)?$", Pattern.CASE_INSENSITIVE);
+        Matcher accountMatcher = accountPattern.matcher(urlString);
+        if (accountMatcher.matches()) {
+            String name = accountMatcher.group(3);
+            if (isReservedPath(name)) {
+                throw new MalformedURLException("Expected username or search string in url: " + url);
+            }
             albumType = ALBUM_TYPE.ACCOUNT;
-            accountName = m.group(3);
+            accountName = name;
+            fetchMode = FETCH_MODE.USER_TWEETS;
             return URI.create(urlString).toURL();
         }
         throw new MalformedURLException("Expected username or search string in url: " + url);
     }
 
-    private void getAccessToken() throws IOException {
-        if (accessToken != null && !accessToken.trim().isEmpty()) {
-            logger.debug("Using cached twitter access token");
-            return;
+    private static boolean isReservedPath(String name) {
+        switch (name.toLowerCase(Locale.ROOT)) {
+        case "search":
+        case "i":
+        case "home":
+        case "explore":
+        case "notifications":
+        case "messages":
+        case "settings":
+        case "compose":
+            return true;
+        default:
+            return false;
         }
+    }
 
-        if (accessToken == null || accessToken.isBlank()) {
-            String firefoxToken = loadAccessTokenFromFirefox();
-            if (firefoxToken != null && !firefoxToken.isBlank()) {
-                accessToken = firefoxToken.trim();
-                logger.info("Loaded twitter bearer token from Firefox profile during rip");
+    public static String extractQueryParam(String queryString, String key) {
+        if (queryString == null || key == null) {
+            return null;
+        }
+        for (String pair : queryString.split("&")) {
+            int eq = pair.indexOf('=');
+            if (eq <= 0) {
+                continue;
+            }
+            String name = pair.substring(0, eq);
+            if (!key.equals(name)) {
+                continue;
+            }
+            String value = pair.substring(eq + 1);
+            try {
+                return URLDecoder.decode(value, StandardCharsets.UTF_8.name());
+            } catch (UnsupportedEncodingException e) {
+                return value;
             }
         }
+        return null;
+    }
 
-        if (accessToken != null && !accessToken.trim().isEmpty()) {
-            logger.debug("Using twitter access token discovered during rip");
-            return;
-        }
-
-        if (authKey == null || authKey.isEmpty()) {
+    private void ensureAuthenticated() throws IOException {
+        loadTwitterCookies();
+        String authToken = getTwitterCookie("auth_token");
+        String ct0 = getTwitterCookie("ct0");
+        if (authToken == null || authToken.isEmpty() || ct0 == null || ct0.isEmpty()) {
             String configPath = Utils.getConfigDir() + java.io.File.separator + "rip.properties";
             throw new IOException(
-                    "X/Twitter ripping requires authentication (X discontinued free API). "
-                            + "Option 1: Log in to twitter.com or x.com in Firefox, then try this rip again (ripme will try to use your session). "
-                            + "Option 2: Add twitter.access_token=YOUR_BEARER_TOKEN to " + configPath);
+                    "X/Twitter ripping requires a logged-in Firefox session (cookies auth_token and ct0). "
+                            + "Log in to https://x.com in Firefox, then try again. "
+                            + "Alternatively set cookies.x.com=auth_token=...; ct0=... in " + configPath);
         }
-
-        for (String base : new String[] { API_TWITTER, API_X }) {
-            try {
-                Document doc = Http.url(base + "/oauth2/token").ignoreContentType()
-                        .header("Authorization", "Basic " + authKey)
-                        .header("Content-Type", "application/x-www-form-urlencoded;charset=UTF-8")
-                        .header("User-agent", "ripe and zipe").data("grant_type", "client_credentials").post();
-                String body = doc.body().html().replaceAll("&quot;", "\"");
-                try {
-                    JSONObject json = new JSONObject(body);
-                    accessToken = json.getString("access_token").trim();
-                    apiBase = base;
-                    return;
-                } catch (JSONException e) {
-                    throw new IOException("Failure while parsing JSON: " + body, e);
-                }
-            } catch (HttpStatusException e) {
-                if (e.getStatusCode() == 403 || e.getStatusCode() == 401) {
-                    logger.warn("{} oauth2/token returned HTTP {}; trying next API base", base, e.getStatusCode());
-                    continue;
-                }
-                throw new IOException("Failed to load " + base + "/oauth2/token (HTTP " + e.getStatusCode()
-                        + "). Set twitter.access_token in rip.properties to use a bearer token instead.", e);
-            }
-        }
-        throw new IOException("Could not obtain X/Twitter access token from " + API_TWITTER + " or " + API_X
-                + ". Free API was discontinued. Log in to X in Firefox, or set twitter.access_token in rip.properties.");
     }
 
-    private void checkRateLimits(String resource, String api) {
+    private JSONObject graphqlGet(String url, String referer) throws IOException {
+        currentRequest++;
+        logger.info("    Retrieving " + url);
         try {
-            Http http = Http.url(apiBase + "/1.1/application/rate_limit_status.json?resources=" + resource)
-                    .ignoreContentType().header("Authorization", "Bearer " + accessToken)
-                    .header("Content-Type", "application/x-www-form-urlencoded;charset=UTF-8")
-                    .header("User-agent", "ripe and zipe");
+            Http http = Http.url(url)
+                    .ignoreContentType()
+                    .header("Authorization", "Bearer " + bearerToken)
+                    .header("Accept", "application/json")
+                    .header("Content-Type", "application/json")
+                    .header("X-Requested-With", "XMLHttpRequest")
+                    .header("User-Agent", AbstractRipper.USER_AGENT)
+                    .header("Origin", "https://x.com")
+                    .header("x-twitter-active-user", "yes")
+                    .header("x-twitter-client-language", "en");
+            if (referer != null && !referer.isEmpty()) {
+                http = http.referrer(referer);
+            }
             if (twitterCookieHeader != null && !twitterCookieHeader.isEmpty()) {
                 http = http.header("Cookie", twitterCookieHeader);
-                String csrf = getTwitterCookie("ct0");
-                if (csrf != null && !csrf.isEmpty()) {
-                    http = http.header("x-csrf-token", csrf);
-                }
             }
-            Document doc = http.get();
-            String body = doc.body().html().replaceAll("&quot;", "\"");
-            JSONObject json = new JSONObject(body);
-            JSONObject stats = json.getJSONObject("resources").getJSONObject(resource).getJSONObject(api);
-            int remaining = stats.getInt("remaining");
-            logger.info("    Twitter " + resource + " calls remaining: " + remaining);
-            if (remaining < 20) {
-                logger.warn("Twitter API calls low (" + remaining + "); continuing anyway.");
+            String csrf = getTwitterCookie("ct0");
+            if (csrf != null && !csrf.isEmpty()) {
+                http = http.header("x-csrf-token", csrf);
             }
-        } catch (Exception e) {
-            logger.warn("Could not check rate limits ({}); continuing. {}", resource, e.getMessage());
-        }
-    }
-
-    private String getApiURL(Long maxID) {
-        StringBuilder req = new StringBuilder();
-        switch (albumType) {
-        case ACCOUNT:
-            req.append(apiBase).append("/1.1/statuses/user_timeline.json")
-                    .append("?screen_name=" + this.accountName).append("&include_entities=true")
-                    .append("&exclude_replies=" + EXCLUDE_REPLIES).append("&trim_user=true").append("&count=" + MAX_ITEMS_REQUEST)
-                    .append("&tweet_mode=extended");
-            break;
-        case SEARCH:// Only get tweets from last week
-            req.append(apiBase).append("/1.1/search/tweets.json").append("?q=" + this.searchText)
-                    .append("&include_entities=true").append("&result_type=recent").append("&count=100")
-                    .append("&tweet_mode=extended");
-            break;
-        }
-        if (maxID > 0) {
-            req.append("&max_id=" + Long.toString(maxID));
-        }
-        return req.toString();
-    }
-
-    private JSONObject getTweets() throws IOException {
-        currentRequest++;
-        String url = getApiURL(lastMaxID - 1);
-        logger.info("    Retrieving " + url);
-        for (int attempt = 0; attempt < 2; attempt++) {
-            try {
-                Http http = Http.url(url).ignoreContentType().header("Authorization", "Bearer " + accessToken)
-                        .header("Content-Type", "application/x-www-form-urlencoded;charset=UTF-8")
-                        .header("User-agent", "ripe and zipe");
-                if (twitterCookieHeader != null && !twitterCookieHeader.isEmpty()) {
-                    http = http.header("Cookie", twitterCookieHeader);
-                    String csrf = getTwitterCookie("ct0");
-                    if (csrf != null && !csrf.isEmpty()) {
-                        http = http.header("x-csrf-token", csrf);
-                    }
-                }
-                Document doc = http.get();
-                String body = doc.body().html().replaceAll("&quot;", "\"");
-                Object jsonObj = new JSONTokener(body).nextValue();
-                JSONArray statuses;
-                if (jsonObj instanceof JSONObject) {
-                    JSONObject json = (JSONObject) jsonObj;
-                    if (json.has("errors")) {
-                        String msg = formatApiErrors(json);
-                        throw new IOException("X/Twitter API responded with errors: " + msg);
-                    }
-                    statuses = json.has("statuses") ? json.getJSONArray("statuses") : json.getJSONArray("tweets");
-                } else {
-                    statuses = (JSONArray) jsonObj;
-                }
-                JSONObject r = new JSONObject();
-                r.put("tweets", statuses);
-                return r;
-            } catch (HttpStatusException e) {
-                if ((e.getStatusCode() == 403 || e.getStatusCode() == 401) && attempt == 0) {
-                    String other = apiBase.equals(API_TWITTER) ? API_X : API_TWITTER;
-                    logger.warn("{} returned HTTP {}; retrying with {}", apiBase, e.getStatusCode(), other);
-                    apiBase = other;
-                    url = getApiURL(lastMaxID - 1);
-                    continue;
-                }
-                throw new IOException("X/Twitter API returned HTTP " + e.getStatusCode()
-                        + ". Log in to X in Firefox and try again, or set twitter.access_token in rip.properties.", e);
+            JSONObject json = http.getJSON();
+            if (json.has("errors")) {
+                throw new IOException("X GraphQL errors: " + formatApiErrors(json));
             }
+            return json;
+        } catch (HttpStatusException e) {
+            throw new IOException("X GraphQL returned HTTP " + e.getStatusCode()
+                    + ". Log in to https://x.com in Firefox and try again.", e);
         }
-        throw new IOException("Could not fetch tweets from X/Twitter API.");
     }
 
     private static String formatApiErrors(JSONObject json) {
@@ -310,24 +280,481 @@ public class TwitterRipper extends AbstractJSONRipper {
         return json.optString("errors", "unknown");
     }
 
+    private String queryId(String configKey, String defaultId) {
+        String configured = Utils.getConfigString(configKey, defaultId);
+        if (configured == null || configured.isBlank()) {
+            return defaultId;
+        }
+        return configured.trim();
+    }
+
+    private String buildUserByScreenNameUrl(String screenName) {
+        String qid = queryId("twitter.graphql.user_by_screen_name", DEFAULT_QUERY_USER_BY_SCREEN_NAME);
+        String variables = urlEncode("{\"screen_name\":\"" + screenName + "\",\"withSafetyModeUserFields\":true}");
+        return GRAPHQL_BASE + "/" + qid + "/UserByScreenName?variables=" + variables
+                + "&features=" + FEATURES_USER_BY_SCREEN_NAME
+                + "&fieldToggles=" + FIELD_TOGGLES_USER;
+    }
+
+    private String buildUserTweetsUrl(String restId, String cursorValue) {
+        String qid = queryId("twitter.graphql.user_tweets", DEFAULT_QUERY_USER_TWEETS);
+        StringBuilder variables = new StringBuilder();
+        variables.append("{\"userId\":\"").append(restId).append("\"");
+        variables.append(",\"count\":").append(PAGE_SIZE);
+        if (cursorValue != null && !cursorValue.isEmpty()) {
+            variables.append(",\"cursor\":\"").append(escapeJson(cursorValue)).append("\"");
+        }
+        variables.append(",\"includePromotedContent\":true");
+        variables.append(",\"withQuickPromoteEligibilityTweetFields\":true");
+        variables.append(",\"withVoice\":true");
+        variables.append(",\"withV2Timeline\":true}");
+        return GRAPHQL_BASE + "/" + qid + "/UserTweets?variables=" + urlEncode(variables.toString())
+                + "&features=" + FEATURES_TIMELINE
+                + "&fieldToggles=" + FIELD_TOGGLES_TIMELINE;
+    }
+
+    private String buildSearchTimelineUrl(String rawQuery, String cursorValue) {
+        String qid = queryId("twitter.graphql.search_timeline", DEFAULT_QUERY_SEARCH_TIMELINE);
+        StringBuilder variables = new StringBuilder();
+        variables.append("{\"rawQuery\":\"").append(escapeJson(rawQuery)).append("\"");
+        variables.append(",\"count\":").append(PAGE_SIZE);
+        if (cursorValue != null && !cursorValue.isEmpty()) {
+            variables.append(",\"cursor\":\"").append(escapeJson(cursorValue)).append("\"");
+        }
+        variables.append(",\"product\":\"Latest\"}");
+        return GRAPHQL_BASE + "/" + qid + "/SearchTimeline?variables=" + urlEncode(variables.toString())
+                + "&features=" + FEATURES_TIMELINE
+                + "&fieldToggles=" + FIELD_TOGGLES_TIMELINE;
+    }
+
+    private static String escapeJson(String value) {
+        if (value == null) {
+            return "";
+        }
+        return value.replace("\\", "\\\\").replace("\"", "\\\"");
+    }
+
+    private static String urlEncode(String value) {
+        try {
+            return URLEncoder.encode(value, StandardCharsets.UTF_8.name());
+        } catch (UnsupportedEncodingException e) {
+            return value;
+        }
+    }
+
+    /**
+     * Extracts the numeric rest_id from a UserByScreenName GraphQL response.
+     */
+    public static String extractUserRestId(JSONObject response) throws IOException {
+        try {
+            JSONObject data = response.getJSONObject("data");
+            JSONObject user = data.getJSONObject("user");
+            JSONObject result = user.getJSONObject("result");
+            String typename = result.optString("__typename", "");
+            if ("UserUnavailable".equals(typename) || !"User".equals(typename) && result.has("reason")) {
+                String reason = result.optString("reason", typename);
+                throw new IOException("X user unavailable: " + reason);
+            }
+            String restId = result.optString("rest_id", null);
+            if (restId == null || restId.isEmpty()) {
+                throw new IOException("UserByScreenName response missing rest_id");
+            }
+            return restId;
+        } catch (JSONException e) {
+            throw new IOException("Could not parse UserByScreenName response: " + e.getMessage(), e);
+        }
+    }
+
+    /**
+     * Walks a GraphQL timeline response and returns legacy tweet objects plus pagination metadata.
+     */
+    public static TimelinePage parseTimelinePage(JSONObject response) {
+        TimelinePage page = new TimelinePage();
+        List<JSONObject> instructions = findTimelineInstructions(response);
+        for (JSONObject instruction : instructions) {
+            String type = instruction.optString("type", "");
+            if (!"TimelineAddEntries".equals(type) && !"TimelineReplaceEntries".equals(type)) {
+                continue;
+            }
+            JSONArray entries = instruction.optJSONArray("entries");
+            if (entries == null) {
+                continue;
+            }
+            for (int i = 0; i < entries.length(); i++) {
+                JSONObject entry = entries.optJSONObject(i);
+                if (entry == null) {
+                    continue;
+                }
+                String entryId = entry.optString("entryId", "");
+                JSONObject content = entry.optJSONObject("content");
+                if (content == null) {
+                    continue;
+                }
+                String cursorType = content.optString("cursorType", "");
+                if ("Bottom".equalsIgnoreCase(cursorType) || entryId.startsWith("cursor-bottom")) {
+                    String value = content.optString("value", null);
+                    if (value != null && !value.isEmpty()) {
+                        page.bottomCursor = value;
+                    }
+                    continue;
+                }
+                if ("Top".equalsIgnoreCase(cursorType) || entryId.startsWith("cursor-top")) {
+                    continue;
+                }
+                if (entryId.startsWith("cursor-")) {
+                    continue;
+                }
+
+                collectTweetsFromEntry(entry, content, page.tweets);
+            }
+        }
+        return page;
+    }
+
+    private static List<JSONObject> findTimelineInstructions(JSONObject response) {
+        List<JSONObject> instructions = new ArrayList<>();
+        try {
+            JSONObject data = response.optJSONObject("data");
+            if (data == null) {
+                return instructions;
+            }
+
+            // UserTweets: data.user.result.timeline_v2.timeline.instructions
+            JSONObject user = data.optJSONObject("user");
+            if (user != null) {
+                JSONObject result = user.optJSONObject("result");
+                if (result != null) {
+                    JSONObject timelineV2 = result.optJSONObject("timeline_v2");
+                    if (timelineV2 == null) {
+                        timelineV2 = result.optJSONObject("timeline");
+                    }
+                    if (timelineV2 != null) {
+                        JSONObject timeline = timelineV2.optJSONObject("timeline");
+                        if (timeline != null) {
+                            addInstructions(instructions, timeline.optJSONArray("instructions"));
+                        }
+                    }
+                }
+            }
+
+            // SearchTimeline: data.search_by_raw_query.search_timeline.timeline.instructions
+            JSONObject searchByRaw = data.optJSONObject("search_by_raw_query");
+            if (searchByRaw != null) {
+                JSONObject searchTimeline = searchByRaw.optJSONObject("search_timeline");
+                if (searchTimeline != null) {
+                    JSONObject timeline = searchTimeline.optJSONObject("timeline");
+                    if (timeline != null) {
+                        addInstructions(instructions, timeline.optJSONArray("instructions"));
+                    }
+                }
+            }
+        } catch (JSONException e) {
+            logger.debug("Failed to walk timeline instructions", e);
+        }
+        return instructions;
+    }
+
+    private static void addInstructions(List<JSONObject> instructions, JSONArray array) {
+        if (array == null) {
+            return;
+        }
+        for (int i = 0; i < array.length(); i++) {
+            JSONObject instruction = array.optJSONObject(i);
+            if (instruction != null) {
+                instructions.add(instruction);
+            }
+        }
+    }
+
+    private static void collectTweetsFromEntry(JSONObject entry, JSONObject content, List<JSONObject> tweets) {
+        String entryId = entry.optString("entryId", "");
+        if (!(entryId.startsWith("tweet-")
+                || entryId.startsWith("sq-i-t-")
+                || entryId.startsWith("profile-conversation"))) {
+            // Still try itemContent for unusual entry ids that wrap tweets
+            JSONObject itemContent = content.optJSONObject("itemContent");
+            if (itemContent != null) {
+                JSONObject tweet = unwrapTweetResult(itemContent);
+                if (tweet != null) {
+                    tweets.add(tweet);
+                }
+            }
+            JSONArray items = content.optJSONArray("items");
+            if (items != null) {
+                for (int i = 0; i < items.length(); i++) {
+                    JSONObject moduleItem = items.optJSONObject(i);
+                    if (moduleItem == null) {
+                        continue;
+                    }
+                    JSONObject item = moduleItem.optJSONObject("item");
+                    if (item == null) {
+                        continue;
+                    }
+                    JSONObject moduleItemContent = item.optJSONObject("itemContent");
+                    if (moduleItemContent == null) {
+                        continue;
+                    }
+                    JSONObject tweet = unwrapTweetResult(moduleItemContent);
+                    if (tweet != null) {
+                        tweets.add(tweet);
+                    }
+                }
+            }
+            return;
+        }
+
+        JSONObject itemContent = content.optJSONObject("itemContent");
+        if (itemContent != null) {
+            JSONObject tweet = unwrapTweetResult(itemContent);
+            if (tweet != null) {
+                tweets.add(tweet);
+            }
+        }
+        JSONArray items = content.optJSONArray("items");
+        if (items != null) {
+            for (int i = 0; i < items.length(); i++) {
+                JSONObject moduleItem = items.optJSONObject(i);
+                if (moduleItem == null) {
+                    continue;
+                }
+                JSONObject item = moduleItem.optJSONObject("item");
+                if (item == null) {
+                    continue;
+                }
+                JSONObject moduleItemContent = item.optJSONObject("itemContent");
+                if (moduleItemContent == null) {
+                    continue;
+                }
+                JSONObject tweet = unwrapTweetResult(moduleItemContent);
+                if (tweet != null) {
+                    tweets.add(tweet);
+                }
+            }
+        }
+    }
+
+    /**
+     * Unwraps TweetWithVisibilityResults / Tweet results down to a legacy-bearing tweet object.
+     */
+    public static JSONObject unwrapTweetResult(JSONObject itemContent) {
+        if (itemContent == null) {
+            return null;
+        }
+        JSONObject tweetResults = itemContent.optJSONObject("tweet_results");
+        if (tweetResults == null) {
+            return null;
+        }
+        JSONObject result = tweetResults.optJSONObject("result");
+        if (result == null) {
+            return null;
+        }
+        if ("TweetWithVisibilityResults".equals(result.optString("__typename", ""))) {
+            result = result.optJSONObject("tweet");
+            if (result == null) {
+                return null;
+            }
+        }
+        if (!result.has("legacy")) {
+            return null;
+        }
+        return result;
+    }
+
+    /**
+     * Extracts downloadable media URLs from a GraphQL tweet result object.
+     */
+    public static List<String> extractMediaUrls(JSONObject tweetResult, boolean ripRetweets, boolean excludeReplies) {
+        List<String> urls = new ArrayList<>();
+        if (tweetResult == null) {
+            return urls;
+        }
+
+        JSONObject legacy = tweetResult.optJSONObject("legacy");
+        if (legacy == null) {
+            return urls;
+        }
+
+        if (excludeReplies) {
+            String replyTo = legacy.optString("in_reply_to_status_id_str", "");
+            if (replyTo != null && !replyTo.isEmpty()) {
+                return urls;
+            }
+        }
+
+        if (!ripRetweets && legacy.has("retweeted_status_result")) {
+            JSONObject rsr = legacy.optJSONObject("retweeted_status_result");
+            if (rsr != null && rsr.has("result")) {
+                return urls;
+            }
+        }
+
+        // Prefer media from the retweeted status when present so we still get media of RTs
+        JSONObject mediaSource = legacy;
+        if (legacy.has("retweeted_status_result")) {
+            JSONObject rsr = legacy.optJSONObject("retweeted_status_result");
+            if (rsr != null) {
+                JSONObject rtResult = rsr.optJSONObject("result");
+                if (rtResult != null) {
+                    if ("TweetWithVisibilityResults".equals(rtResult.optString("__typename", ""))) {
+                        rtResult = rtResult.optJSONObject("tweet");
+                    }
+                    if (rtResult != null && rtResult.has("legacy")) {
+                        mediaSource = rtResult.getJSONObject("legacy");
+                    }
+                }
+            }
+        }
+
+        JSONObject entities = mediaSource.has("extended_entities")
+                ? mediaSource.optJSONObject("extended_entities")
+                : mediaSource.optJSONObject("entities");
+        if (entities == null || !entities.has("media")) {
+            return urls;
+        }
+
+        JSONArray medias = entities.optJSONArray("media");
+        if (medias == null) {
+            return urls;
+        }
+
+        for (int i = 0; i < medias.length(); i++) {
+            JSONObject media = medias.optJSONObject(i);
+            if (media == null) {
+                continue;
+            }
+            String type = media.optString("type", "photo");
+            if ("video".equals(type) || "animated_gif".equals(type)) {
+                String videoUrl = selectBestVideoUrl(media);
+                if (videoUrl != null) {
+                    urls.add(videoUrl);
+                }
+            } else {
+                String photoUrl = media.optString("media_url_https", media.optString("media_url", ""));
+                if (!photoUrl.isEmpty()) {
+                    urls.add(rewritePhotoUrl(photoUrl));
+                }
+            }
+        }
+        return urls;
+    }
+
+    public static String selectBestVideoUrl(JSONObject media) {
+        JSONObject videoInfo = media.optJSONObject("video_info");
+        if (videoInfo == null) {
+            return null;
+        }
+        JSONArray variants = videoInfo.optJSONArray("variants");
+        if (variants == null) {
+            return null;
+        }
+        String type = media.optString("type", "video");
+        int largestBitrate = -1;
+        String bestUrl = null;
+        for (int i = 0; i < variants.length(); i++) {
+            JSONObject variant = variants.optJSONObject(i);
+            if (variant == null) {
+                continue;
+            }
+            String contentType = variant.optString("content_type", "");
+            if (!"video/mp4".equals(contentType) && !variant.has("bitrate")) {
+                continue;
+            }
+            String url = variant.optString("url", null);
+            if (url == null || url.isEmpty()) {
+                continue;
+            }
+            if (variant.has("bitrate")) {
+                int bitrate = variant.optInt("bitrate", 0);
+                if (bitrate > largestBitrate) {
+                    largestBitrate = bitrate;
+                    bestUrl = url;
+                }
+            } else if ("animated_gif".equals(type) && bestUrl == null) {
+                bestUrl = url;
+            }
+        }
+        return bestUrl;
+    }
+
+    /**
+     * Rewrites pbs.twimg.com photo URLs to request the original size.
+     */
+    public static String rewritePhotoUrl(String url) {
+        if (url == null || url.isEmpty()) {
+            return url;
+        }
+        if (!url.contains("pbs.twimg.com/media/")) {
+            if (url.contains(".twimg.com/") && !url.contains("?")) {
+                return url + ":orig";
+            }
+            return url;
+        }
+        try {
+            URI uri = URI.create(url);
+            String path = uri.getPath();
+            int slash = path.lastIndexOf('/');
+            String filename = slash >= 0 ? path.substring(slash + 1) : path;
+            int dot = filename.lastIndexOf('.');
+            String baseName = dot > 0 ? filename.substring(0, dot) : filename;
+            String ext = dot > 0 ? filename.substring(dot + 1) : "jpg";
+            String dir = slash >= 0 ? path.substring(0, slash + 1) : "/";
+            return uri.getScheme() + "://" + uri.getHost() + dir + baseName + "?format=" + ext + "&name=orig";
+        } catch (IllegalArgumentException e) {
+            return url.contains("?") ? url : url + ":orig";
+        }
+    }
+
+    public static String oldestTweetDate(List<JSONObject> tweets) {
+        String oldest = null;
+        ZonedDateTime oldestTime = null;
+        for (JSONObject tweet : tweets) {
+            JSONObject legacy = tweet.optJSONObject("legacy");
+            if (legacy == null) {
+                continue;
+            }
+            String createdAt = legacy.optString("created_at", null);
+            if (createdAt == null || createdAt.isEmpty()) {
+                continue;
+            }
+            try {
+                ZonedDateTime time = ZonedDateTime.parse(createdAt, TWITTER_DATE);
+                if (oldestTime == null || time.isBefore(oldestTime)) {
+                    oldestTime = time;
+                    oldest = time.format(UNTIL_DATE);
+                }
+            } catch (Exception e) {
+                logger.debug("Could not parse tweet date: {}", createdAt);
+            }
+        }
+        return oldest;
+    }
+
     public String getPrefix(int index) {
         return Utils.getConfigBoolean("download.save_order", true) ? String.format("%03d_", index) : "";
     }
 
     @Override
     protected JSONObject getFirstPage() throws IOException {
-        getAccessToken();
+        ensureAuthenticated();
+        currentRequest = 0;
+        cursor = null;
+        previousCursor = null;
+        lastBottomCursor = null;
+        oldestPostDate = null;
+        switchedToSearchFallback = false;
+        lastPageHadTweets = false;
 
-        switch (albumType) {
-        case ACCOUNT:
-            checkRateLimits("statuses", "/statuses/user_timeline");
-            break;
-        case SEARCH:
-            checkRateLimits("search", "/search/tweets");
-            break;
+        if (albumType == ALBUM_TYPE.ACCOUNT) {
+            fetchMode = FETCH_MODE.USER_TWEETS;
+            String userUrl = buildUserByScreenNameUrl(accountName);
+            JSONObject userResponse = graphqlGet(userUrl, "https://x.com/" + accountName);
+            userRestId = extractUserRestId(userResponse);
+            logger.info("Resolved @{} to rest_id {}", accountName, userRestId);
+        } else {
+            fetchMode = FETCH_MODE.SEARCH_TIMELINE;
         }
 
-        return getTweets();
+        return fetchTimelinePage();
     }
 
     @Override
@@ -335,12 +762,92 @@ public class TwitterRipper extends AbstractJSONRipper {
         try {
             Thread.sleep(WAIT_TIME);
         } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
             logger.error("[!] Interrupted while waiting to load more results", e);
+            return null;
         }
         if (maxDownloadLimitReached) {
             return null;
         }
-        return currentRequest <= MAX_REQUESTS ? getTweets() : null;
+        if (currentRequest >= MAX_REQUESTS) {
+            logger.info("Reached twitter.max_requests ({}); stopping.", MAX_REQUESTS);
+            return null;
+        }
+
+        previousCursor = cursor;
+        cursor = lastBottomCursor;
+
+        boolean cursorExhausted = cursor == null || cursor.isEmpty() || cursor.equals(previousCursor);
+        if (cursorExhausted
+                && albumType == ALBUM_TYPE.ACCOUNT
+                && fetchMode == FETCH_MODE.USER_TWEETS
+                && !switchedToSearchFallback
+                && oldestPostDate != null) {
+            logger.info("UserTweets exhausted; switching to SearchTimeline from:{} until:{}",
+                    accountName, oldestPostDate);
+            fetchMode = FETCH_MODE.SEARCH_TIMELINE;
+            switchedToSearchFallback = true;
+            cursor = null;
+            previousCursor = null;
+            lastBottomCursor = null;
+        } else if (cursorExhausted && !lastPageHadTweets) {
+            logger.info("No more timeline cursor; stopping.");
+            return null;
+        } else if (cursorExhausted) {
+            logger.info("No more timeline cursor; stopping.");
+            return null;
+        }
+
+        return fetchTimelinePage();
+    }
+
+    private JSONObject fetchTimelinePage() throws IOException {
+        String requestUrl;
+        String referer;
+        if (fetchMode == FETCH_MODE.USER_TWEETS) {
+            requestUrl = buildUserTweetsUrl(userRestId, cursor);
+            referer = "https://x.com/" + accountName;
+        } else {
+            String rawQuery;
+            if (albumType == ALBUM_TYPE.ACCOUNT && switchedToSearchFallback) {
+                rawQuery = "from:" + accountName + " until:" + oldestPostDate;
+                referer = "https://x.com/search?q=" + urlEncode(rawQuery) + "&src=typed_query&f=latest";
+            } else {
+                rawQuery = searchText;
+                referer = "https://x.com/search?q=" + urlEncode(searchText) + "&src=typed_query&f=latest";
+            }
+            requestUrl = buildSearchTimelineUrl(rawQuery, cursor);
+        }
+
+        JSONObject response = graphqlGet(requestUrl, referer);
+        TimelinePage page = parseTimelinePage(response);
+        lastBottomCursor = page.bottomCursor;
+        lastPageHadTweets = !page.tweets.isEmpty();
+        String date = oldestTweetDate(page.tweets);
+        if (date != null) {
+            oldestPostDate = date;
+        }
+
+        if (page.tweets.isEmpty()
+                && albumType == ALBUM_TYPE.ACCOUNT
+                && fetchMode == FETCH_MODE.USER_TWEETS
+                && !switchedToSearchFallback
+                && oldestPostDate != null) {
+            logger.info("Empty UserTweets page; switching to SearchTimeline");
+            fetchMode = FETCH_MODE.SEARCH_TIMELINE;
+            switchedToSearchFallback = true;
+            cursor = null;
+            lastBottomCursor = null;
+            return fetchTimelinePage();
+        }
+
+        JSONArray tweetArray = new JSONArray();
+        for (JSONObject tweet : page.tweets) {
+            tweetArray.put(tweet);
+        }
+        JSONObject wrapper = new JSONObject();
+        wrapper.put("tweets", tweetArray);
+        return wrapper;
     }
 
     @Override
@@ -370,16 +877,14 @@ public class TwitterRipper extends AbstractJSONRipper {
             StringBuilder gid = new StringBuilder();
             for (int i = 0; i < searchText.length(); i++) {
                 char c = searchText.charAt(i);
-                // Ignore URL-encoded chars
-                if (c == '%') {
+                if (c == '%' || c == ' ' || c == ':' || c == '/') {
                     gid.append('_');
-                    i += 2;
-                    // Ignore non-alphanumeric chars
-                } else if ((c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9')) {
+                } else if ((c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9') || c == '_'
+                        || c == '-') {
                     gid.append(c);
                 }
             }
-            return "search_" + gid.toString();
+            return "search_" + gid;
         }
         throw new MalformedURLException("Could not decide type of URL (search/account): " + url);
     }
@@ -396,85 +901,23 @@ public class TwitterRipper extends AbstractJSONRipper {
             hasTweets = false;
             return urls;
         }
-        List<JSONObject> tweets = new ArrayList<>();
-        JSONArray statuses = json.getJSONArray("tweets");
+
+        JSONArray statuses = json.optJSONArray("tweets");
+        if (statuses == null || statuses.length() == 0) {
+            logger.info("   No more tweets found.");
+            // If user timeline is done, getNextPage may switch to search fallback
+            return urls;
+        }
+
+        logger.debug("Twitter GraphQL response #{} tweets: {}", currentRequest, statuses.length());
 
         for (int i = 0; i < statuses.length(); i++) {
-            tweets.add((JSONObject) statuses.get(i));
-        }
-
-        if (tweets.isEmpty()) {
-            logger.info("   No more tweets found.");
-            return urls;
-        }
-
-        logger.debug("Twitter response #" + (currentRequest) + " Tweets:\n" + tweets);
-        if (tweets.size() == 1 && lastMaxID.equals(tweets.get(0).getString("id_str"))) {
-            logger.info("   No more tweet found.");
-            return urls;
-        }
-
-        for (JSONObject tweet : tweets) {
-            lastMaxID = tweet.getLong("id");
-
-            if (!RIP_RETWEETS && tweet.has("retweeted_status")) {
-                logger.info("Skipping a retweet as twitter.rip_retweet is set to false.");
+            JSONObject tweet = statuses.optJSONObject(i);
+            if (tweet == null) {
                 continue;
             }
-
-            JSONObject entities = tweet.has("extended_entities") ? tweet.getJSONObject("extended_entities")
-                    : tweet.has("entities") ? tweet.getJSONObject("entities") : null;
-            if (entities == null || !entities.has("media")) {
-                continue;
-            }
-
-            if (entities.has("media")) {
-                JSONArray medias = entities.getJSONArray("media");
-                String url;
-                JSONObject media;
-
-                for (int i = 0; i < medias.length(); i++) {
-                    media = (JSONObject) medias.get(i);
-                    url = media.optString("media_url_https", media.optString("media_url", ""));
-                    if (url.isEmpty()) {
-                        continue;
-                    }
-                    String type = media.optString("type", "photo");
-                    if (("video".equals(type) || "animated_gif".equals(type)) && media.has("video_info")) {
-                        try {
-                            JSONArray variants = media.getJSONObject("video_info").getJSONArray("variants");
-                            int largestBitrate = 0;
-                            String urlToDownload = null;
-                            for (int j = 0; j < variants.length(); j++) {
-                                JSONObject variant = (JSONObject) variants.get(j);
-                                logger.debug("variant: {}", variant);
-                                if (variant.has("bitrate")) {
-                                    if (variant.getInt("bitrate") > largestBitrate) {
-                                        largestBitrate = variant.getInt("bitrate");
-                                        urlToDownload = variant.getString("url");
-                                    } else if ("animated_gif".equals(type)) {
-                                        urlToDownload = variant.getString("url");
-                                    }
-                                }
-                            }
-                            if (urlToDownload != null) {
-                                urls.add(urlToDownload);
-                            }
-                        } catch (JSONException e) {
-                            logger.warn("Could not parse video_info for media: {}", e.getMessage());
-                        }
-                    } else {
-                        if (url.contains(".twimg.com/")) {
-                            url += ":orig";
-                            urls.add(url);
-                        } else {
-                            urls.add(url);
-                        }
-                    }
-                }
-            }
+            urls.addAll(extractMediaUrls(tweet, RIP_RETWEETS, EXCLUDE_REPLIES));
         }
-
         return urls;
     }
 
@@ -526,7 +969,7 @@ public class TwitterRipper extends AbstractJSONRipper {
 
     @Override
     public boolean canRip(URL url) {
-        String host = url.getHost().toLowerCase();
+        String host = url.getHost().toLowerCase(Locale.ROOT);
         return host.endsWith("twitter.com") || host.endsWith("x.com");
     }
 
@@ -548,151 +991,74 @@ public class TwitterRipper extends AbstractJSONRipper {
         super.downloadErrored(url, reason);
     }
 
-    private static String loadAccessTokenFromFirefox() {
-        if (!FirefoxCookieUtils.isSQLiteDriverAvailable()) {
-            logger.debug("SQLite JDBC driver not available; cannot read Firefox data for twitter token");
-            return null;
+    private void loadTwitterCookies() {
+        twitterCookies.clear();
+        loadCookiesFromFirefox();
+        mergeConfiguredCookies("cookies.x.com");
+        mergeConfiguredCookies("cookies.twitter.com");
+        twitterCookieHeader = FirefoxCookieUtils.toCookieHeader(twitterCookies);
+        if (twitterCookieHeader != null && !twitterCookieHeader.isEmpty()) {
+            logger.debug("Prepared twitter cookie header ({} bytes, auth_token={}, ct0={})",
+                    twitterCookieHeader.length(),
+                    getTwitterCookie("auth_token") != null,
+                    getTwitterCookie("ct0") != null);
         }
-
-        Set<Path> profilePaths = FirefoxCookieUtils.discoverFirefoxProfiles();
-        if (profilePaths.isEmpty()) {
-            logger.debug("No Firefox profiles detected while attempting to load twitter token");
-            return null;
-        }
-
-        for (Path profilePath : profilePaths) {
-            String token = readAccessTokenFromFirefoxProfile(profilePath);
-            if (token != null && !token.isBlank()) {
-                logger.info("Loaded twitter bearer token from Firefox profile {}", profilePath.getFileName());
-                return token.trim();
-            }
-        }
-
-        logger.debug("Unable to locate twitter bearer token in any Firefox profile");
-        return null;
     }
 
-    private void loadTwitterCookiesFromFirefox() {
+    private void mergeConfiguredCookies(String configKey) {
+        String configured = Utils.getConfigString(configKey, null);
+        if (configured == null || configured.isBlank()) {
+            return;
+        }
+        try {
+            Map<String, String> parsed = RipUtils.getCookiesFromString(configured.trim());
+            for (Map.Entry<String, String> entry : parsed.entrySet()) {
+                // Config overrides Firefox when explicitly set
+                if (entry.getKey() != null && !entry.getKey().isBlank() && entry.getValue() != null) {
+                    twitterCookies.put(entry.getKey(), entry.getValue());
+                }
+            }
+        } catch (Exception e) {
+            logger.warn("Could not parse {}: {}", configKey, e.getMessage());
+        }
+    }
+
+    private void loadCookiesFromFirefox() {
         if (!FirefoxCookieUtils.isSQLiteDriverAvailable()) {
             logger.debug("SQLite JDBC driver not available; cannot read Firefox cookies for twitter");
             return;
         }
 
-        twitterCookies.clear();
+        Map<String, String> bestCookies = null;
+        Path bestProfile = null;
         for (Path profilePath : FirefoxCookieUtils.discoverFirefoxProfiles()) {
             Map<String, String> cookies = FirefoxCookieUtils.readCookiesFromProfile(profilePath,
                     Arrays.asList("%twitter.com", "%x.com"));
-            if (!cookies.isEmpty()) {
-                twitterCookies.putAll(cookies);
-                logger.info("Loaded {} twitter cookies from Firefox profile {}", cookies.size(), profilePath.getFileName());
+            if (cookies.isEmpty()) {
+                continue;
+            }
+            boolean hasAuth = cookies.containsKey("auth_token") && !isBlank(cookies.get("auth_token"));
+            boolean hasCt0 = cookies.containsKey("ct0") && !isBlank(cookies.get("ct0"));
+            if (hasAuth && hasCt0) {
+                bestCookies = cookies;
+                bestProfile = profilePath;
                 break;
             }
+            if (bestCookies == null) {
+                bestCookies = cookies;
+                bestProfile = profilePath;
+            }
         }
 
-        twitterCookieHeader = FirefoxCookieUtils.toCookieHeader(twitterCookies);
-        if (twitterCookieHeader != null && !twitterCookieHeader.isEmpty()) {
-            logger.debug("Prepared twitter cookie header from Firefox ({} bytes)", twitterCookieHeader.length());
+        if (bestCookies != null) {
+            twitterCookies.putAll(bestCookies);
+            logger.info("Loaded {} twitter cookies from Firefox profile {}", bestCookies.size(),
+                    bestProfile != null ? bestProfile.getFileName() : "?");
         }
     }
 
-    private static String readAccessTokenFromFirefoxProfile(Path profilePath) {
-        if (profilePath == null) {
-            return null;
-        }
-
-        String token = readTokenFromWebappsStore(profilePath);
-        if (token != null && !token.isBlank()) {
-            return token;
-        }
-
-        token = readTokenFromCookies(profilePath);
-        if (token != null && !token.isBlank()) {
-            return token;
-        }
-
-        return null;
-    }
-
-    private static String readTokenFromWebappsStore(Path profilePath) {
-        Path sqlitePath = profilePath.resolve("webappsstore.sqlite");
-        if (!Files.exists(sqlitePath)) {
-            return null;
-        }
-
-        Path tempCopy = null;
-        try {
-            tempCopy = Files.createTempFile("ripme-twitter-webapps", ".sqlite");
-            tempCopy.toFile().deleteOnExit();
-            Files.copy(sqlitePath, tempCopy, StandardCopyOption.REPLACE_EXISTING);
-            try (Connection conn = DriverManager.getConnection("jdbc:sqlite:" + tempCopy);
-                    Statement stmt = conn.createStatement();
-                    ResultSet rs = stmt.executeQuery(
-                            "SELECT value FROM webappsstore2 WHERE (originKey LIKE '%twitter.com%' OR originKey LIKE '%x.com%') AND value LIKE 'Bearer %'")) {
-                while (rs.next()) {
-                    String value = rs.getString("value");
-                    if (value != null && !value.isBlank()) {
-                        String token = normalizeAccessToken(value);
-                        if (token != null && !token.isBlank()) {
-                            return token;
-                        }
-                    }
-                }
-            }
-        } catch (SQLException | IOException e) {
-            logger.debug("Unable to read twitter token from Firefox webappsstore in {}", profilePath, e);
-        } finally {
-            if (tempCopy != null) {
-                try {
-                    Files.deleteIfExists(tempCopy);
-                } catch (IOException e) {
-                    logger.debug("Failed to delete temporary Firefox storage copy", e);
-                }
-            }
-        }
-
-        return null;
-    }
-
-    private static String readTokenFromCookies(Path profilePath) {
-        Path sqlitePath = profilePath.resolve("cookies.sqlite");
-        if (!Files.exists(sqlitePath)) {
-            return null;
-        }
-
-        Path tempCopy = null;
-        try {
-            tempCopy = Files.createTempFile("ripme-twitter-cookies", ".sqlite");
-            tempCopy.toFile().deleteOnExit();
-            Files.copy(sqlitePath, tempCopy, StandardCopyOption.REPLACE_EXISTING);
-            String sql = "SELECT name, value FROM moz_cookies WHERE host LIKE '%twitter.com%' OR host LIKE '%x.com%'";
-            try (Connection conn = DriverManager.getConnection("jdbc:sqlite:" + tempCopy);
-                    Statement stmt = conn.createStatement();
-                    ResultSet rs = stmt.executeQuery(sql)) {
-                while (rs.next()) {
-                    String value = rs.getString("value");
-                    if (value == null || value.isBlank()) {
-                        continue;
-                    }
-
-                    String token = extractAccessTokenFromCookieValue(value);
-                    if (token != null && !token.isBlank()) {
-                        return token;
-                    }
-                }
-            }
-        } catch (SQLException | IOException e) {
-            logger.debug("Unable to read twitter token from Firefox cookies in {}", profilePath, e);
-        } finally {
-            if (tempCopy != null) {
-                try {
-                    Files.deleteIfExists(tempCopy);
-                } catch (IOException e) {
-                    logger.debug("Failed to delete temporary Firefox cookie copy", e);
-                }
-            }
-        }
-
-        return null;
+    private static boolean isBlank(String value) {
+        return value == null || value.isBlank();
     }
 
     private String getTwitterCookie(String name) {
@@ -700,50 +1066,6 @@ public class TwitterRipper extends AbstractJSONRipper {
             return null;
         }
         return twitterCookies.get(name);
-    }
-
-    private static String extractAccessTokenFromCookieValue(String value) {
-        if (value == null) {
-            return null;
-        }
-
-        String trimmed = value.trim();
-        if (trimmed.isEmpty()) {
-            return null;
-        }
-
-        String normalized = normalizeAccessToken(trimmed);
-        if (normalized != null && !normalized.isBlank() && !normalized.equals(trimmed)) {
-            return normalized;
-        }
-
-        int idx = trimmed.indexOf("access_token");
-        if (idx >= 0) {
-            Pattern pattern = Pattern.compile("\"access_token\"\\s*:\\s*\"([^\"]+)\"");
-            Matcher matcher = pattern.matcher(trimmed);
-            if (matcher.find()) {
-                return matcher.group(1).trim();
-            }
-        }
-
-        return null;
-    }
-
-    private static String normalizeAccessToken(String value) {
-        if (value == null) {
-            return null;
-        }
-
-        String trimmed = value.trim();
-        if (trimmed.isEmpty()) {
-            return null;
-        }
-
-        if (trimmed.startsWith("Bearer ")) {
-            return trimmed.substring("Bearer ".length()).trim();
-        }
-
-        return trimmed;
     }
 
     private void handleSuccessfulDownload(URL url) {
@@ -758,4 +1080,11 @@ public class TwitterRipper extends AbstractJSONRipper {
         }
     }
 
+    /**
+     * Parsed GraphQL timeline page: tweet results and bottom cursor.
+     */
+    public static final class TimelinePage {
+        public final List<JSONObject> tweets = new ArrayList<>();
+        public String bottomCursor;
+    }
 }

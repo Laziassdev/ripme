@@ -166,7 +166,8 @@ public final class FirefoxCookieUtils {
                         if (name == null || name.isBlank() || value == null || value.isEmpty()) {
                             continue;
                         }
-                        cookies.put(name, value);
+                        // Query orders by lastAccessed DESC; keep the newest value per name.
+                        cookies.putIfAbsent(name, value);
                     }
                 }
             }

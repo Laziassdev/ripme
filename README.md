@@ -97,7 +97,7 @@ Feel free to open an issue if you notice something not working, but please searc
 The list of supported rippers includes:
 
 - imgur
-- twitter (currently broken, needs to be updated for X)
+- twitter / x.com (requires a logged-in Firefox session on x.com)
 - tumblr
 - instagram
 - flickr
