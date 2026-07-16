@@ -30,6 +30,7 @@ import java.util.Locale;
 import java.util.Set;
 import java.util.Map;
 import java.util.MissingResourceException;
+import java.util.WeakHashMap;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
@@ -96,6 +97,15 @@ public final class MainWindow implements Runnable, RipStatusHandler {
     private boolean isRipping = false; // Flag to indicate if we're ripping something
     private volatile boolean queuePaused = false;
     private final Map<AbstractRipper, ActiveDownloadEntry> activeRippers = new ConcurrentHashMap<>();
+    /*
+     * Rippers that have reached a terminal state (complete/errored/no-album/stopped/finished).
+     * Prevents late or out-of-order status messages (e.g. a DOWNLOAD_COMPLETE that a racing
+     * download thread enqueues after RIP_COMPLETE) from resurrecting an already-removed active
+     * entry via ensureActiveRipperEntry(). Weak keys let finished rippers be GC'd once no queued
+     * StatusEvent still references them, so this never grows unbounded across a session.
+     */
+    private final Set<AbstractRipper> finishedRippers =
+            Collections.synchronizedSet(Collections.newSetFromMap(new WeakHashMap<>()));
     private final Set<String> activeDomains = Collections.newSetFromMap(new ConcurrentHashMap<>());
     private final ExecutorService ripExecutor = Executors.newCachedThreadPool();
     private BiConsumer<String, String> ripperLauncher = this::launchRipper;
@@ -517,7 +527,9 @@ public final class MainWindow implements Runnable, RipStatusHandler {
     }
 
     private void ensureActiveRipperEntry(AbstractRipper ripper) {
-        if (ripper == null || activeRippers.containsKey(ripper)) {
+        if (ripper == null || activeRippers.containsKey(ripper) || finishedRippers.contains(ripper)) {
+            // Never re-create an entry for a ripper that has already finished; doing so would
+            // leave a completed rip stuck in the active-downloads list forever.
             return;
         }
         String domain = "unknown";
@@ -539,6 +551,9 @@ public final class MainWindow implements Runnable, RipStatusHandler {
         if (ripper == null) {
             return;
         }
+        // Mark finished first so any status message still queued behind this terminal event
+        // cannot resurrect the entry via ensureActiveRipperEntry().
+        finishedRippers.add(ripper);
         if (activeRippers.remove(ripper) != null) {
             refreshActivePanel();
         }
@@ -2491,6 +2506,10 @@ public final class MainWindow implements Runnable, RipStatusHandler {
     void onRipperFinished(String domain, AbstractRipper ripper) {
         if (ripper != null) {
             removePausedUrl(ripper.getURL().toExternalForm());
+            // Guaranteed cleanup: the rip thread has returned, so this is the last chance to
+            // finalize rippers that ended via a path with no terminal status event (0 URLs,
+            // uncaught exception, or a stopped rip that was guarded out of handleEvent).
+            finishedRippers.add(ripper);
             activeRippers.remove(ripper);
         }
         if (domain != null && activeDomains.remove(domain)) {
