@@ -1,7 +1,9 @@
 {
-  "latestVersion": "2.1.273-1-9ae1fd8",
-  "currentHash": "68ec5e085c67b88124069e17eb57322478ceb5ee613556b1bdd0e7b9d06bdc63",
+  "latestVersion": "2.1.274-1-389d18b",
+  "currentHash": "2d32c86a0e98f650f43f246570c34b696792f4ea49f42c1e1c4be605f5465458",
   "changeList": [
+    "2.1.274-1-389d18b: Add Instagram reels support and fix history removal",
+    "2.1.274-1-389d18b: Built at 2026-07-16T21:54:59Z",
     "2.1.273-1-9ae1fd8: Move re-ripped history entry to bottom on start",
     "2.1.273-1-9ae1fd8: Built at 2026-07-16T21:26:06Z",
     "2.1.272-1-cedc8eb: Restore history row at rip start with 0/0",
