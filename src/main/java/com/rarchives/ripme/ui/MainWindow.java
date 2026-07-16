@@ -2715,7 +2715,9 @@ public final class MainWindow implements Runnable, RipStatusHandler {
             HistoryEntry entry;
             if (HISTORY.containsURL(url)) {
                 entry = HISTORY.getEntryByURL(url);
-                if (rsc.count == 0 && entry.count == 0) {
+                String entryDir = (entry.dir != null && !entry.dir.isEmpty()) ? entry.dir : rsc.getDir();
+                if (rsc.count == 0 && entry.count == 0 && !hasDownloadedFiles(entryDir)) {
+                    // Nothing new, no prior recorded downloads, and no files on disk: drop the empty row.
                     HISTORY.remove(entry);
                 } else {
                     entry.latestCount = rsc.count;
@@ -2831,10 +2833,44 @@ public final class MainWindow implements Runnable, RipStatusHandler {
 
     private void removeEmptyHistoryEntry(AbstractRipper ripper) {
         String url = normalizeQueueUrl(ripper.getURL().toExternalForm());
-        if (HISTORY.removeIfNeverDownloaded(url)) {
-            historyTableModel.fireTableDataChanged();
-            applyHistoryFilter();
-            saveHistory();
+        if (!HISTORY.containsURL(url)) {
+            return;
+        }
+        HistoryEntry entry = HISTORY.getEntryByURL(url);
+        if (entry.count > 0) {
+            return;
+        }
+        String dir = (entry.dir != null && !entry.dir.isEmpty())
+                ? entry.dir
+                : ripper.getWorkingDir().getAbsolutePath();
+        if (hasDownloadedFiles(dir)) {
+            // Keep entries whose album folder still holds previously downloaded files.
+            return;
+        }
+        HISTORY.remove(entry);
+        historyTableModel.fireTableDataChanged();
+        applyHistoryFilter();
+        saveHistory();
+    }
+
+    /**
+     * @return {@code true} when {@code dir} exists and contains at least one downloaded file
+     *         (ignoring the {@code urls.txt} produced by urls-only rips).
+     */
+    private boolean hasDownloadedFiles(String dir) {
+        if (dir == null || dir.isEmpty()) {
+            return false;
+        }
+        Path folder = Paths.get(dir);
+        if (!Files.isDirectory(folder)) {
+            return false;
+        }
+        try (Stream<Path> stream = Files.walk(folder)) {
+            return stream.anyMatch(path -> Files.isRegularFile(path)
+                    && !path.getFileName().toString().equalsIgnoreCase("urls.txt"));
+        } catch (IOException e) {
+            LOGGER.warn("Could not inspect album directory {}: {}", dir, e.getMessage());
+            return false;
         }
     }
 

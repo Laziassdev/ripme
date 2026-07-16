@@ -30,6 +30,7 @@ import com.rarchives.ripme.utils.FirefoxCookieUtils;
 import com.rarchives.ripme.utils.Http;
 import com.rarchives.ripme.utils.RipUtils;
 import com.rarchives.ripme.utils.Utils;
+import org.jsoup.Connection.Method;
 import org.jsoup.Connection.Response;
 import java.sql.DriverManager;
 import java.sql.PreparedStatement;
@@ -85,12 +86,24 @@ public class InstagramRipper extends AbstractJSONRipper {
 
     @Override
     public String getGID(URL url) throws MalformedURLException {
-        Pattern pattern = Pattern.compile("https?://(?:www\\.)?instagram\\.com/(?<username>[^/?#]+)/?");
+        // Reels rip into the same album folder as the profile's posts.
+        return getUsername(url);
+    }
+
+    /** Extracts just the account handle, ignoring any trailing tab like {@code /reels/}. */
+    private String getUsername(URL url) throws MalformedURLException {
+        Pattern pattern = Pattern.compile("https?://(?:www\\.)?instagram\\.com/(?<username>[^/?#]+)");
         Matcher matcher = pattern.matcher(url.toExternalForm());
         if (matcher.find()) {
             return matcher.group("username");
         }
         throw new MalformedURLException("Expected format: https://www.instagram.com/username/");
+    }
+
+    /** True when the URL points at a profile's reels tab (e.g. {@code /username/reels/}). */
+    private boolean isReelsUrl(URL url) {
+        return url.toExternalForm()
+                .matches("(?i)https?://(?:www\\.)?instagram\\.com/[^/?#]+/reels/?(?:[?#].*)?");
     }
 
     @Override
@@ -196,8 +209,9 @@ public class InstagramRipper extends AbstractJSONRipper {
         }
     }    @Override
     protected JSONObject getFirstPage() throws IOException {
-        String username = getGID(url);
-        logger.info("Ripping Instagram profile: " + username);
+        String username = getUsername(url);
+        boolean reels = isReelsUrl(url);
+        logger.info("Ripping Instagram {}: {}", reels ? "reels" : "profile", username);
         
         // Always try Firefox cookies first
         extractFirefoxCookies();
@@ -205,7 +219,7 @@ public class InstagramRipper extends AbstractJSONRipper {
             throw new IOException("No Instagram cookies found. Please log in to Instagram using Firefox and try again.");
         }
         
-        JSONObject json = getGraphQLUserPage(username, null);
+        JSONObject json = reels ? getClipsUserPage(username, null) : getGraphQLUserPage(username, null);
         
         // Enhanced debug logging
         logger.debug("First page response: " + (json != null ? json.toString(2) : "null"));
@@ -363,6 +377,200 @@ public class InstagramRipper extends AbstractJSONRipper {
             throw e;
         }
     }
+    /**
+     * Fetches a page of a user's reels via the private {@code /api/v1/clips/user/} endpoint.
+     * Unlike the web reels-tab GraphQL query (which only returns cover images), this endpoint
+     * returns full media objects including {@code video_versions}, so we can download the videos.
+     * The response is normalized into the same shape {@link #getURLsFromJSON(JSONObject)} expects.
+     */
+    private JSONObject getClipsUserPage(String username, String maxId) throws IOException {
+        String userId = getUserID(username);
+        if (userId == null || userId.isEmpty()) {
+            throw new IOException("Failed to get user ID for " + username);
+        }
+
+        String requestUrl = "https://www.instagram.com/api/v1/clips/user/";
+        Map<String, String> data = new HashMap<>();
+        data.put("target_user_id", userId);
+        data.put("page_size", "50");
+        data.put("include_feed_video", "true");
+        if (maxId != null && !maxId.isEmpty()) {
+            data.put("max_id", maxId);
+        }
+        logger.debug("Fetching reels for {} (maxId={})", username, maxId);
+
+        try {
+            Http request = Http.url(requestUrl)
+                    .method(Method.POST)
+                    .data(data)
+                    .userAgent(INSTAGRAM_USER_AGENT)
+                    .header("Accept", "*/*")
+                    .header("Accept-Language", "en-US,en;q=0.9")
+                    .header("X-IG-App-ID", INSTAGRAM_APP_ID)
+                    .header("X-Requested-With", "XMLHttpRequest")
+                    .header("X-ASBD-ID", "129477")
+                    .header("X-IG-WWW-Claim", cookies.getOrDefault("ig_www_claim", "0"))
+                    .header("X-CSRFToken", cookies.getOrDefault("csrftoken", ""))
+                    .header("Origin", "https://www.instagram.com")
+                    .header("Referer", "https://www.instagram.com/" + username + "/reels/")
+                    .header("Sec-Fetch-Dest", "empty")
+                    .header("Sec-Fetch-Mode", "cors")
+                    .header("Sec-Fetch-Site", "same-origin")
+                    .cookies(cookies)
+                    .ignoreContentType()
+                    .ignoreHttpErrors();
+            applyOptionalInstagramHeaders(request);
+            Response response = request.response();
+
+            int statusCode = response.statusCode();
+            String jsonText = response.body();
+            logger.debug("Instagram clips API {} -> status {} (len={})", requestUrl, statusCode,
+                    jsonText != null ? jsonText.length() : 0);
+
+            if (statusCode == 429) {
+                logger.warn("Instagram clips API rate limited {} body={}", requestUrl, summarizeBody(jsonText));
+                throw new IOException("Rate limited by Instagram. Please wait a few minutes before trying again.");
+            }
+            if (statusCode != 200) {
+                logger.warn("Instagram clips API error {} -> status {} body={}", requestUrl, statusCode,
+                        summarizeBody(jsonText));
+                throw new IOException("HTTP error " + statusCode + " while fetching reels for " + username);
+            }
+            if (jsonText == null || jsonText.isEmpty()) {
+                throw new IOException("Empty response from Instagram clips API");
+            }
+
+            JSONObject json = new JSONObject(jsonText);
+            if (!json.has("items")) {
+                if (json.has("message")) {
+                    throw new IOException("Instagram API error: " + json.getString("message"));
+                }
+                throw new IOException("Invalid clips response - missing items array");
+            }
+            return convertClipsToTimeline(json);
+        } catch (JSONException e) {
+            logger.error("Error parsing clips response: " + e.getMessage());
+            throw new IOException("Failed to parse Instagram clips response: " + e.getMessage());
+        }
+    }
+
+    /** Reshapes a {@code /clips/user/} response into the GraphQL timeline structure. */
+    private JSONObject convertClipsToTimeline(JSONObject clips) {
+        JSONArray items = clips.getJSONArray("items");
+        JSONArray edges = new JSONArray();
+        for (int i = 0; i < items.length(); i++) {
+            JSONObject media = items.getJSONObject(i).optJSONObject("media");
+            if (media == null) {
+                continue;
+            }
+            JSONObject node = mediaToNode(media);
+            if (node != null) {
+                JSONObject edge = new JSONObject();
+                edge.put("node", node);
+                edges.put(edge);
+            }
+        }
+
+        boolean hasNext = false;
+        String endCursorValue = null;
+        if (clips.has("paging_info") && !clips.isNull("paging_info")) {
+            JSONObject paging = clips.getJSONObject("paging_info");
+            hasNext = paging.optBoolean("more_available", false);
+            endCursorValue = paging.optString("max_id", null);
+        }
+
+        JSONObject pageInfo = new JSONObject();
+        pageInfo.put("has_next_page", hasNext && endCursorValue != null && !endCursorValue.isEmpty());
+        if (endCursorValue != null) {
+            pageInfo.put("end_cursor", endCursorValue);
+        }
+
+        JSONObject timelineMedia = new JSONObject();
+        timelineMedia.put("edges", edges);
+        timelineMedia.put("page_info", pageInfo);
+
+        JSONObject user = new JSONObject();
+        user.put("edge_owner_to_timeline_media", timelineMedia);
+        JSONObject dataObj = new JSONObject();
+        dataObj.put("user", user);
+        JSONObject result = new JSONObject();
+        result.put("data", dataObj);
+        return result;
+    }
+
+    /** Converts a single private-API media object into a GraphQL-style node. */
+    private JSONObject mediaToNode(JSONObject media) {
+        if (media.has("carousel_media") && !media.isNull("carousel_media")) {
+            JSONArray carousel = media.getJSONArray("carousel_media");
+            JSONArray childEdges = new JSONArray();
+            for (int i = 0; i < carousel.length(); i++) {
+                String childUrl = bestMediaUrl(carousel.getJSONObject(i));
+                if (childUrl != null) {
+                    JSONObject childNode = new JSONObject();
+                    childNode.put("display_url", childUrl);
+                    JSONObject childEdge = new JSONObject();
+                    childEdge.put("node", childNode);
+                    childEdges.put(childEdge);
+                }
+            }
+            if (childEdges.length() == 0) {
+                return null;
+            }
+            JSONObject node = new JSONObject();
+            node.put("__typename", "GraphSidecar");
+            JSONObject sidecar = new JSONObject();
+            sidecar.put("edges", childEdges);
+            node.put("edge_sidecar_to_children", sidecar);
+            return node;
+        }
+
+        JSONObject node = new JSONObject();
+        String video = videoUrl(media);
+        if (video != null) {
+            node.put("__typename", "GraphVideo");
+            node.put("video_url", video);
+            String image = imageUrl(media);
+            node.put("display_url", image != null ? image : "");
+            return node;
+        }
+
+        String image = imageUrl(media);
+        if (image == null) {
+            return null;
+        }
+        node.put("__typename", "GraphImage");
+        node.put("display_url", image);
+        return node;
+    }
+
+    private String bestMediaUrl(JSONObject media) {
+        String video = videoUrl(media);
+        return video != null ? video : imageUrl(media);
+    }
+
+    private String videoUrl(JSONObject media) {
+        if (media.has("video_versions") && !media.isNull("video_versions")) {
+            JSONArray versions = media.getJSONArray("video_versions");
+            if (versions.length() > 0) {
+                return versions.getJSONObject(0).optString("url", null);
+            }
+        }
+        return null;
+    }
+
+    private String imageUrl(JSONObject media) {
+        if (media.has("image_versions2") && !media.isNull("image_versions2")) {
+            JSONObject imageVersions = media.getJSONObject("image_versions2");
+            if (imageVersions.has("candidates")) {
+                JSONArray candidates = imageVersions.getJSONArray("candidates");
+                if (candidates.length() > 0) {
+                    return candidates.getJSONObject(0).optString("url", null);
+                }
+            }
+        }
+        return null;
+    }
+
     private String getUserID(String username) throws IOException {
         if (cachedUserId != null && !cachedUserId.isEmpty()) {
             return cachedUserId;
@@ -863,8 +1071,8 @@ public class InstagramRipper extends AbstractJSONRipper {
             throw new IOException("No more pages");
         }
 
-        String username = getGID(url);
-        return getGraphQLUserPage(username, endCursor);
+        String username = getUsername(url);
+        return isReelsUrl(url) ? getClipsUserPage(username, endCursor) : getGraphQLUserPage(username, endCursor);
     }
 
     @Override
