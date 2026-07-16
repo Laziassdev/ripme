@@ -1,7 +1,9 @@
 {
-  "latestVersion": "2.1.274-1-389d18b",
-  "currentHash": "2d32c86a0e98f650f43f246570c34b696792f4ea49f42c1e1c4be605f5465458",
+  "latestVersion": "2.1.275-1-3efcbb9",
+  "currentHash": "766a058246e500d1dbe4cf4cf7dde50c3fe7ddabb86b4f42382e02dbf29faec5",
   "changeList": [
+    "2.1.275-1-3efcbb9: Fix completed rips stuck in active downloads list",
+    "2.1.275-1-3efcbb9: Built at 2026-07-16T22:09:56Z",
     "2.1.274-1-389d18b: Add Instagram reels support and fix history removal",
     "2.1.274-1-389d18b: Built at 2026-07-16T21:54:59Z",
     "2.1.273-1-9ae1fd8: Move re-ripped history entry to bottom on start",
