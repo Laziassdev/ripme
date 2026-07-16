@@ -2425,7 +2425,18 @@ public final class MainWindow implements Runnable, RipStatusHandler {
                 ripper.setObserver(this);
 
                 String ripUrl = normalizeQueueUrl(ripper.getURL().toExternalForm());
-                if (HISTORY.containsURL(ripUrl)) {
+                if (!HISTORY.containsURL(ripUrl)) {
+                    // Show the row immediately with 0/0; it is removed on completion if
+                    // nothing was downloaded and it had no prior successful downloads.
+                    HistoryEntry entry = new HistoryEntry();
+                    entry.url = ripUrl;
+                    entry.dir = ripper.getWorkingDir().getAbsolutePath();
+                    entry.startDate = new Date();
+                    entry.modifiedDate = new Date();
+                    HISTORY.add(entry);
+                    historyTableModel.fireTableDataChanged();
+                    saveHistory();
+                } else {
                     HistoryEntry entry = HISTORY.getEntryByURL(ripUrl);
                     entry.latestCount = 0;
                     if (entry.dir == null || entry.dir.isEmpty()) {
