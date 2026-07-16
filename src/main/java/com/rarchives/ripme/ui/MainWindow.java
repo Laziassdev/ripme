@@ -2442,7 +2442,10 @@ public final class MainWindow implements Runnable, RipStatusHandler {
                     if (entry.dir == null || entry.dir.isEmpty()) {
                         entry.dir = ripper.getWorkingDir().getAbsolutePath();
                     }
+                    // Move the re-ripped entry to the bottom so active rips show as most recent.
+                    HISTORY.moveToBottom(entry);
                     historyTableModel.fireTableDataChanged();
+                    saveHistory();
                 }
 
                 Thread t = new Thread(ripper);
