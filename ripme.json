@@ -1,7 +1,9 @@
 {
-  "latestVersion": "2.1.272-1-cedc8eb",
-  "currentHash": "ba06f31a56785fc80d593392e5dd0cc7b04eff41e8032d1c681adf2f54ffb38a",
+  "latestVersion": "2.1.273-1-9ae1fd8",
+  "currentHash": "68ec5e085c67b88124069e17eb57322478ceb5ee613556b1bdd0e7b9d06bdc63",
   "changeList": [
+    "2.1.273-1-9ae1fd8: Move re-ripped history entry to bottom on start",
+    "2.1.273-1-9ae1fd8: Built at 2026-07-16T21:26:06Z",
     "2.1.272-1-cedc8eb: Restore history row at rip start with 0/0",
     "2.1.272-1-cedc8eb: Built at 2026-07-16T21:04:48Z",
     "2.1.271-1-a5a4f00: Merge branch 'main' of https://github.com/Laziassdev/ripme",
