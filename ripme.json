@@ -1,7 +1,9 @@
 {
-  "latestVersion": "2.1.275-1-3efcbb9",
-  "currentHash": "766a058246e500d1dbe4cf4cf7dde50c3fe7ddabb86b4f42382e02dbf29faec5",
+  "latestVersion": "2.1.276-1-b7a6249",
+  "currentHash": "f59bce7e1be6f3daa44e7aac56bdda70fdcc44d40ce1c1ab0d872a38e4f31e8d",
   "changeList": [
+    "2.1.276-1-b7a6249: Point updater and docs at Lazidev/ripme after repo transfer.",
+    "2.1.276-1-b7a6249: Built at 2026-07-19T13:56:00Z",
     "2.1.275-1-3efcbb9: Fix completed rips stuck in active downloads list",
     "2.1.275-1-3efcbb9: Built at 2026-07-16T22:09:56Z",
     "2.1.274-1-389d18b: Add Instagram reels support and fix history removal",
