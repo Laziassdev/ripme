@@ -141,7 +141,7 @@ public class RedditRipper extends AlbumRipper {
     private static final Pattern REDDIT_USER_EDGE_CHARS = Pattern.compile("^[^A-Za-z0-9]+|[^A-Za-z0-9]+$");
     private static final Pattern NON_ALNUM = Pattern.compile("[^A-Za-z0-9]+");
 
-    private static final String REDDIT_USER_AGENT = "RipMe:github.com/laziassdev/ripme:" + UpdateUtils.getThisJarVersion() + " (by /u/metaprime and /u/ineedmorealts)";
+    private static final String REDDIT_USER_AGENT = "RipMe:github.com/Lazidev/ripme:" + UpdateUtils.getThisJarVersion() + " (by /u/metaprime and /u/ineedmorealts)";
 
     private static final int SLEEP_TIME = 2000;
     private static final int RETRY_DELAY_SECONDS = 20;

@@ -13,7 +13,7 @@ currently being supported with security updates.
 
 ## Reporting a Vulnerability
 
-A vulnerability may be reported either on [github](https://github.com/RipMeApp/ripme/issues) 
+A vulnerability may be reported either on [github](https://github.com/Lazidev/ripme/issues) 
 or by contacting a maintainer on reddit.
 
 Maintainers with reddit accounts:

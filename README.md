@@ -3,7 +3,7 @@
 [![Licensed under the MIT License](https://img.shields.io/badge/License-MIT-blue.svg)](/LICENSE.txt)
 [![Join the chat at https://gitter.im/RipMeApp/Lobby](https://badges.gitter.im/RipMeApp/Lobby.svg)](https://gitter.im/RipMeApp/Lobby?utm_source=badge&utm_medium=badge&utm_campaign=pr-badge&utm_content=badge)
 [![Subreddit](https://img.shields.io/badge/discuss-on%20reddit-blue.svg)](https://www.reddit.com/r/ripme/)
-![alt Badge Status](https://github.com/ripmeapp/ripme/actions/workflows/gradle.yml/badge.svg)
+![alt Badge Status](https://github.com/Lazidev/ripme/actions/workflows/gradle.yml/badge.svg)
 [![Coverage Status](https://coveralls.io/repos/github/RipMeApp/ripme/badge.svg?branch=main)](https://coveralls.io/github/RipMeApp/ripme?branch=main)
 
 ## About
@@ -14,7 +14,7 @@ RipMe is an album downloader (or "ripper") for various websites. This is a cross
 
 ## Download
 
-Download `ripme.jar` from the [latest release](https://github.com/ripmeapp/ripme/releases/latest). For information about running the `.jar` file, see
+Download `ripme.jar` from the [latest release](https://github.com/Lazidev/ripme/releases/latest). For information about running the `.jar` file, see
 [the How To Run wiki](https://github.com/ripmeapp/ripme/wiki/How-To-Run-RipMe).
 
 ## Minimum Requirements
@@ -26,15 +26,14 @@ Java 17 is the most modern possible Java version that allows us to support the m
 ## Supported Sites
 
 Jump to:
-- [List of Supported Sites](https://github.com/RipMeApp/ripme?tab=readme-ov-file#list-of-supported-sites)
-- [Site Not Supported?](https://github.com/RipMeApp/ripme?tab=readme-ov-file#site-not-supported)
+- [List of Supported Sites](https://github.com/Lazidev/ripme?tab=readme-ov-file#list-of-supported-sites)
+- [Site Not Supported?](https://github.com/Lazidev/ripme?tab=readme-ov-file#site-not-supported)
 
 ## Recent development updates
 
-- The current active development repo for RipMe is located at [ripmeapp/ripme](https://github.com/ripmeapp/ripme/).
-- Note: For a while, the ripmeapp/ripme repo was inactive, but development continued at ripmeapp2/ripme.
-- Now, maintainers have been updated and development has been rejoined with ripmeapp/ripme where it will continue.
-- You may find a number of stale issues on ripmeapp/ripme and/or on ripmeapp2/ripme until everything is merged back together and statuses are updated.
+- This fork's active development continues at [Lazidev/ripme](https://github.com/Lazidev/ripme/).
+- The upstream community project remains at [ripmeapp/ripme](https://github.com/ripmeapp/ripme/).
+- Note: For a while, the ripmeapp/ripme repo was inactive, but development continued at ripmeapp2/ripme, then rejoined ripmeapp/ripme.
 
 ## Maintainers
 

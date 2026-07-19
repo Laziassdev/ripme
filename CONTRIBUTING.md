@@ -1,6 +1,6 @@
 # We've moved!
 
-You can now find the latest code, issues, and releases at [RipMeApp/ripme](https://github.com/RipMeApp/ripme/).
+You can now find the latest code, issues, and releases at [Lazidev/ripme](https://github.com/Lazidev/ripme/).
 
 
 # Etiquette
@@ -34,7 +34,7 @@ Our priorities, roughly in order of impact:
 
 ## Bugs
 
-If you have noticed a bug in RipMe, please open an issue at [RipMeApp/ripme](https://github.com/RipMeApp/ripme/issues/new).
+If you have noticed a bug in RipMe, please open an issue at [Lazidev/ripme](https://github.com/Lazidev/ripme/issues/new).
 
 Please include enough information that we can easily confirm the problem and verify when it is fixed. (For example: the exact URL that you tried to rip when something bad/incorrect happened.)
 
@@ -51,11 +51,11 @@ If you're a developer, you can add your own Ripper by following the wiki guide
 
 Before you open your pull request, please consider the following:
 
-* Please ensure your change is based on the `master` branch of this repo (i.e. https://github.com/RipMeApp/ripme.git)
-  * Please do `git pull` on the `master` branch before starting work on your bug fix.
+* Please ensure your change is based on the `main` branch of this repo (i.e. https://github.com/Lazidev/ripme.git)
+  * Please do `git pull` on the `main` branch before starting work on your bug fix.
   * This helps avoid merge conflicts.
 * Please ensure your change includes only the minimum changes needed to fix a single issue. These are easiest to review and tend to get merged more quickly. If the scope of your PR is wider than a single issue, you may be asked to reopen your PR as multiple separate PRs.
-* Are you fixing an issue from one of the issue trackers ([RipMeApp](https://github.com/RipMeApp/ripme/issues) or ([RipMeApp2](https://github.com/RipMeApp2/ripme/issues) or [4pr0n](https://github.com/4pr0n/ripme/issues))? If so, please ensure that you reference the issue you are fixing in your commit message so that it will be [automatically closed](https://help.github.com/articles/closing-issues-via-commit-messages/).
+* Are you fixing an issue from one of the issue trackers ([Lazidev](https://github.com/Lazidev/ripme/issues) or [RipMeApp](https://github.com/RipMeApp/ripme/issues) or [RipMeApp2](https://github.com/RipMeApp2/ripme/issues) or [4pr0n](https://github.com/4pr0n/ripme/issues))? If so, please ensure that you reference the issue you are fixing in your commit message so that it will be [automatically closed](https://help.github.com/articles/closing-issues-via-commit-messages/).
 * Please ensure you verify that you did not break any functionality outside of your change or feature
   * The CI might be broken, so please ensure that `gradlew test` shows no new errors since before your change.
   * Keep in mind each Ripper likely supports multiple URL formats for each website, which have different content layouts (users, galleries, etc.)
