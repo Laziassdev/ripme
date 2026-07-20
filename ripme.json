@@ -1,7 +1,9 @@
 {
-  "latestVersion": "2.1.276-1-b7a6249",
-  "currentHash": "f59bce7e1be6f3daa44e7aac56bdda70fdcc44d40ce1c1ab0d872a38e4f31e8d",
+  "latestVersion": "2.1.277-1-f88a8f6",
+  "currentHash": "dd41e07bda210a36832d9d8bb973de4b5cbdeaff26e6662f8ca1d3f22efe6e04",
   "changeList": [
+    "2.1.277-1-f88a8f6: ﻿Fix Twitter/X profile URLs with harmless query params.",
+    "2.1.277-1-f88a8f6: Built at 2026-07-20T10:43:27Z",
     "2.1.276-1-b7a6249: Point updater and docs at Lazidev/ripme after repo transfer.",
     "2.1.276-1-b7a6249: Built at 2026-07-19T13:56:00Z",
     "2.1.275-1-3efcbb9: Fix completed rips stuck in active downloads list",
