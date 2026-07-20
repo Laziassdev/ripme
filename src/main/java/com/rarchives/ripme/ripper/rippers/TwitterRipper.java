@@ -214,9 +214,11 @@ public class TwitterRipper extends AbstractJSONRipper {
             return URI.create(urlString).toURL();
         }
 
+        // Profile URLs may include harmless query params (e.g. ?lang=en); strip them for matching.
+        String accountUrlString = stripQueryString(urlString);
         Pattern accountPattern = Pattern.compile(
                 "^https?://(m\\.)?(twitter|x)\\.com/([a-zA-Z0-9_]+)(/.*)?$", Pattern.CASE_INSENSITIVE);
-        Matcher accountMatcher = accountPattern.matcher(urlString);
+        Matcher accountMatcher = accountPattern.matcher(accountUrlString);
         if (accountMatcher.matches()) {
             String name = accountMatcher.group(3);
             if (isReservedPath(name)) {
@@ -225,9 +227,14 @@ public class TwitterRipper extends AbstractJSONRipper {
             albumType = ALBUM_TYPE.ACCOUNT;
             accountName = name;
             fetchMode = FETCH_MODE.USER_TWEETS;
-            return URI.create(urlString).toURL();
+            return URI.create(accountUrlString).toURL();
         }
         throw new MalformedURLException("Expected username or search string in url: " + url);
+    }
+
+    private static String stripQueryString(String urlString) {
+        int queryIdx = urlString.indexOf('?');
+        return queryIdx >= 0 ? urlString.substring(0, queryIdx) : urlString;
     }
 
     private static boolean isReservedPath(String name) {

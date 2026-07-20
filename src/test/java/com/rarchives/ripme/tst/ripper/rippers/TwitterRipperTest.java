@@ -9,6 +9,7 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.net.URI;
 import java.net.URISyntaxException;
+import java.net.URL;
 import java.nio.charset.StandardCharsets;
 import java.util.List;
 import java.util.Scanner;
@@ -41,6 +42,23 @@ public class TwitterRipperTest extends RippersTest {
         TwitterRipper ripper = new TwitterRipper(new URI("https://x.com/exampleuser/media").toURL());
         assertEquals("account_exampleuser", ripper.getGID(ripper.getURL()));
         assertTrue(ripper.canRip(new URI("https://x.com/exampleuser").toURL()));
+    }
+
+    @Test
+    public void testProfileUrlWithLangQueryParam() throws Exception {
+        URL url = new URI("https://x.com/Sospoonable?lang=en").toURL();
+        TwitterRipper ripper = new TwitterRipper(url);
+        assertEquals("account_Sospoonable", ripper.getGID(ripper.getURL()));
+        assertEquals("https://x.com/Sospoonable", ripper.getURL().toExternalForm());
+        assertTrue(ripper.canRip(url));
+    }
+
+    @Test
+    public void testProfileMediaUrlWithLangQueryParam() throws Exception {
+        URL url = new URI("https://x.com/exampleuser/media?lang=en").toURL();
+        TwitterRipper ripper = new TwitterRipper(url);
+        assertEquals("account_exampleuser", ripper.getGID(ripper.getURL()));
+        assertEquals("https://x.com/exampleuser/media", ripper.getURL().toExternalForm());
     }
 
     @Test
